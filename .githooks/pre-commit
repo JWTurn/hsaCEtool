@@ -1,0 +1,38 @@
+#!/bin/sh
+# Block caribou location data from commits (see AGENTS.md, "Caribou location
+# data are confidential"). Turn on once per clone:
+#   git config core.hooksPath .githooks
+# Do not bypass with --no-verify; ask if this blocks something that is not location data.
+
+status=0
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+
+for f in $files; do
+  # 1. data file types
+  if echo "$f" | grep -Eiq '\.(rds|rda|rdata|qs2?|fst|parquet|feather|xlsx?|shp|shx|dbf|prj|cpg|gpkg|geojson|kmz?|gpx|sqlite|db|tiff?)$'; then
+    echo "BLOCKED (data file type): $f"
+    status=1
+    continue
+  fi
+  # 2. tables with coordinate-like columns, anywhere (including config/)
+  if echo "$f" | grep -Eiq '\.(csv|tsv|txt)$'; then
+    header=$(git show ":$f" | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d '"' | tr '\t;' ',,')
+    if echo ",$header," | grep -Eq ',(x|y|x_|y_|x1_|y1_|x2_|y2_|lat|latitude|lon|long|longitude|easting|northing|location-lat|location-long),'; then
+      echo "BLOCKED (coordinate columns in table): $f"
+      status=1
+    fi
+  fi
+  # 3. very large files (data, not code)
+  size=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
+  if [ "$size" -gt 5000000 ]; then
+    echo "BLOCKED (larger than 5 MB): $f"
+    status=1
+  fi
+done
+
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "Caribou location data must not be committed (see AGENTS.md)."
+  echo "Unstage with: git restore --staged <file>"
+fi
+exit $status
