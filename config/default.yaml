@@ -1,0 +1,114 @@
+# Default settings for the caribou CE-tool data pipeline ----------------------
+#
+# Every setting the pipeline uses is listed here with its default value.
+# A project file (config/<project>.yaml) only needs the settings that differ.
+# Settings are combined in this order, later files winning:
+#   default.yaml  <  <project>.yaml  <  local.yaml (this computer only)  <  <project>.R
+# local.yaml is not shared through git: use it for folder paths on your computer.
+# <project>.R is optional, for programmers: it can change any setting with R code.
+# See config/README.md.
+#
+# INPUTS. Wherever the pipeline reads data, the input is given as a "source":
+#   path: "folder/file.tif"          a file on this computer (absolute, or relative to paths: data_in)
+#   url: "https://..."               a web or cloud-drive (e.g. Google Drive) link, downloaded
+#                                    with reproducible::prepInputs() into paths: inputs
+#   target_file: "file.shp"          with url: which file to use from the download (e.g. inside a .zip)
+#   archive: "file.zip"              with url: the archive's name, if prepInputs can't tell
+# Give either path or url.
+
+project:
+  crs: "EPSG:3154"        # coordinate reference system for all spatial data (units must be metres)
+  seed: 37                # random seed, so random steps are the same on every run
+
+paths:
+  data_in: ""             # folder that relative `path:` inputs are read from
+  inputs: "inputs"        # folder where downloaded inputs are kept (like reproducible.inputPaths)
+  outputs: "outputs"      # folder where the pipeline writes layers it builds (in <outputs>/<project>)
+  shared: ""              # shared folder results are copied to after each run (e.g. a Google
+                          # shared drive); set it in local.yaml, as the path differs by computer
+
+# Caribou locations (GPS collar fixes) -----------------------------------------
+locations:
+  # Where the locations come from. A list, so several data sets can be combined.
+  # Each entry is a source (path or url, see above) with `type: file`, or a
+  # Movebank study with `type: movebank`. Each can have its own `columns` and `input_crs`.
+  sources: []
+    # - type: file
+    #   url: "https://drive.google.com/file/d/.../view"
+    #   target_file: clean_NMC.RDS
+    # - type: movebank
+    #   study: "Klaza caribou"
+    #   user: jwturner        # password is read from keyring::key_get("movebank", user)
+  columns:                # names of the columns in the input data (default for every source)
+    id: id                # animal (collar deployment) ID
+    datetime: t_          # fix date and time (UTC)
+    x: x_                 # x coordinate (easting or longitude)
+    y: y_                 # y coordinate (northing or latitude)
+  keep_columns: []        # other input columns to keep (e.g. herd, jurisdiction); [] keeps all
+  input_crs: "EPSG:3154"  # coordinate system of x and y in the input (EPSG:4326 for longitude/latitude)
+  tz: UTC                 # time zone of datetime, if it is stored as text
+
+  # Cleaning steps run in the order listed. Leave the list empty ([]) if the
+  # input is already clean. Each step's settings are under `params`.
+  cleaning:
+    steps: []
+    # Available steps:
+    #   bounds          keep fixes inside a longitude/latitude box
+    #   exclude_points  drop fixes near known false locations (e.g. a field office)
+    #   capture_effect  drop the first days after each collar was put on
+    #   dop             drop low-quality fixes (high dilution of precision)
+    #   duplicates      drop duplicate fixes close in time (amt::flag_duplicates)
+    #   fast_steps      drop unrealistically fast steps (amt::flag_fast_steps)
+    #   roundtrips      drop fast out-and-back spikes (amt::flag_roundtrips)
+    #   clusters        drop clusters from dropped or dead collars (amt::flag_defunct_clusters)
+    #   speed           drop steps faster than a speed limit (simple, quick version)
+    #   min_points      drop animals with too few fixes
+    params:
+      bounds: {xmin: -180, ymin: -90, xmax: 180, ymax: 90}
+      exclude_points: []  # list of {name:, lon:, lat:, radius_m:}
+      capture_effect: {days: 7}
+      dop: {column: gps_dop, max_dop: 10, keep_missing: true}
+      duplicates: {gamma_minutes: 15, dop_column: gps_dop}
+      fast_steps: {delta: 200000}
+      roundtrips: {delta: 100000, epsilon: 10}
+      clusters: {zeta: 200, eta: 3, theta_hours: 48}
+      speed: {max_m_per_hr: 12000}
+      min_points: {n: 3}
+
+  # Study area: the area landscape layers are prepared for.
+  study_area:
+    source: null          # an existing polygon (a source: path or url) instead of building one
+    buffer_m: 20000       # otherwise, buffer this far around every location ...
+    convex_hull: false    # ... and optionally wrap the buffer in a convex hull
+  crop_method: bbox       # keep locations inside the study area's bounding box ("bbox") or the polygon itself ("within")
+
+# Movement tracks and random steps (integrated step selection analysis) -------
+tracks:
+  split_by: id            # column(s) that define one track; each is processed separately
+  rate_hours: 11          # resample every track to one fix per this many hours
+  tolerance_minutes: 120  # allowed deviation from that rate
+  min_burst_n: 3          # drop runs of regular fixes ("bursts") with fewer fixes than this
+  min_steps: 20           # drop tracks with fewer steps than this after resampling
+  max_step_quantile: 0.99 # drop steps longer than this quantile of each track's step lengths
+  n_random: 30            # random (available) steps per observed step
+  sl_distr: gamma         # distribution fitted to step lengths
+  ta_distr: vonmises      # distribution fitted to turning angles
+  min_year: 2012          # keep steps from this year ...
+  max_year: 2025          # ... to this year
+  year_interval: 5        # round years down to this interval (column int.year)
+  buffer_round_m: 50      # median step length is rounded down to this, for neighbourhood layers
+
+# Test runs: use only part of the data. null = use everything.
+subset:
+  ids: null               # only these animals, e.g. [KZCH2425, TRCH2010]
+  n_ids: null             # first n animals
+  years: null             # only these years, e.g. [2020, 2021]
+
+# Landscape layers -------------------------------------------------------------
+landscape:
+  mode: file              # "file" = use existing rasters (local or url); "build" = make them from source data
+  layers: ""              # table of layers (CSV), relative to the config folder; see config/README.md
+
+# Extracting layer values at steps --------------------------------------------
+extract:
+  where: both             # extract at the step's "start", "end", or "both"
