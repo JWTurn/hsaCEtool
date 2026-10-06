@@ -111,6 +111,35 @@ that year included (default 2).
 | `harvest_dens` | The proportion of its 30 m cells with recent harvest |
 | `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell |
 
+### Land cover (`build: landcover` or `landcover_cell`)
+
+Yearly proportion of each land-cover class, from SCANFI v3 (1985-2025) or NTEMS
+VLCE2 (1984-2022), chosen with `landscape: landcover: source:`. The classes are
+kept as the source defines them (listed, with their codes, under
+`landscape: landcover: scanfi: classes:` and `ntems: classes:`), so they can be
+combined later in a biologically meaningful way. Each row names its class in
+the `class` column, e.g. `treed_coniferous_lichen`.
+
+| `build` | Each cell holds |
+|---|---|
+| `landcover_cell` | The proportion of its classified 30 m cells in that class |
+| `landcover` | At resolutions with a moving window (`landscape: landcover: window_m:`, default 500 m radius at 240 m), the mean of those proportions within that circle around the cell, as in `make_landforest_prop()`. At other resolutions, the same as `landcover_cell` |
+
+The cell proportions are always saved too (in
+`outputs/<project>/landscape/landcover/`), e.g. for masking water or rock.
+
+Reading SCANFI from NRCan is slow (about 1 MB/s per connection; each yearly
+file is 3.4 GB). With `access: download`, each file is fetched in 8 pieces at
+once.
+
+## Running steps in parallel
+
+Set `run: workers:` (usually in `local.yaml`) above 1 to run independent steps,
+such as each year of a layer, at the same time in separate R sessions (needs
+the crew package). Each worker uses memory and temporary disk space, so start
+with 2-4. `run: memfrac:` is the share of the computer's memory the workers
+share for raster work.
+
 ## Programmer settings: `<project>.R`
 
 The file must end with a function that takes the settings and returns them.

@@ -3,8 +3,9 @@
 # layer table, layer_files_<name>: the layer's raster file(s), tracked so that a
 # changed file reruns that layer's extraction. A row either points to existing
 # rasters (path or url) or names a builder (column `build`) that makes the
-# layer from source data on the template grids.
-
+# layer from source data on the template grids. Builders work one year per
+# target, so years can run in parallel (run: workers) and a new year builds
+# only that year.
 #' @title Targets: landscape layer files
 #' @description Rows of the layer table without `build` use existing rasters
 #'   (local or downloaded). Rows with `build` are made by the pipeline: first
@@ -27,11 +28,11 @@ targets_landscape <- function(cfg) {
     )))
   }
   if (nrow(built)) {
-    out <- c(out, targets_templates(), targets_harvest(built))
+    out <- c(out, targets_templates(), targets_harvest(built),
+             targets_landcover(built, cfg$landscape$landcover$window_m))
   }
   out
 }
-
 #' @title Targets: template rasters
 #' @return list of targets.
 #' @keywords internal
@@ -45,13 +46,12 @@ targets_templates <- function() {
                format = 'file')
   )
 }
-
 #' @title Targets: harvest history from CanLaD and the harvest layers
 #' @description One target per CanLaD annual map (each tracked by its web
 #'   address, so a re-released year reruns only that year), one for the
-#'   1965-1984 maps, the combined harvest history, one target per harvest
-#'   metric (year, pa, dens, dist) building every resolution and year asked
-#'   for, and one `layer_files_<name>` per layer-table row.
+#'   1965-1984 maps, the combined harvest history, then for each harvest
+#'   metric (year, pa, dens, dist) one target per output year building every
+#'   resolution asked for, and one `layer_files_<name>` per layer-table row.
 #' @param built data.table. The layer-table rows with a `build`.
 #' @return list of targets.
 #' @keywords internal
@@ -79,24 +79,75 @@ targets_harvest <- function(built) {
     tar_target(harvest_history,
                unique(data.table::rbindlist(c(list(harvest_old), harvest_annual))))
   )
-
   for (b in unique(harv$build)) {
     rows <- harv[build == b]
     metric <- sub('^harvest_', '', b)
     files_nm <- paste0(b, '_files')
-    out <- c(out, list(tar_target_raw(files_nm, substitute(
-      build_harvest_layers(harvest_history, METRIC, RES, YEARS, cfg_harvest$recent_years,
-                           templates, file.path(landscape_dir, 'harvest')),
-      list(METRIC = metric, RES = sort(unique(rows$resolution)),
-           YEARS = seq(min(rows$first_year), max(rows$last_year)))),
-      format = 'file')))
-    for (i in seq_len(nrow(rows))) {
-      out <- c(out, list(tar_target_raw(paste0('layer_files_', rows$name[i]), substitute(
-        pick_layer_files(FILES, PREFIX, RES, FY, LY),
-        list(FILES = as.symbol(files_nm), PREFIX = b, RES = rows$resolution[i],
-             FY = rows$first_year[i], LY = rows$last_year[i])),
-        format = 'file')))
-    }
+    years_nm <- paste0(b, '_years')
+    out <- c(out, list(
+      tar_target_raw(years_nm, substitute(seq(A, B), list(A = min(rows$first_year), B = max(rows$last_year)))),
+      tar_target_raw(files_nm, substitute(
+        build_harvest_layers(harvest_history, METRIC, RES, YEARS, cfg_harvest$recent_years,
+                             templates, file.path(landscape_dir, 'harvest')),
+        list(METRIC = metric, RES = sort(unique(rows$resolution)), YEARS = as.symbol(years_nm))),
+        pattern = substitute(map(YEARS), list(YEARS = as.symbol(years_nm))),
+        format = 'file')
+    ))
+    out <- c(out, pick_targets(rows, files_nm, function(i) b))
   }
   out
+}
+#' @title Targets: yearly land-cover proportions
+#' @description One target per year of the land-cover source (SCANFI v3 or
+#'   NTEMS VLCE2, `landscape: landcover: source`), each tracked by its web
+#'   address and building every class at every resolution asked for, then one
+#'   `layer_files_<name>` per layer-table row.
+#' @param built data.table. The layer-table rows with a `build`.
+#' @param window_m named list. `landscape: landcover: window_m`.
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+targets_landcover <- function(built, window_m) {
+  lc <- built[build %in% c('landcover', 'landcover_cell')]
+  if (nrow(lc) == 0) return(list())
+  out <- list(
+    tar_target_raw('landcover_years', substitute(seq(A, B), list(A = min(lc$first_year), B = max(lc$last_year)))),
+    tar_target(landcover_source, cfg_landcover[[cfg_landcover$source]]),
+    tar_target(landcover_file, fill_year(landcover_source$url, landcover_years),
+               pattern = map(landcover_years), format = 'url'),
+    tar_target_raw('landcover_files', substitute(
+      build_landcover_year(landcover_file, landcover_years, landcover_source$classes, RES,
+                           cfg_landcover$window_m, templates,
+                           file.path(landscape_dir, 'landcover', cfg_landcover$source),
+                           cfg_access$access, cfg_access$cache, landcover_source$archive_file),
+      list(RES = sort(unique(lc$resolution)))),
+      pattern = quote(map(landcover_file, landcover_years)),
+      format = 'file')
+  )
+  # a `landcover` row at a resolution without a moving window uses the cell proportions
+  windows <- names(Filter(function(w) !is.null(w) && w > 0, window_m))
+  prefix <- function(i) {
+    if (lc$build[i] == 'landcover' && as.character(lc$resolution[i]) %in% windows) {
+      paste0('landcover_', lc$class[i])
+    } else {
+      paste0('landcover_cell_', lc$class[i])
+    }
+  }
+  c(out, pick_targets(lc, 'landcover_files', prefix))
+}
+#' @title One layer_files_<name> target per row, picking its files from a builder
+#' @param rows data.table. Layer-table rows.
+#' @param files_nm character. Name of the builder's files target.
+#' @param prefix function(i) giving row i's file name prefix.
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+pick_targets <- function(rows, files_nm, prefix) {
+  purrr::map(seq_len(nrow(rows)), function(i) {
+    tar_target_raw(paste0('layer_files_', rows$name[i]), substitute(
+      pick_layer_files(FILES, PREFIX, RES, FY, LY),
+      list(FILES = as.symbol(files_nm), PREFIX = prefix(i), RES = rows$resolution[i],
+           FY = rows$first_year[i], LY = rows$last_year[i])),
+      format = 'file')
+  })
 }

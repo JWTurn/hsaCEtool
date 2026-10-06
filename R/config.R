@@ -131,7 +131,7 @@ check_config <- function(cfg) {
     add('landscape: access must be "stream" or "download"')
   }
   if (!is.null(cfg$layers)) {
-    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist')
+    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist', 'landcover', 'landcover_cell')
     built <- cfg$layers[!is.na(build)]
     bad <- built[!build %in% builds]$name
     if (length(bad)) {
@@ -143,6 +143,29 @@ check_config <- function(cfg) {
     if (length(bad)) {
       add('layer table: built layers need a resolution of ', paste(res_ok, collapse = ', '),
           ' m (landscape: template: base_res x factors): ', paste(bad, collapse = ', '))
+    }
+    lc <- built[build %in% c('landcover', 'landcover_cell')]
+    if (nrow(lc)) {
+      lcs <- cfg$landscape$landcover
+      src <- lcs[[lcs$source %||% '']]
+      if (is.null(src)) {
+        add('landscape: landcover: source "', lcs$source, '" has no settings (e.g. scanfi or ntems)')
+      } else {
+        bad <- lc[!class %in% unlist(src$classes)]$name
+        if (length(bad)) {
+          add('layer table: class not in landscape: landcover: ', lcs$source, ': classes: ',
+              paste(bad, collapse = ', '))
+        }
+        bad <- lc[first_year < src$first_year | last_year > src$last_year]$name
+        if (length(bad)) {
+          add('layer table: ', lcs$source, ' land cover covers ', src$first_year, '-', src$last_year,
+              ' only: ', paste(bad, collapse = ', '))
+        }
+      }
+      bad <- setdiff(names(lcs$window_m), as.character(res_ok))
+      if (length(bad)) {
+        add('landscape: landcover: window_m has resolutions without a template: ', paste(bad, collapse = ', '))
+      }
     }
   }
   if (!cfg$extract$where %in% c('start', 'end', 'both')) {

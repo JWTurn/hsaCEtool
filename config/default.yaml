@@ -141,6 +141,65 @@ landscape:
       year_url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canada_disturbances_1965to1984/v1/canlad_1965_1984_disturbanceYear.tif"
       code: 3             # type value meaning harvest (3 = harvest)
 
+  # Land cover: yearly proportion of each class (build: landcover / landcover_cell).
+  # Classes are kept as in the source, to be combined later in a biologically
+  # meaningful way. A class can be renamed here; codes not listed are ignored.
+  landcover:
+    source: scanfi        # scanfi (SCANFI v3, 1985-2025) or ntems (NTEMS VLCE2, 1984-2022)
+    window_m:             # radius (m) of the circular moving window, by resolution (as in
+      240: 500            # make_landforest_prop); resolutions not listed get plain cell proportions
+    scanfi:
+      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/SCANFI/v3/cog_SCANFI_landcover_{year}_v3_20260528.tif"
+      first_year: 1985
+      last_year: 2025
+      classes:            # source code: class name (https://open.canada.ca/data/en/dataset/50f132f9-f312-4951-bb9f-9ea99580f29f)
+        1: water
+        2: rock
+        3: soil
+        4: burn_scars
+        5: lichen
+        6: herbaceous
+        7: low_shrubs
+        8: tall_shrubs
+        9: treed_broadleaf
+        10: treed_mixed
+        11: treed_coniferous
+        12: treed_coniferous_lichen
+        13: treed_coniferous_rock_soil
+        14: treed_coniferous_herbs
+        15: treed_coniferous_low_shrub
+        16: treed_coniferous_tall_shrub
+        17: cropland
+        18: urban
+        19: road
+        20: snow_ice
+    ntems:
+      url: "https://opendata.nfis.org/downloads/forest_change/CA_forest_VLCE2_{year}.zip"
+      archive_file: "CA_forest_VLCE2_{year}.tif"   # the raster inside the zip
+      first_year: 1984
+      last_year: 2022
+      classes:
+        20: water
+        31: snow_ice
+        32: rock_rubble
+        33: exposed_barren_land
+        40: bryoids
+        50: shrubs
+        80: wetland
+        81: wetland_treed
+        100: herbs
+        210: coniferous
+        220: broadleaf
+        230: mixedwood
+
+# Running steps in parallel ---------------------------------------------------
+# Usually set in local.yaml, as it depends on the computer.
+run:
+  workers: 1              # steps run at the same time (e.g. one year of a layer each);
+                          # 1 = one at a time. Needs the crew package. Each worker uses
+                          # memory and temporary disk space, so start with 2-4.
+  memfrac: 0.6            # share of the computer's memory terra may use, split among workers
+
 # Extracting layer values at steps --------------------------------------------
 extract:
   where: both             # extract at the step's "start", "end", or "both"

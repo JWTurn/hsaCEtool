@@ -36,6 +36,7 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
   reproducible::checkPath(out_dir, create = TRUE)
   fine <- terra::rast(templates[1])
   base <- terra::res(fine)[1]
+  resolutions <- sort(unique(resolutions))
   h <- data.table::as.data.table(history)[, .(cell, year)]
   h[, `:=`(row = (cell - 1) %/% terra::ncol(fine), col = (cell - 1) %% terra::ncol(fine))]
 
@@ -53,15 +54,25 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
   files <- character()
   for (yr in years) {
     recent <- h[year <= yr & year > yr - recent_years]
-    if (metric == 'dist') dist <- harvest_distance(recent$cell, fine)
+    if (metric == 'dist') {
+      dist <- harvest_distance(recent$cell, fine)
+      # mean at the finest resolution asked for; coarser ones from those means,
+      # weighted by each cell's number of 30 m cells (same values, much faster)
+      if (!is.null(dist)) dist <- terra::aggregate(dist, coarse[[1]]$f, fun = 'mean', na.rm = TRUE)
+    }
     for (cc in coarse) {
       out <- file.path(out_dir, sprintf('harvest_%s_%sm_%d.tif', metric, cc$res, yr))
       if (metric == 'dist') {
         if (is.null(dist)) {
           terra::writeRaster(terra::init(cc$rast, NA), out, datatype = type, gdal = gdal_opts, overwrite = TRUE)
+        } else if (cc$res == coarse[[1]]$res) {
+          terra::writeRaster(dist, out, datatype = type, gdal = gdal_opts, overwrite = TRUE)
         } else {
-          terra::aggregate(dist, cc$f, fun = 'mean', na.rm = TRUE, filename = out,
-                           datatype = type, gdal = gdal_opts, overwrite = TRUE)
+          n1 <- coarse[[1]]$rast
+          fct <- round(cc$res / coarse[[1]]$res)
+          d <- terra::aggregate(dist * n1, fct, fun = 'sum', na.rm = TRUE) /
+            terra::aggregate(n1, fct, fun = 'sum', na.rm = TRUE)
+          terra::writeRaster(d, out, datatype = type, gdal = gdal_opts, overwrite = TRUE)
         }
       } else {
         v <- if (metric == 'year') rep(NA_real_, length(cc$n)) else ifelse(is.na(cc$n), NA_real_, 0)

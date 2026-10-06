@@ -17,15 +17,16 @@
 #'     \item{ts_nodata}{years since, for places with no recorded disturbance}
 #'     \item{build}{instead of path or url: the builder that makes the layer
 #'       from source data, e.g. `harvest_year` (see config/README.md)}
+#'     \item{class}{for land-cover builds: the class, as named in the settings}
 #'   }
 #' @param file character. Path to the CSV.
 #' @return data.table, one row per layer.
 #' @author Julie W. Turner
 read_layers <- function(file) {
   if (!file.exists(file)) stop('Layer table not found: ', file, call. = FALSE)
-  text_cols <- intersect(c('path', 'url', 'target_file', 'archive', 'build'), names(data.table::fread(file, nrows = 0)))
+  text_cols <- intersect(c('path', 'url', 'target_file', 'archive', 'build', 'class'), names(data.table::fread(file, nrows = 0)))
   layers <- data.table::fread(file, colClasses = list(character = text_cols))
-  for (col in c('path', 'url', 'target_file', 'archive', 'build')) {
+  for (col in c('path', 'url', 'target_file', 'archive', 'build', 'class')) {
     if (!col %in% names(layers)) layers[, (col) := NA_character_]
     layers[get(col) == '', (col) := NA_character_]
   }
