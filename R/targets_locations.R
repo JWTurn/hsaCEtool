@@ -14,7 +14,12 @@ targets_config <- function(cfg) {
     tar_target(cfg_locations, cfg$locations),
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
-    tar_target(cfg_landscape, cfg$landscape),
+    tar_target(cfg_template, cfg$landscape$template),
+    tar_target(cfg_harvest, cfg$landscape$harvest),
+    tar_target(cfg_access, list(
+      access = cfg$landscape$access,
+      cache = if (nzchar(cfg$paths$input_cache %||% '')) cfg$paths$input_cache else cfg$paths$inputs
+    )),
     tar_target(cfg_extract, cfg$extract)
   )
 }

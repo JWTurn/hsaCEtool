@@ -33,7 +33,7 @@ test_that('read_layers reads a valid table and reports problems', {
   err <- tryCatch(read_layers(file.path(dir, 'bad.csv')), error = conditionMessage)
   expect_match(err, 'more than once: a')
   expect_match(err, 'letters, numbers.*1b')
-  expect_match(err, 'no path or url: c')
+  expect_match(err, 'no path, url or build: c')
   expect_match(err, 'without \\{year\\}')
 })
 

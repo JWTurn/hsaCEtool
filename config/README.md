@@ -27,7 +27,7 @@ They are combined in that order, so later files win. A section such as
 
 Each input is a *source*: either a `path` to a file on your computer, or a
 `url` to download (a web or Google Drive link). Downloads use
-`reproducible::preProcess()`, the download step of `prepInputs()`. They are
+`reproducible::prepInputs()`. They are
 saved in `paths: inputs` and are only downloaded again if that copy is missing
 or incomplete. To check a URL for a newer version on every run, add
 `refresh: true` to that source.
@@ -67,9 +67,49 @@ every step (`extract: where:`). They become columns `<name>_start` and
 | `url`, `target_file`, `archive` | Or a download (`{year}` allowed) |
 | `time_since` | `TRUE` if the raster holds the year of a disturbance (fire, harvest). Adds `ts_<name>_start/end`, the years since that disturbance |
 | `ts_nodata` | Years since, used where there was no disturbance (e.g. 200 for fire) |
+| `build` | Instead of `path` or `url`: the pipeline builds the layer from source data (see below). Leave blank for existing rasters |
 
 Each step gets the raster for its year. Steps after `last_year` use the last
 raster, and steps before `first_year` use the first.
+
+## Layers the pipeline builds
+
+A row with `build` is made by the pipeline on the **template rasters**, so all
+built layers line up cell for cell and are in the project's `crs` (distances in
+true metres). The templates come from `landscape: template:`:
+
+- `base_res: 30` is the size of the finest cells (the 30 m Landsat-based inputs).
+- `factors: [8, 40, 160]` says how many fine cells along each side make one
+  coarser cell: 8 x 30 m = 240 m, 40 x 30 m = 1200 m and 160 x 30 m = 4800 m.
+  Five 240 m cells fit exactly along a 1200 m cell, and four 1200 m cells along
+  a 4800 m cell.
+- `buffer_m: 50000` is how far beyond the study area the layers extend.
+- `source:` can give your own finest template raster instead. A programmer can
+  instead set `cfg$landscape$template$fun` in `<project>.R` to a function of
+  `(study_area, tmpl, crs)` that returns one.
+
+A built layer's `resolution` must be `base_res` times one of the factors (e.g.
+240), and it needs `first_year` and `last_year`.
+
+National rasters are read with `landscape: access:` either `stream` (only the
+part covering the study area is read from the web; nothing is stored) or
+`download` (each whole file is saved once to `paths: input_cache`, which several
+projects can share, like `reproducible.inputPaths`).
+
+### Harvest (`build: harvest_*`)
+
+Built from the Canada Landsat Disturbance maps (CanLaD, 30 m): the 1965-1984
+maps (disturbance type 3 = harvest, with the year from the matching year map)
+and the annual maps from 1985 (value 2 = harvesting). Settings are under
+`landscape: harvest:`. "Recent" harvest means the last `recent_years` years,
+that year included (default 2).
+
+| `build` | Each cell holds |
+|---|---|
+| `harvest_year` | The most recent harvest year up to that year, in any of its 30 m cells (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
+| `harvest_pa` | 1 if any of its 30 m cells had recent harvest, otherwise 0 |
+| `harvest_dens` | The proportion of its 30 m cells with recent harvest |
+| `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell |
 
 ## Programmer settings: `<project>.R`
 

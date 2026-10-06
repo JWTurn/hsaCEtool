@@ -15,15 +15,17 @@
 #'     \item{time_since}{TRUE if the raster holds the year of a disturbance (fire,
 #'       harvest): adds `ts_<name>_<start/end>`, the years since}
 #'     \item{ts_nodata}{years since, for places with no recorded disturbance}
+#'     \item{build}{instead of path or url: the builder that makes the layer
+#'       from source data, e.g. `harvest_year` (see config/README.md)}
 #'   }
 #' @param file character. Path to the CSV.
 #' @return data.table, one row per layer.
 #' @author Julie W. Turner
 read_layers <- function(file) {
   if (!file.exists(file)) stop('Layer table not found: ', file, call. = FALSE)
-  text_cols <- intersect(c('path', 'url', 'target_file', 'archive'), names(data.table::fread(file, nrows = 0)))
+  text_cols <- intersect(c('path', 'url', 'target_file', 'archive', 'build'), names(data.table::fread(file, nrows = 0)))
   layers <- data.table::fread(file, colClasses = list(character = text_cols))
-  for (col in c('path', 'url', 'target_file', 'archive')) {
+  for (col in c('path', 'url', 'target_file', 'archive', 'build')) {
     if (!col %in% names(layers)) layers[, (col) := NA_character_]
     layers[get(col) == '', (col) := NA_character_]
   }
@@ -40,11 +42,12 @@ read_layers <- function(file) {
   if (!'name' %in% names(layers)) stop('Layer table ', file, ' needs a `name` column', call. = FALSE)
   add(duplicated(layers$name), 'names used more than once')
   add(make.names(layers$name) != layers$name, 'names must be letters, numbers, . and _ and not start with a number')
-  add(is.na(layers$path) & is.na(layers$url), 'no path or url')
+  add(is.na(layers$path) & is.na(layers$url) & is.na(layers$build), 'no path, url or build')
   yearly <- !is.na(layers$first_year)
   add(yearly & (is.na(layers$last_year) | layers$last_year < layers$first_year), 'last_year missing or before first_year')
   has_year <- grepl('{year}', paste(layers$path, layers$url, layers$target_file), fixed = TRUE)
-  add(yearly & !has_year, 'yearly layer without {year} in its path, url or target_file')
+  add(yearly & is.na(layers$build) & !has_year, 'yearly layer without {year} in its path, url or target_file')
+  add(!is.na(layers$build) & !yearly, 'built layers need first_year and last_year')
   add(!yearly & has_year, '{year} in path but no first_year/last_year')
   add(layers$time_since & !yearly, 'time_since needs a yearly layer')
 

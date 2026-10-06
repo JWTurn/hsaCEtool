@@ -22,7 +22,10 @@ project:
 
 paths:
   data_in: ""             # folder that relative `path:` inputs are read from
-  inputs: "inputs"        # folder where downloaded inputs are kept (like reproducible.inputPaths)
+  inputs: "inputs"        # folder where downloaded inputs are kept
+  input_cache: ""         # folder for large national rasters downloaded with landscape: access:
+                          # download, shared by projects (like reproducible.inputPaths);
+                          # blank = use paths: inputs. Set it in local.yaml.
   outputs: "outputs"      # folder where the pipeline writes layers it builds (in <outputs>/<project>)
   shared: ""              # shared folder results are copied to after each run (e.g. a Google
                           # shared drive); set it in local.yaml, as the path differs by computer
@@ -106,8 +109,37 @@ subset:
 
 # Landscape layers -------------------------------------------------------------
 landscape:
-  mode: file              # "file" = use existing rasters (local or url); "build" = make them from source data
-  layers: ""              # table of layers (CSV), relative to the config folder; see config/README.md
+  layers: ""              # table of layers (CSV), relative to the config folder; see config/README.md.
+                          # Each layer either uses existing rasters (path or url) or is built
+                          # by the pipeline from source data (column `build`).
+
+  # Template rasters: the grids every built layer is written onto, in the
+  # project's crs (so distances are in true metres). All resolutions nest exactly.
+  template:
+    source: null          # your own finest template raster (a source: path or url); null = build one
+    base_res: 30          # size of the finest cells in metres (the 30 m Landsat-based inputs)
+    buffer_m: 50000       # how far beyond the study area the layers extend (50 km)
+    factors: [8, 40, 160] # how many fine cells along each side make one coarser cell:
+                          # 8 x 30 m = 240 m, 40 x 30 m = 1200 m, 160 x 30 m = 4800 m
+
+  # How national rasters (e.g. CanLaD) are read: "stream" reads only the part
+  # covering the study area straight from the web (nothing stored); "download"
+  # saves each whole file once to paths: input_cache and reads it from there.
+  access: stream
+
+  # Harvest: Canada Landsat Disturbance (CanLaD) 1965-1984 and annual maps from 1985
+  harvest:
+    recent_years: 2       # harvest this many years back (that year included) counts as recent,
+                          # for presence (pa), density (dens) and distance (dist)
+    canlad_annual:
+      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canlad_including_insect_defoliation/v1/Disturbances_Time_Series/canlad_annual_{year}_v1.tif"
+      first_year: 1985
+      last_year: 2024
+      code: 2             # value meaning harvest (2 = Harvesting)
+    canlad_old:           # 1965-1984: disturbance type, and the year from a second raster
+      type_url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canada_disturbances_1965to1984/v1/canlad_1965_1984_disturbanceType.tif"
+      year_url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canada_disturbances_1965to1984/v1/canlad_1965_1984_disturbanceYear.tif"
+      code: 3             # type value meaning harvest (3 = harvest)
 
 # Extracting layer values at steps --------------------------------------------
 extract:

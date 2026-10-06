@@ -127,8 +127,23 @@ check_config <- function(cfg) {
   if (cfg$tracks$min_year > cfg$tracks$max_year) {
     add('tracks: min_year is after max_year')
   }
-  if (!cfg$landscape$mode %in% c('file', 'build')) {
-    add('landscape: mode must be "file" or "build"')
+  if (!cfg$landscape$access %in% c('stream', 'download')) {
+    add('landscape: access must be "stream" or "download"')
+  }
+  if (!is.null(cfg$layers)) {
+    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist')
+    built <- cfg$layers[!is.na(build)]
+    bad <- built[!build %in% builds]$name
+    if (length(bad)) {
+      add('layer table: unknown build for ', paste(bad, collapse = ', '),
+          ' (available: ', paste(builds, collapse = ', '), ')')
+    }
+    res_ok <- cfg$landscape$template$base_res * unlist(cfg$landscape$template$factors)
+    bad <- built[!resolution %in% res_ok]$name
+    if (length(bad)) {
+      add('layer table: built layers need a resolution of ', paste(res_ok, collapse = ', '),
+          ' m (landscape: template: base_res x factors): ', paste(bad, collapse = ', '))
+    }
   }
   if (!cfg$extract$where %in% c('start', 'end', 'both')) {
     add('extract: where must be "start", "end" or "both"')
