@@ -17,7 +17,8 @@
 #'     \item{ts_nodata}{years since, for places with no recorded disturbance}
 #'     \item{build}{instead of path or url: the builder that makes the layer
 #'       from source data, e.g. `harvest_year` (see config/README.md)}
-#'     \item{class}{for land-cover builds: the class, as named in the settings}
+#'     \item{class}{for land-cover builds: the class, as named in the settings;
+#'       for disturbance builds: the category (e.g. paved)}
 #'   }
 #' @param file character. Path to the CSV.
 #' @return data.table, one row per layer.

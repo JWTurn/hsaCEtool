@@ -10,7 +10,8 @@
 #' @param sourceFile character. The year's annual map (`canlad_annual_<year>_v1.tif`),
 #'   a web address or local file.
 #' @param year integer. Its year.
-#' @param template character. Finest template raster file.
+#' @param template character. Template raster file giving the grid: the finest
+#'   template, or the one with a margin (see [make_margin_template()]).
 #' @param code integer. Value(s) that mean harvest (2 in the annual maps).
 #' @inheritParams raster_source
 #' @return data.table with columns `cell` (cell number in the template) and `year`.

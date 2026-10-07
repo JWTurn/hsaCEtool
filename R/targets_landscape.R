@@ -29,11 +29,14 @@ targets_landscape <- function(cfg) {
   }
   if (nrow(built)) {
     out <- c(out, targets_templates(), targets_harvest(built),
-             targets_landcover(built, cfg$landscape$landcover$window_m))
+             targets_landcover(built, cfg$landscape$landcover$window_m),
+             targets_disturbance(built, cfg$landscape$disturbance))
   }
   out
 }
 #' @title Targets: template rasters
+#' @description The nested templates, and the finest one with a margin
+#'   (`landscape: distance_margin_m`) that distances are measured over.
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
@@ -43,6 +46,10 @@ targets_templates <- function() {
     tar_target(templates,
                make_templates(study_area, cfg_template, cfg_project$crs, cfg_paths,
                               file.path(landscape_dir, 'templates')),
+               format = 'file'),
+    tar_target(template_margin,
+               make_margin_template(templates[1], cfg_margin,
+                                    file.path(landscape_dir, 'templates', 'template_margin.tif')),
                format = 'file')
   )
 }
@@ -65,7 +72,7 @@ targets_harvest <- function(built) {
     tar_target(canlad_annual_file, fill_year(cfg_harvest$canlad_annual$url, canlad_years),
                pattern = map(canlad_years), format = 'url'),
     tar_target(harvest_annual,
-               canlad_annual_harvest(canlad_annual_file, canlad_years, templates[1],
+               canlad_annual_harvest(canlad_annual_file, canlad_years, template_margin,
                                      cfg_harvest$canlad_annual$code,
                                      cfg_access$access, cfg_access$cache),
                pattern = map(canlad_annual_file, canlad_years), iteration = 'list'),
@@ -73,7 +80,7 @@ targets_harvest <- function(built) {
                c(cfg_harvest$canlad_old$type_url, cfg_harvest$canlad_old$year_url),
                format = 'url'),
     tar_target(harvest_old,
-               canlad_old_harvest(canlad_old_files[1], canlad_old_files[2], templates[1],
+               canlad_old_harvest(canlad_old_files[1], canlad_old_files[2], template_margin,
                                   cfg_harvest$canlad_old$code,
                                   cfg_access$access, cfg_access$cache)),
     tar_target(harvest_history,
@@ -88,7 +95,7 @@ targets_harvest <- function(built) {
       tar_target_raw(years_nm, substitute(seq(A, B), list(A = min(rows$first_year), B = max(rows$last_year)))),
       tar_target_raw(files_nm, substitute(
         build_harvest_layers(harvest_history, METRIC, RES, YEARS, cfg_harvest$recent_years,
-                             templates, file.path(landscape_dir, 'harvest')),
+                             templates, file.path(landscape_dir, 'harvest'), margin = template_margin),
         list(METRIC = metric, RES = sort(unique(rows$resolution)), YEARS = as.symbol(years_nm))),
         pattern = substitute(map(YEARS), list(YEARS = as.symbol(years_nm))),
         format = 'file')
@@ -135,19 +142,96 @@ targets_landcover <- function(built, window_m) {
   }
   c(out, pick_targets(lc, 'landcover_files', prefix))
 }
+#' @title Targets: human disturbance layers
+#' @description For each lookup table and source in `landscape: disturbance:`,
+#'   a download target (run again every `check_every_days` to pick up updates)
+#'   and, per source, its features sorted into categories. Then for each
+#'   category in the layer table: the disturbed 30 m cells and their years, the
+#'   years in which they change, and for each metric (dist, pa, dens) one target
+#'   per such year, building every resolution asked for. Each source's settings
+#'   are written into its own targets, so changing one source's rules reruns
+#'   only that source.
+#' @param built data.table. The layer-table rows with a `build`.
+#' @param dcfg named list. `landscape: disturbance:`.
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+targets_disturbance <- function(built, dcfg) {
+  rows <- built[startsWith(build, 'disturb_')]
+  if (nrow(rows) == 0) return(list())
+  age <- as.difftime(dcfg$check_every_days %||% 30, units = 'days')
+  download <- function(nm, url, files, folder) {
+    tar_target_raw(nm, substitute(
+      download_disturbance(URL, FILES, file.path(cfg_access$cache, 'disturbance', FOLDER)),
+      list(URL = url, FILES = files, FOLDER = folder)),
+      format = 'file', cue = tarchetypes::tar_cue_age_raw(nm, age))
+  }
+  out <- list()
+  for (nm in names(dcfg$lookups)) {
+    lk <- dcfg$lookups[[nm]]
+    out <- c(out, list(download(paste0('disturb_lookup_', nm), lk$url, lk$target_file, nm)))
+  }
+  features <- character()
+  for (nm in names(dcfg$sources)) {
+    src <- dcfg$sources[[nm]]
+    dl_nm <- paste0('disturb_download_', nm)
+    ft_nm <- paste0('disturb_features_', nm)
+    used <- unique(unlist(purrr::map(src$files, function(f) f$lookup$table)))
+    lookups <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('disturb_lookup_', used), as.symbol), used)))
+    out <- c(out, list(
+      download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm),
+      tar_target_raw(ft_nm, substitute(
+        prep_disturbance_features(DL, SRC, LOOKUPS, template_margin, cfg_project$crs,
+                                  file.path(landscape_dir, 'disturbance', FILE)),
+        list(DL = as.symbol(dl_nm), SRC = src, LOOKUPS = lookups, FILE = paste0('features_', nm, '.gpkg'))),
+        format = 'file')
+    ))
+    features <- c(features, ft_nm)
+  }
+  all_features <- as.call(c(quote(c), purrr::map(features, as.symbol)))
+  for (cl in unique(rows$class)) {
+    cr <- rows[class == cl]
+    hist_nm <- paste0('disturb_history_', cl)
+    years_nm <- paste0('disturb_years_', cl)
+    out <- c(out, list(
+      tar_target_raw(hist_nm, substitute(disturbance_cells(FEATURES, CL, template_margin),
+                                         list(FEATURES = all_features, CL = cl))),
+      tar_target_raw(years_nm, substitute(disturbance_years(H, FY, LY),
+                                          list(H = as.symbol(hist_nm), FY = min(cr$first_year),
+                                               LY = max(cr$last_year))))
+    ))
+    for (b in unique(cr$build)) {
+      metric <- sub('^disturb_', '', b)
+      files_nm <- paste0('disturb_', metric, '_', cl, '_files')
+      out <- c(out, list(
+        tar_target_raw(files_nm, substitute(
+          build_disturbance_layers(H, METRIC, RES, YEARS, templates,
+                                   file.path(landscape_dir, 'disturbance'), PREFIX, template_margin),
+          list(H = as.symbol(hist_nm), METRIC = metric, RES = sort(unique(cr[build == b]$resolution)),
+               YEARS = as.symbol(years_nm), PREFIX = paste0('disturb_', cl))),
+          pattern = substitute(map(YEARS), list(YEARS = as.symbol(years_nm))),
+          format = 'file')
+      ))
+      out <- c(out, pick_targets(cr[build == b], files_nm,
+                                 function(i) paste0('disturb_', cl, '_', metric), fill = TRUE))
+    }
+  }
+  out
+}
 #' @title One layer_files_<name> target per row, picking its files from a builder
 #' @param rows data.table. Layer-table rows.
 #' @param files_nm character. Name of the builder's files target.
 #' @param prefix function(i) giving row i's file name prefix.
+#' @param fill logical. Years without their own file use the latest earlier one.
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-pick_targets <- function(rows, files_nm, prefix) {
+pick_targets <- function(rows, files_nm, prefix, fill = FALSE) {
   purrr::map(seq_len(nrow(rows)), function(i) {
     tar_target_raw(paste0('layer_files_', rows$name[i]), substitute(
-      pick_layer_files(FILES, PREFIX, RES, FY, LY),
+      pick_layer_files(FILES, PREFIX, RES, FY, LY, FILL),
       list(FILES = as.symbol(files_nm), PREFIX = prefix(i), RES = rows$resolution[i],
-           FY = rows$first_year[i], LY = rows$last_year[i])),
+           FY = rows$first_year[i], LY = rows$last_year[i], FILL = fill)),
       format = 'file')
   })
 }

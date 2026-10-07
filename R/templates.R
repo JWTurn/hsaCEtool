@@ -67,6 +67,32 @@ make_templates <- function(study_area, tmpl, crs, paths, out_dir) {
   c(fine_file, coarse_files)
 }
 
+#' @title Make the template with a margin, for distances
+#' @description The finest template's grid extended by `margin_m` (rounded up
+#'   to whole cells) on every side, with every cell 1. Distances are measured
+#'   over it and then cut back to the template, so that a road or cutblock just
+#'   outside the template still counts.
+#' @param template character. The finest template file, from [make_templates()].
+#' @param margin_m numeric. Margin in metres (0 = none).
+#' @param out character. File to write.
+#' @return `out`.
+#' @author Julie W. Turner
+make_margin_template <- function(template, margin_m, out) {
+  reproducible::checkPath(dirname(out), create = TRUE)
+  r <- terra::rast(template)
+  res <- terra::res(r)[1]
+  m <- ceiling((margin_m %||% 0) / res) * res
+  e <- as.vector(terra::ext(r)) + c(-m, m, -m, m)
+  box <- tempfile(fileext = '.gpkg')
+  on.exit(unlink(box), add = TRUE)
+  terra::writeVector(terra::as.polygons(terra::ext(e), crs = terra::crs(r)), box)
+  sf::gdal_utils('rasterize', box, out, options = c(
+    '-burn', '1', '-init', '1', '-a_nodata', '0', '-ot', 'Byte',
+    '-te', e[1], e[3], e[2], e[4], '-tr', res, res,
+    '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'))
+  out
+}
+
 #' @title Pick one template file by cell size
 #' @param templates character. Files from [make_templates()].
 #' @param res numeric. Cell size in metres.

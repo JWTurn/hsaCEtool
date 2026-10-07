@@ -91,6 +91,10 @@ true metres). The templates come from `landscape: template:`:
 A built layer's `resolution` must be `base_res` times one of the factors (e.g.
 240), and it needs `first_year` and `last_year`.
 
+Distances (to harvest and human disturbance) are measured over the template
+plus `landscape: distance_margin_m` (default 10 km) on every side, so a road or
+cutblock just outside the template still counts.
+
 National rasters are read with `landscape: access:` either `stream` (only the
 part covering the study area is read from the web; nothing is stored) or
 `download` (each whole file is saved once to `paths: input_cache`, which several
@@ -109,7 +113,7 @@ that year included (default 2).
 | `harvest_year` | The most recent harvest year up to that year, in any of its 30 m cells (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
 | `harvest_pa` | 1 if any of its 30 m cells had recent harvest, otherwise 0 |
 | `harvest_dens` | The proportion of its 30 m cells with recent harvest |
-| `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell |
+| `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell (including those in the margin) |
 
 ### Land cover (`build: landcover` or `landcover_cell`)
 
@@ -131,6 +135,45 @@ The cell proportions are always saved too (in
 Reading SCANFI from NRCan is slow (about 1 MB/s per connection; each yearly
 file is 3.4 GB). With `access: download`, each file is fetched in 8 pieces at
 once.
+
+### Human disturbance (`build: disturb_*`)
+
+Roads, trails, seismic lines, mines, clearings and other human disturbance,
+from the sources listed under `landscape: disturbance: sources:` (for NMC:
+GeoYukon surface disturbance, and the BC and NWT compilations; see
+`NMC.yaml`). Each feature is sorted into a category, named in the row's
+`class` column (for NMC: paved, unpaved, lfother, placer, quartz, othermines,
+otherpoly). A feature counts from the year it was built; one without a year
+counts in every year.
+
+| `build` | Each cell holds, counting every feature built up to that year |
+|---|---|
+| `disturb_pa` | 1 if any of its 30 m cells is touched by a feature of that category, otherwise 0 |
+| `disturb_dens` | The proportion of its 30 m cells touched |
+| `disturb_dist` | The mean distance (m) from its 30 m cells to the nearest touched 30 m cell (including those in the margin) |
+
+Each source is a download (`url`: a file, a zip, or a Google Drive folder) and
+the `files` wanted from it. Each file has:
+
+- `category`: one category for all its features, or `rules`: a list of
+  `{where: {field: value(s)}, category: ...}`, checked in order; the first
+  that matches gives the category. A rule without `where` catches the rest.
+  Category `drop` leaves features out (e.g. harvest, which comes from CanLaD).
+- `year`: fields giving the year built, in order of preference (a year or a
+  date). None, or all empty: the feature counts in every year.
+- `lookup`: optionally, columns added from a table in `landscape: disturbance:
+  lookups:` (e.g. a reclassification spreadsheet), matched on some fields:
+  `{table: ..., sheet: ..., by: {feature field: table column}, add: column}`.
+  Types missing from the table are listed in a warning and sorted by the
+  remaining rules.
+
+Sources are downloaded again every `check_every_days` (default 30) to pick up
+updates; the layers are only rebuilt if the features changed. Google Drive
+downloads use the saved login of `run: google_email` (set it in `local.yaml`
+and run `googledrive::drive_auth(email = "<it>")` once).
+
+Layers are only built for the first year and the years in which features were
+added; the other years reuse the layer of the year before.
 
 ## Running steps in parallel
 

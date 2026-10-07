@@ -15,6 +15,7 @@ targets_config <- function(cfg) {
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
     tar_target(cfg_template, cfg$landscape$template),
+    tar_target(cfg_margin, cfg$landscape$distance_margin_m %||% 0),
     tar_target(cfg_harvest, cfg$landscape$harvest),
     tar_target(cfg_landcover, cfg$landscape$landcover),
     tar_target(cfg_access, list(

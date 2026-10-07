@@ -127,6 +127,10 @@ landscape:
   # saves each whole file once to paths: input_cache and reads it from there.
   access: stream
 
+  # Distances (to harvest and human disturbance) also count features up to this
+  # far beyond the template, so that a road just outside it is not missed
+  distance_margin_m: 10000
+
   # Harvest: Canada Landsat Disturbance (CanLaD) 1965-1984 and annual maps from 1985
   harvest:
     recent_years: 2       # harvest this many years back (that year included) counts as recent,
@@ -192,6 +196,16 @@ landscape:
         220: broadleaf
         230: mixedwood
 
+  # Human disturbance: roads, trails, seismic lines, mines, clearings... from one
+  # or more sources, each sorted into categories (e.g. paved, unpaved, lfother) by
+  # rules, and counted from the year each feature was built (build: disturb_dist,
+  # disturb_pa, disturb_dens). The sources are set per project (see config/NMC.yaml
+  # and config/README.md).
+  disturbance:
+    check_every_days: 30  # download the sources again after this many days, to pick up updates
+    lookups: {}           # tables the rules can use, e.g. a reclassification spreadsheet
+    sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup}]}
+
 # Running steps in parallel ---------------------------------------------------
 # Usually set in local.yaml, as it depends on the computer.
 run:
@@ -199,6 +213,8 @@ run:
                           # 1 = one at a time. Needs the crew package. Each worker uses
                           # memory and temporary disk space, so start with 2-4.
   memfrac: 0.6            # share of the computer's memory terra may use, split among workers
+  google_email: null      # Google account whose saved login is used for Google Drive
+                          # downloads (run googledrive::drive_auth() once with it)
 
 # Extracting layer values at steps --------------------------------------------
 extract:

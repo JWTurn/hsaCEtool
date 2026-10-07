@@ -131,7 +131,8 @@ check_config <- function(cfg) {
     add('landscape: access must be "stream" or "download"')
   }
   if (!is.null(cfg$layers)) {
-    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist', 'landcover', 'landcover_cell')
+    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist', 'landcover', 'landcover_cell',
+                'disturb_dist', 'disturb_pa', 'disturb_dens')
     built <- cfg$layers[!is.na(build)]
     bad <- built[!build %in% builds]$name
     if (length(bad)) {
@@ -165,6 +166,32 @@ check_config <- function(cfg) {
       bad <- setdiff(names(lcs$window_m), as.character(res_ok))
       if (length(bad)) {
         add('landscape: landcover: window_m has resolutions without a template: ', paste(bad, collapse = ', '))
+      }
+    }
+    dr <- built[startsWith(build, 'disturb_')]
+    if (nrow(dr)) {
+      dcfg <- cfg$landscape$disturbance
+      if (length(dcfg$sources) == 0) add('layer table: disturbance layers need landscape: disturbance: sources')
+      cats <- character()
+      for (nm in names(dcfg$sources)) {
+        src <- dcfg$sources[[nm]]
+        if (!nzchar(src$url %||% '')) add('landscape: disturbance: sources: ', nm, ' needs a url')
+        for (f in src$files) {
+          if (is.null(f$file)) add('landscape: disturbance: sources: ', nm, ': each of files needs a file')
+          if (is.null(f$category) && length(f$rules) == 0) {
+            add('landscape: disturbance: sources: ', nm, ': ', f$file, ' needs a category or rules')
+          }
+          if (!is.null(f$lookup) && is.null(dcfg$lookups[[f$lookup$table %||% '']])) {
+            add('landscape: disturbance: sources: ', nm, ': ', f$file, ' uses lookup "', f$lookup$table,
+                '", which is not in landscape: disturbance: lookups')
+          }
+          cats <- c(cats, f$category, purrr::map_chr(f$rules, function(r) r$category %||% NA_character_))
+        }
+      }
+      bad <- dr[!class %in% setdiff(cats, 'drop')]$name
+      if (length(bad)) {
+        add('layer table: class not given to any feature by landscape: disturbance: sources: ',
+            paste(bad, collapse = ', '))
       }
     }
   }
