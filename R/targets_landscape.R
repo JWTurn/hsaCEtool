@@ -144,7 +144,8 @@ targets_landcover <- function(built, window_m) {
 }
 #' @title Targets: human disturbance layers
 #' @description For each lookup table and source in `landscape: disturbance:`,
-#'   a download target (run again every `check_every_days` to pick up updates)
+#'   a download target (downloading only files not already in the input
+#'   cache, or every run with `refresh: true` on that source or lookup)
 #'   and, per source, its features sorted into categories. Then for each
 #'   category in the layer table: the disturbed 30 m cells and their years, the
 #'   years in which they change, and for each metric (dist, pa, dens) one target
@@ -159,17 +160,17 @@ targets_landcover <- function(built, window_m) {
 targets_disturbance <- function(built, dcfg) {
   rows <- built[startsWith(build, 'disturb_')]
   if (nrow(rows) == 0) return(list())
-  age <- as.difftime(dcfg$check_every_days %||% 30, units = 'days')
-  download <- function(nm, url, files, folder) {
+  download <- function(nm, url, files, folder, refresh) {
+    refresh <- isTRUE(refresh)
     tar_target_raw(nm, substitute(
-      download_disturbance(URL, FILES, file.path(cfg_access$cache, 'disturbance', FOLDER)),
-      list(URL = url, FILES = files, FOLDER = folder)),
-      format = 'file', cue = tarchetypes::tar_cue_age_raw(nm, age))
+      download_disturbance(URL, FILES, file.path(cfg_access$cache, 'disturbance', FOLDER), REFRESH),
+      list(URL = url, FILES = files, FOLDER = folder, REFRESH = refresh)),
+      format = 'file', cue = tar_cue(mode = if (refresh) 'always' else 'thorough'))
   }
   out <- list()
   for (nm in names(dcfg$lookups)) {
     lk <- dcfg$lookups[[nm]]
-    out <- c(out, list(download(paste0('disturb_lookup_', nm), lk$url, lk$target_file, nm)))
+    out <- c(out, list(download(paste0('disturb_lookup_', nm), lk$url, lk$target_file, nm, lk$refresh)))
   }
   features <- character()
   for (nm in names(dcfg$sources)) {
@@ -179,7 +180,7 @@ targets_disturbance <- function(built, dcfg) {
     used <- unique(unlist(purrr::map(src$files, function(f) f$lookup$table)))
     lookups <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('disturb_lookup_', used), as.symbol), used)))
     out <- c(out, list(
-      download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm),
+      download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm, src$refresh),
       tar_target_raw(ft_nm, substitute(
         prep_disturbance_features(DL, SRC, LOOKUPS, template_margin, cfg_project$crs,
                                   file.path(landscape_dir, 'disturbance', FILE)),

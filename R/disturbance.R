@@ -10,26 +10,29 @@
 #' @title Download one disturbance source
 #' @description Uses [reproducible::prepInputs()]: a zip is downloaded and
 #'   unpacked, a Google Drive folder is downloaded file by file, and a single
-#'   file (e.g. a spreadsheet) is downloaded as it is. Existing copies are
-#'   replaced, so running it again picks up updates.
+#'   file (e.g. a spreadsheet) is downloaded as it is. Files already in `dir`
+#'   are not downloaded again (prepInputs does not check the web for a newer
+#'   version). With `refresh = TRUE`, the source is downloaded afresh and
+#'   replaces the copies in `dir` (see [prep_inputs_fresh()]).
 #' @param url character. Web address of a file or zip, or a Google Drive folder.
 #' @param files character. The files wanted from the download.
 #' @param dir character. Folder to download into.
+#' @param refresh logical. Download again even if the files are in `dir`?
 #' @return character. The files, with their shapefile companions.
 #' @author Julie W. Turner
-download_disturbance <- function(url, files, dir) {
+download_disturbance <- function(url, files, dir, refresh = FALSE) {
   reproducible::checkPath(dir, create = TRUE)
   folder <- grepl('drive.google.com/drive/folders', url, fixed = TRUE)
-  reproducible::prepInputs(url = url, destinationPath = dir, fun = NA, overwrite = TRUE,
-                           targetFile = if (folder) NULL else files[1])
+  get <- if (isTRUE(refresh)) prep_inputs_fresh else reproducible::prepInputs
+  get(url = url, destinationPath = dir, fun = NA, targetFile = if (folder) NULL else files[1])
   paths <- file.path(dir, files)
   missing <- !file.exists(paths)
   if (any(missing)) {
     stop('Not in the download from ', url, ': ', paste(files[missing], collapse = ', '), call. = FALSE)
   }
   shp <- tolower(tools::file_ext(paths)) == 'shp'
-  sidecars <- unlist(purrr::map(tools::file_path_sans_ext(paths[shp]),
-                                function(b) paste0(b, c('.shx', '.dbf', '.prj', '.cpg'))))
+  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths[shp]),
+                                             function(b) paste0(b, c('.shx', '.dbf', '.prj', '.cpg')))))
   c(paths, sidecars[file.exists(sidecars)])
 }
 

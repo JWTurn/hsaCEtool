@@ -202,9 +202,10 @@ landscape:
   # disturb_pa, disturb_dens). The sources are set per project (see config/NMC.yaml
   # and config/README.md).
   disturbance:
-    check_every_days: 30  # download the sources again after this many days, to pick up updates
     lookups: {}           # tables the rules can use, e.g. a reclassification spreadsheet
     sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup}]}
+                          # Downloads are kept in paths: input_cache and not repeated; add
+                          # refresh: true to a source or lookup to download it again every run
 
 # Running steps in parallel ---------------------------------------------------
 # Usually set in local.yaml, as it depends on the computer.

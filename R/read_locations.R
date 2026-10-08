@@ -23,11 +23,12 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #' @description Downloads and reads a locations file with
 #'   [reproducible::prepInputs()], e.g. from a Google Drive link. The file is
 #'   kept in `paths$inputs`, so it is only downloaded again if that copy is
-#'   missing or incomplete. The function that reads it is the source's `fun`
+#'   missing or incomplete, or if the source has `refresh: true` (see
+#'   [prep_inputs_fresh()]). The function that reads it is the source's `fun`
 #'   setting or, if not set, chosen from `target_file`'s type: `readRDS` for
 #'   .rds, `data.table::fread` for .csv, `sf::st_read` for .shp/.gpkg/.geojson.
 #' @inheritParams read_locations_file
-#' @param src named list. `url`, `target_file`, optional `archive` and `fun`.
+#' @param src named list. `url`, `target_file`, optional `archive`, `fun` and `refresh`.
 #' @param paths named list. The `paths:` settings.
 #' @return data.table of locations.
 #' @author Julie W. Turner
@@ -37,10 +38,10 @@ download_locations <- function(src, loc_cfg, crs, paths) {
                              csv = 'data.table::fread',
                              shp = , gpkg = , geojson = 'sf::st_read',
                              stop('Set target_file (or fun) for ', src$url, call. = FALSE))
-  dir.create(paths$inputs, recursive = TRUE, showWarnings = FALSE)
-  obj <- reproducible::prepInputs(url = src$url, targetFile = src$target_file,
-                                  archive = src$archive, destinationPath = paths$inputs,
-                                  fun = fun)
+  reproducible::checkPath(paths$inputs, create = TRUE)
+  get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
+  obj <- get(url = src$url, targetFile = src$target_file, archive = src$archive,
+             destinationPath = paths$inputs, fun = fun)
   locations_from_object(obj, src, loc_cfg, crs)
 }
 

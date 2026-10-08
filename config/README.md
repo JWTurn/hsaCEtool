@@ -29,8 +29,9 @@ Each input is a *source*: either a `path` to a file on your computer, or a
 `url` to download (a web or Google Drive link). Downloads use
 `reproducible::prepInputs()`. They are
 saved in `paths: inputs` and are only downloaded again if that copy is missing
-or incomplete. To check a URL for a newer version on every run, add
-`refresh: true` to that source.
+or incomplete (`prepInputs()` does not check the web for a newer version). To
+get a newer version, add `refresh: true` to that source for one run: it is
+downloaded afresh and replaces the kept copy. Remove it afterwards.
 
 ```yaml
 locations:
@@ -167,8 +168,11 @@ the `files` wanted from it. Each file has:
   Types missing from the table are listed in a warning and sorted by the
   remaining rules.
 
-Sources are downloaded again every `check_every_days` (default 30) to pick up
-updates; the layers are only rebuilt if the features changed. Google Drive
+Each download is kept in `paths: input_cache` and is not downloaded again
+(`prepInputs()` does not check the web for a newer version). To pick up an
+update (e.g. a new GeoYukon release), add `refresh: true` to that source or
+lookup for one run: it is downloaded afresh, and the layers are only rebuilt
+if its features changed. Remove it afterwards. Google Drive
 downloads use the saved login of `run: google_email` (set it in `local.yaml`
 and run `googledrive::drive_auth(email = "<it>")` once).
 

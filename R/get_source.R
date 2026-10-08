@@ -14,7 +14,7 @@
 #' @author Julie W. Turner
 get_source <- function(src, paths) {
   if (!is.null(src$url) && nzchar(src$url)) {
-    dir.create(paths$inputs, recursive = TRUE, showWarnings = FALSE)
+    reproducible::checkPath(paths$inputs, create = TRUE)
     if (is.null(src$target_file)) stop('Set target_file for ', src$url, call. = FALSE)
     fun <- src$fun %||% switch(tolower(tools::file_ext(src$target_file)),
                                tif = , tiff = , grd = 'terra::rast',
@@ -56,4 +56,39 @@ get_source <- function(src, paths) {
     path <- c(path, sidecars[file.exists(sidecars)])
   }
   path
+}
+
+#' @title Download afresh with prepInputs, replacing the kept copy
+#' @description [reproducible::prepInputs()] does not download a file it
+#'   already has, and does not check the web for a newer version. This
+#'   downloads into a new temporary folder (ignoring `reproducible.inputPaths`,
+#'   so no older copy kept elsewhere is reused), then replaces the copies in
+#'   `destinationPath` and their entries in its CHECKSUMS.txt, so later runs
+#'   use the new copy without downloading it again. Used for sources with
+#'   `refresh: true`.
+#' @param destinationPath character. Folder the download is kept in.
+#' @param ... Passed to [reproducible::prepInputs()].
+#' @return What prepInputs returns (with `fun = NA`, a path in the temporary
+#'   folder: use the copies in `destinationPath` instead).
+#' @author Julie W. Turner
+prep_inputs_fresh <- function(destinationPath, ...) {
+  reproducible::checkPath(destinationPath, create = TRUE)
+  tmp <- reproducible::checkPath(tempfile('download_'), create = TRUE)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  out <- withr::with_options(list(reproducible.inputPaths = NULL),
+                             reproducible::prepInputs(..., destinationPath = tmp))
+  got <- setdiff(list.files(tmp), 'CHECKSUMS.txt')
+  file.copy(file.path(tmp, got), destinationPath, overwrite = TRUE)
+  # keep the other files' checksums; replace those of the new copies
+  new_ck <- file.path(tmp, 'CHECKSUMS.txt')
+  old_ck <- file.path(destinationPath, 'CHECKSUMS.txt')
+  if (file.exists(new_ck)) {
+    ck <- data.table::fread(new_ck, colClasses = 'character')
+    if (file.exists(old_ck)) {
+      old <- data.table::fread(old_ck, colClasses = 'character')
+      ck <- rbind(old[!file %in% ck$file], ck, fill = TRUE)
+    }
+    data.table::fwrite(ck, old_ck, sep = ' ', quote = TRUE)
+  }
+  out
 }
