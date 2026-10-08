@@ -28,8 +28,11 @@ targets_config <- function(cfg) {
 
 #' @title Targets: read, clean and crop caribou locations
 #' @description One target per data source in `locations: sources:` (a local
-#'   file, a URL, or a Movebank study), then: combine, clean, make the study
-#'   area, and keep the locations inside it.
+#'   file, a URL, a Movebank study, or the B.C. telemetry exports combined by
+#'   [read_bc_locations()], with a `_log` target counting each step), then:
+#'   combine (flagging fixes an earlier-listed source also has, see
+#'   [flag_source_duplicates()]), clean, make the study area, and keep the
+#'   locations inside it.
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
@@ -44,6 +47,22 @@ targets_locations <- function(cfg) {
       src_targets <- c(src_targets, list(
         tar_target_raw(nm, substitute(download_movebank(SRC, cfg_locations, cfg_project$crs),
                                       list(SRC = src)), cue = cue)
+      ))
+    } else if (identical(src$type, 'bc')) {
+      files <- list(NEW = quote(NULL), OLD = quote(NULL), REF = quote(NULL))
+      for (part in intersect(c('new', 'old', 'reference'), names(src))) {
+        part_nm <- paste0(nm, '_', part)
+        part_cue <- tar_cue(mode = if (isTRUE(src$refresh) || isTRUE(src[[part]]$refresh)) 'always' else 'thorough')
+        src_targets <- c(src_targets, list(
+          tar_target_raw(part_nm, substitute(get_source(SRC, cfg_paths), list(SRC = src[[part]])),
+                         format = 'file', cue = part_cue)
+        ))
+        files[[c(new = 'NEW', old = 'OLD', reference = 'REF')[[part]]]] <- as.symbol(part_nm)
+      }
+      src_targets <- c(src_targets, list(
+        tar_target_raw(nm, substitute(read_bc_locations(NEW, OLD, REF, SRC, cfg_locations, cfg_project$crs),
+                                      c(files, list(SRC = src)))),
+        tar_target_raw(paste0(nm, '_log'), substitute(attr(X, 'merge_log'), list(X = as.symbol(nm))))
       ))
     } else if (!is.null(src$url)) {
       src_targets <- c(src_targets, list(
@@ -62,7 +81,8 @@ targets_locations <- function(cfg) {
     src_names <- c(src_names, nm)
   }
 
-  combine <- substitute(data.table::rbindlist(SRCS, fill = TRUE),
+  combine <- substitute(flag_source_duplicates(data.table::rbindlist(SRCS, fill = TRUE),
+                                               cfg_locations$source_duplicates, cfg_project$crs),
                         list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
 
   sa_src <- cfg$locations$study_area$source

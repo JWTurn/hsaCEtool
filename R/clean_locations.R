@@ -34,6 +34,45 @@ clean_locations <- function(DT, cleaning, crs) {
   DT
 }
 
+#' @title Flag fixes that another source also has
+#' @description When sources overlap (e.g. the same collars on Movebank and in a
+#'   government export), the same fix appears twice, possibly under different
+#'   animal IDs. Fixes within `max_m` metres and `max_s` seconds of a fix from
+#'   a source listed earlier in `locations: sources:` get that source's name in
+#'   `dup_source`; the earlier source's copy is kept unflagged. Nothing is
+#'   removed here: the cleaning step `source_duplicates` removes flagged fixes.
+#' @param DT data.table of standard locations from all sources, in the order the
+#'   sources are listed, with a `source` column.
+#' @param params named list: `max_m` (default 2) and `max_s` (default 60).
+#' @param crs character. Project coordinate system.
+#' @return `DT` with column `dup_source` (NA if no earlier source has the fix).
+#' @author Julie W. Turner
+flag_source_duplicates <- function(DT, params, crs) {
+  DT <- data.table::as.data.table(DT)
+  DT[, dup_source := NA_character_]
+  srcs <- unique(DT$source)
+  if (length(srcs) < 2) return(DT[])
+  ll <- sf::sf_project(sf::st_crs(crs), sf::st_crs('EPSG:4326'), as.matrix(DT[, .(x_, y_)]))
+  fixes <- data.table::data.table(g = 1L, t = DT$t_, lat = ll[, 2], lon = ll[, 1])
+  rank <- match(DT$source, srcs)
+  pr <- match_fixes(fixes, fixes, params$max_s %||% 60, params$max_m %||% 2)
+  pr <- pr[rank[ia] < rank[ib]][order(rank[ia], abs(dt))][!duplicated(ib)]
+  DT[pr$ib, dup_source := DT$source[pr$ia]]
+  message(sprintf('[source duplicates] %s fixes also in an earlier-listed source', nrow(pr)))
+  DT[]
+}
+
+#' @title Cleaning step: drop fixes another source also has
+#' @description Removes the fixes [flag_source_duplicates()] flagged.
+#' @inheritParams clean_bounds
+#' @param params not used.
+#' @return data.table.
+#' @author Julie W. Turner
+clean_source_duplicates <- function(DT, params, crs) {
+  if (!'dup_source' %in% names(DT)) return(DT)
+  DT[is.na(dup_source)]
+}
+
 #' @title Run an amt flagging function on each animal's track
 #' @param DT data.table of standard locations, sorted by id and t_.
 #' @param flag_fun function taking a `track_xyt` and returning it with a flag column.

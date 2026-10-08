@@ -65,8 +65,10 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
 }
 
 #' @title Download caribou locations from Movebank
-#' @description Downloads one Movebank study and its deployment table with
-#'   \pkg{move2}, adds deployment start/end times, and puts it in standard form.
+#' @description Downloads one Movebank study with \pkg{move2}, drops records
+#'   without a position, adds each deployment's animal ID, sex, start/end times,
+#'   duty cycle and end type (from the study's deployment, or track, table), and
+#'   puts it in standard form.
 #'   The Movebank password is never stored in the settings: it is read from the
 #'   system keyring, where it is saved once with
 #'   `move2::movebank_store_credentials(<user>)`. You must have accepted the
@@ -81,26 +83,26 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
 download_movebank <- function(src, loc_cfg, crs) {
   options(move2_movebank_key_name = 'movebank')
   dat <- move2::movebank_download_study(src$study, removeDuplicatedTimestamps = TRUE)
-  meta <- data.table::as.data.table(move2::movebank_download_deployment(src$study))
+  dat <- dat[!sf::st_is_empty(dat), ]   # records without a position
 
   xy <- sf::st_coordinates(dat)
   DT <- data.table::as.data.table(sf::st_drop_geometry(dat))
   DT[, `:=`(longitude = xy[, 1], latitude = xy[, 2])]
+  track_col <- move2::mt_track_id_column(dat)
+  meta <- data.table::as.data.table(sf::st_drop_geometry(move2::mt_track_data(dat)))
+  meta_cols <- intersect(c(track_col, 'deployment_id', 'individual_local_identifier', 'tag_local_identifier',
+                           'sex', 'deploy_on_timestamp', 'deploy_off_timestamp', 'duty_cycle',
+                           'deployment_end_type', 'individual_number_of_deployments'), names(meta))
+  meta <- meta[, unique(meta_cols), with = FALSE]
+  DT <- merge(DT[, setdiff(names(DT), setdiff(names(meta), track_col)), with = FALSE], meta,
+              by = track_col, all.x = TRUE)
 
-  pick_id <- function(d) {
-    if (isTRUE(src$id_from_deployment)) {
-      as.character(d$deployment_id)
-    } else {
-      data.table::fifelse(is.na(d$individual_local_identifier),
-                          as.character(d$deployment_id),
-                          as.character(d$individual_local_identifier))
-    }
-  }
-  DT[, id := pick_id(.SD)]
-  meta[, id := pick_id(.SD)]
-  meta_cols <- intersect(c('id', 'deploy_on_timestamp', 'deploy_off_timestamp', 'duty_cycle',
-                           'deployment_end_type'), names(meta))
-  DT <- merge(DT, unique(meta[, ..meta_cols], by = 'id'), by = 'id', all.x = TRUE)
+  DT[, id := if (isTRUE(src$id_from_deployment) || !'individual_local_identifier' %in% names(DT)) {
+    as.character(deployment_id)
+  } else {
+    data.table::fifelse(is.na(individual_local_identifier), as.character(deployment_id),
+                        as.character(individual_local_identifier))
+  }]
 
   src$columns <- list(id = 'id', datetime = 'timestamp', x = 'longitude', y = 'latitude')
   src$input_crs <- 'EPSG:4326'
@@ -110,9 +112,17 @@ download_movebank <- function(src, loc_cfg, crs) {
 
 #' @title Put locations in the pipeline's standard form
 #' @description Renames the ID, time and coordinate columns to `id`, `t_`, `x_`
-#'   and `y_` (the names \pkg{amt} uses), makes `id` text and `t_` a date-time,
+#'   and `y_` (the names \pkg{amt} uses), makes `id` text and `t_` a date-time
+#'   in UTC,
 #'   projects coordinates to the project's coordinate system, and adds a
 #'   `source` column naming the data set.
+#'
+#'   Times stored as text are read in the time zone `tz` (the source's, else
+#'   the `locations:` default). If `columns` also names an `hour` column,
+#'   `datetime` is taken as the date and `hour` as the whole hour of the day,
+#'   in time zone `tz` (e.g. `America/Whitehorse` for Yukon local time,
+#'   which follows daylight saving until November 2020), and converted to UTC
+#'   with [local_to_utc()].
 #' @inheritParams read_locations_file
 #' @param DT data.frame of locations.
 #' @return data.table.
@@ -120,7 +130,7 @@ download_movebank <- function(src, loc_cfg, crs) {
 standardize_locations <- function(DT, src, loc_cfg, crs) {
   DT <- data.table::as.data.table(DT)
   cols <- src$columns %||% loc_cfg$columns
-  missing <- setdiff(unlist(cols[c('id', 'datetime', 'x', 'y')]), names(DT))
+  missing <- setdiff(unlist(cols[c('id', 'datetime', 'x', 'y', 'hour')]), names(DT))
   if (length(missing)) {
     stop('Location columns not found: ', paste(missing, collapse = ', '),
          '. Set `columns:` in the settings to the names used in this data set.')
@@ -128,7 +138,7 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
 
   keep <- unlist(loc_cfg$keep_columns)
   if (length(keep)) {
-    DT <- DT[, unique(c(unlist(cols[c('id', 'datetime', 'x', 'y')]), intersect(keep, names(DT)))), with = FALSE]
+    DT <- DT[, unique(c(unlist(cols[c('id', 'datetime', 'x', 'y', 'hour')]), intersect(keep, names(DT)))), with = FALSE]
   }
   # avoid clashes with columns that already use the standard names
   std <- c(id = 'id', datetime = 't_', x = 'x_', y = 'y_')
@@ -137,9 +147,15 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
   data.table::setnames(DT, unlist(cols[c('id', 'datetime', 'x', 'y')]), std)
 
   DT[, id := as.character(id)]
-  if (!inherits(DT$t_, 'POSIXct')) {
-    DT[, t_ := as.POSIXct(t_, tz = loc_cfg$tz %||% 'UTC')]
+  tz <- src$tz %||% loc_cfg$tz %||% 'UTC'
+  if (!is.null(cols$hour)) {
+    # a date column plus a whole-hour column, as clock time in tz
+    DT[, t_ := as.POSIXct(format(as.Date(t_)), tz = 'UTC') + as.numeric(DT[[cols$hour]]) * 3600]
+    if (tz != 'UTC') DT[, t_ := local_to_utc(t_, tz)]
+  } else if (!inherits(DT$t_, 'POSIXct')) {
+    DT[, t_ := as.POSIXct(t_, tz = tz)]
   }
+  attr(DT$t_, 'tzone') <- 'UTC'
   DT <- DT[!is.na(x_) & !is.na(y_) & !is.na(t_)]
 
   input_crs <- src$input_crs %||% loc_cfg$input_crs
@@ -149,4 +165,21 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
   }
   DT[, source := src$name %||% NA_character_]
   DT[]
+}
+
+#' @title Convert local clock times to UTC
+#' @description For times read as if they were UTC but that are really the
+#'   clock time in time zone `tz`, adds that zone's offset from UTC on each
+#'   date (so daylight saving is followed). Clock times that do not exist (the
+#'   hour skipped when clocks go forward) are read as daylight time, and those
+#'   that occur twice (when clocks go back) as the first, daylight-time one.
+#' @param x POSIXct. Clock times, stored as UTC.
+#' @param tz character. Time zone the clock times are in.
+#' @return POSIXct in UTC.
+#' @keywords internal
+#' @noRd
+local_to_utc <- function(x, tz) {
+  off <- function(t) as.numeric(t) - as.numeric(as.POSIXct(format(t, tz = tz), tz = 'UTC'))
+  t0 <- x + off(x)
+  x + off(t0)
 }

@@ -33,8 +33,9 @@ paths:
 # Caribou locations (GPS collar fixes) -----------------------------------------
 locations:
   # Where the locations come from. A list, so several data sets can be combined.
-  # Each entry is a source (path or url, see above) with `type: file`, or a
-  # Movebank study with `type: movebank`. Each can have its own `columns` and `input_crs`.
+  # Each entry is a source (path or url, see above) with `type: file`, a
+  # Movebank study with `type: movebank`, or the B.C. telemetry exports with
+  # `type: bc` (see config/README.md). Each can have its own `columns` and `input_crs`.
   sources: []
     # - type: file
     #   url: "https://drive.google.com/file/d/.../view"
@@ -47,9 +48,14 @@ locations:
     datetime: t_          # fix date and time (UTC)
     x: x_                 # x coordinate (easting or longitude)
     y: y_                 # y coordinate (northing or latitude)
+    # hour: Hour          # optional: whole hour of the day, if datetime holds only the date
   keep_columns: []        # other input columns to keep (e.g. herd, jurisdiction); [] keeps all
   input_crs: "EPSG:3154"  # coordinate system of x and y in the input (EPSG:4326 for longitude/latitude)
-  tz: UTC                 # time zone of datetime, if it is stored as text
+  # Fixes that two sources both have (e.g. the same collars on Movebank and in a
+  # government export): the copy from the source listed later is flagged in
+  # column dup_source; the cleaning step source_duplicates removes them.
+  source_duplicates: {max_m: 2, max_s: 60}   # same fix if this close in metres and seconds
+  tz: UTC                 # time zone of datetime, if stored as text or as date plus hour (a source can set its own tz); converted to UTC
 
   # Cleaning steps run in the order listed. Leave the list empty ([]) if the
   # input is already clean. Each step's settings are under `params`.
@@ -60,6 +66,7 @@ locations:
     #   exclude_points  drop fixes near known false locations (e.g. a field office)
     #   capture_effect  drop the first days after each collar was put on
     #   dop             drop low-quality fixes (high dilution of precision)
+    #   source_duplicates  drop fixes an earlier-listed source also has (see source_duplicates above)
     #   duplicates      drop duplicate fixes close in time (amt::flag_duplicates)
     #   fast_steps      drop unrealistically fast steps (amt::flag_fast_steps)
     #   roundtrips      drop fast out-and-back spikes (amt::flag_roundtrips)

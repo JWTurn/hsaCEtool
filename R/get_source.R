@@ -7,7 +7,8 @@
 #'   `target_file` (required with a url), `archive` and `fun` (the function
 #'   prepInputs uses to read the file; by default chosen from `target_file`'s
 #'   type: `terra::rast` for rasters, `sf::st_read` for vector files, `readRDS`
-#'   for .rds).
+#'   for .rds, `data.table::fread` for .csv), and `refresh` (TRUE to download
+#'   afresh, see [prep_inputs_fresh()]).
 #' @param paths named list. The `paths:` settings (`data_in`, `inputs`).
 #' @return character. Path(s) to the file; for a shapefile, the `.shp` first and
 #'   then its companion files, so that `format = "file"` targets notice changes to any of them.
@@ -20,8 +21,10 @@ get_source <- function(src, paths) {
                                tif = , tiff = , grd = 'terra::rast',
                                shp = , gpkg = , geojson = 'sf::st_read',
                                rds = 'readRDS',
+                               csv = 'data.table::fread',
                                stop('Set fun for ', src$target_file, call. = FALSE))
-    reproducible::prepInputs(
+    get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
+    get(
       url = src$url,
       targetFile = src$target_file,
       archive = src$archive,

@@ -102,8 +102,11 @@ check_config <- function(cfg) {
   for (i in seq_along(cfg$locations$sources)) {
     src <- cfg$locations$sources[[i]]
     type <- src$type %||% 'file'
-    if (!type %in% c('file', 'movebank')) {
-      add('locations: sources ', i, ': type must be "file" or "movebank", not "', type, '"')
+    if (!type %in% c('file', 'movebank', 'bc')) {
+      add('locations: sources ', i, ': type must be "file", "movebank" or "bc", not "', type, '"')
+    }
+    if (type == 'bc' && is.null(src$new$path) && is.null(src$new$url)) {
+      add('locations: sources ', i, ': a bc source needs `new:` with a path or a url')
     }
     if (type == 'file' && is.null(src$path) && is.null(src$url)) {
       add('locations: sources ', i, ': give a path or a url')

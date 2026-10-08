@@ -52,6 +52,74 @@ Movebank passwords are never written in the settings. Save yours once with
 `move2::movebank_store_credentials("<user>")`, which keeps it in your computer's
 keyring.
 
+All times are stored in UTC. A source whose times are local clock time gives
+its time zone as `tz` (a name from the time zone database, e.g.
+`America/Whitehorse`, which follows Yukon daylight saving until it ended in
+November 2020). If the date and the hour are in separate columns, name the hour
+column too; the date column is then `datetime`:
+
+```yaml
+    - type: file
+      url: "..."
+      target_file: fixes.shp
+      columns: {id: Collar_ID, datetime: Date_Time, hour: Hour}
+      tz: America/Whitehorse   # leave out if the times are already UTC
+```
+
+Check a source's times before trusting its stated time zone. Two checks
+have helped: collar temperature (warmest mid-afternoon, about 22-23 h UTC in
+this region) and, for collars on a fixed schedule, the gap between fixes
+across a daylight-saving change. In local clock time a 13 h schedule kept by
+a UTC clock shows 14 h across the spring change and 12 h in the fall. The
+Prairie Creek 2015-18 file shows the reverse (12 h in spring, 14 h in fall),
+which fits UTC times from a collar scheduled by local time, so its hours are
+read as UTC.
+
+### B.C. telemetry (`type: bc`)
+
+The B.C. caribou telemetry comes as overlapping exports. A `type: bc` source
+combines them (`read_bc_locations()`); each part is a source as above:
+
+```yaml
+    - type: bc
+      name: BC
+      new: {url: "...", target_file: Caribou_Telem.shp}               # recent export: the base
+      old: {url: "...", target_file: BC_NMC_Telemetry.csv}            # optional
+      reference: {url: "...", target_file: nmc_combined_data_cleaned.csv}  # optional
+      params: {local_tz: America/Vancouver, match_m: 2, max_shift_h: 48}  # defaults
+```
+
+The exports' times are not what they say. Collar temperatures (warmest in the
+mid-afternoon, about 22-23 h UTC) and the same collars on Movebank show that:
+
+- **New file:** the clock time in `Date` is UTC; the -0700/-0800 offset some
+  rows carry is wrong and ignored.
+- **Reference file:** its `timestamp` is UTC (`Acquisition_Date` is shifted).
+  Where it has the same collar's fix at the same position exactly 7 or 8 hours
+  earlier than the new file's time, its time is used: about 250 fixes in the
+  2025 export are 7 hours late.
+- **Old file:** its times are UTC plus the Pacific offset (`local_tz`; 7 hours
+  in daylight time, 8 in standard time), which is subtracted. Caribou only,
+  duplicates removed. Fixes also in the new file
+  (same herd, within `match_m` metres, same time) give it their mortality flag.
+  Fixes at the same position as a new fix but at another time (within
+  `max_shift_h` hours; mostly Lotek collars) give their flag **and their time**:
+  the old times were consistent, while the new export often had two positions
+  at one time. Fixes only in the old file are added.
+- Each fix records `bc_file` (`new` or `old`) and `time_note` (how its time
+  was set), and `time_clash` marks fixes that share their animal and time with
+  another fix, for the cleaning steps to resolve. The animal ID is `Anml_ID`
+  (or `collar_<Cllr_ID>`). The target `locations_source_<n>_log` counts each step.
+
+Where sources overlap (e.g. Little Rancheria collars on Movebank and in the B.C.
+export), list the source that should win first: fixes another, earlier-listed
+source also has are flagged in `dup_source` (`locations: source_duplicates:`),
+and the cleaning step `source_duplicates` removes them.
+
+The comparison behind these rules (counts only) is in
+`inputs/bc_compare/BC_telemetry_comparison.md`, kept with the downloads rather
+than in git.
+
 ## Landscape layers: `layers_<project>.csv`
 
 Each landscape layer is one row of a table named in `landscape: layers:`. To add
