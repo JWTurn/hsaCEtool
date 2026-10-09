@@ -74,7 +74,9 @@ locations:
     #   fast_steps      drop unrealistically fast steps (amt::flag_fast_steps)
     #   roundtrips      drop fast out-and-back spikes (amt::flag_roundtrips)
     #   clusters        flag (not drop) possible dead or dropped collars, amt's rule (amt::flag_defunct_clusters): column defunct_cluster_
-    #   end_clusters    flag (not drop) a stationary end of track, incl. a collar moved to an office: column end_cluster_
+    #   end_clusters    flag (not drop) a stationary end of track, incl. a collar moved to an office: column end_cluster_;
+    #                   also adds cluster_status, mortality_status and mortality_basis (see target mortality_rules)
+    #   drop_end_clusters  drop the stationary end of track flagged by end_clusters, except its first fix (list after end_clusters)
     #   speed           drop steps faster than a speed limit (simple, quick version)
     #   min_points      drop animals with too few fixes
     params:

@@ -138,8 +138,8 @@ each is kept with a warning, so each animal has one fix per time.
 - The target `mortality_check` counts, by source and animal, the fixes flagged
   as mortalities (column `mortality`, e.g. from the old B.C. export) that each
   step removed, and those kept. It is empty if no source has the column.
-- Two steps flag possible dead animals or dropped collars without removing
-  anything. `clusters` uses amt's rule (`defunct_cluster_`): it flags
+- Two steps flag possible dead animals or dropped collars. `clusters` uses
+  amt's rule (`defunct_cluster_`) and only flags: it flags
   everything after the last stretch of short steps lasting `theta_hours`,
   even if the animal moves on later, so it also flags many live animals.
   `end_clusters` (`end_cluster_`) flags only the end of a track that stays
@@ -148,12 +148,37 @@ each is kept with a warning, so each animal has one fix per time.
   joined by up to `transit_fixes` fixes on the move, or a stationary stretch
   followed by up to `transit_fixes` fixes before the data end (picked up and
   switched off). Known offices can also go in `exclude_points`.
-- `end_clusters` also adds `mortality_status`: `likely` (a `mortality` flag
-  in a stationary end of track), `unknown` (a stationary end with no
-  mortality flag), `flag only` (a mortality flag elsewhere; in B.C. several
-  such animals moved on for years, so these look like false alarms). The
-  target `flag_summary` counts, by source, the fixes each rule flags, both,
-  those with a `mortality` flag, and each `mortality_status`.
+  Its first flagged fix, where the animal stopped, is marked `end_of_track_`.
+- The step `drop_end_clusters` (listed after `end_clusters`) removes the
+  stationary end of each track except that first fix, which becomes the
+  track's last fix. Tracks then hold only fixes from when the animal was
+  likely alive. `locations_raw` still has every fix.
+- `end_clusters` also adds `cluster_status`, for each fix: `mortality-cluster`
+  (a `mortality` flag in a stationary end of track), `unknown-cluster` (a
+  stationary end with no mortality flag), `flag-only` (a mortality flag
+  elsewhere; in B.C. several such animals moved on for years, so these look
+  like false alarms, and they are not used for `mortality_status`).
+- `end_clusters` also gives each animal a `mortality_status`, its fate at the
+  end of its track, and a `mortality_basis` saying how it was decided. The
+  first rule that applies wins (the target `mortality_rules` holds this
+  table):
+
+  | Rule | `mortality_status` | Evidence | Kind |
+  |---|---|---|---|
+  | 1 | `dead` | Movebank `deployment_end_type` is dead | recorded |
+  | 2 | `dead` | a `mortality` flag within the stationary end of the track | recorded |
+  | 3 | the `deployment_end_type` (e.g. `equipment-failure`, `removal`, `captured`, `unknown`) | Movebank | recorded |
+  | 4 | `unknown` | the track ends in a stationary stretch, no recorded outcome | inferred |
+  | 5 | `alive` | the track does not end in a stationary stretch, no recorded outcome | inferred |
+
+  Inferred outcomes come from this cluster analysis only: they are our best
+  guess about the end of the track, not an observed fate. Movebank's own
+  `unknown` (rule 3) and the inferred `unknown` (rule 4) are told apart by
+  `mortality_basis`.
+- The target `flag_summary` counts, by source, the fixes flagged by amt's
+  rule, with a `mortality` flag, or both; the fixes removed by
+  `drop_end_clusters` (and those with a mortality flag); and the animals with
+  each `mortality_status` and `mortality_basis`.
 
 The comparison behind these rules (counts only) is in
 `inputs/bc_compare/BC_telemetry_comparison.md`, kept with the downloads rather

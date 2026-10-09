@@ -46,8 +46,8 @@ clean_locations <- function(DT, cleaning, crs) {
                     capture_effect = clean_capture_effect, dop = clean_dop,
                     duplicates = clean_duplicates, fast_steps = clean_fast_steps,
                     roundtrips = clean_roundtrips, clusters = clean_clusters,
-                    end_clusters = clean_end_clusters, speed = clean_speed,
-                    min_points = clean_min_points)
+                    end_clusters = clean_end_clusters, drop_end_clusters = clean_drop_end_clusters,
+                    speed = clean_speed, min_points = clean_min_points)
   run_steps <- function(DT, steps, suffix = '') {
     for (step in unlist(steps)) {
       fun <- cleaning$custom[[step]] %||% available[[step]] %||%
@@ -413,26 +413,98 @@ clean_clusters <- function(DT, params, crs) {
 #'   and flags it and the fixes in between. The last stretch may also be
 #'   followed by up to `transit_fixes` fixes (e.g. a collar picked up and
 #'   switched off soon after), which are flagged too. An animal that moves on
-#'   after staying put is never flagged.
+#'   after staying put is never flagged. Column `end_of_track_` is TRUE for
+#'   the first flagged fix, where the animal stopped: the step
+#'   `drop_end_clusters` ([clean_drop_end_clusters()]) keeps it as the
+#'   track's last fix and removes the flagged fixes after it.
 #'
-#'   Also adds `mortality_status`, comparing these flags with a `mortality`
-#'   column from the data (e.g. the B.C. exports): `likely` (a mortality flag
-#'   in a stationary end of track), `unknown` (a stationary end of track with
-#'   no mortality flag), `flag only` (a mortality flag elsewhere in the track),
-#'   and NA otherwise.
+#'   Also adds, comparing these flags with a `mortality` column from the data
+#'   (e.g. the B.C. exports):
+#'   * `cluster_status`, for each fix: `mortality-cluster` (a mortality flag
+#'     in a stationary end of track), `unknown-cluster` (a stationary end of
+#'     track with no mortality flag), `flag-only` (a mortality flag elsewhere
+#'     in the track; it does not affect `mortality_status`), and NA otherwise.
+#'   * `mortality_status` and `mortality_basis`, one value per animal: the
+#'     animal's fate at the end of its track, from the first rule in
+#'     [mortality_status_rules()] that applies. Recorded outcomes (Movebank's
+#'     `deployment_end_type`, the data's mortality flags) come first; the
+#'     rest (`unknown`, `alive`) are inferred from the stationary end of track
+#'     and are our best guess, not an observed fate.
 #' @inheritParams clean_bounds
 #' @param params named list: `zeta`, `theta_hours`, `max_moves`, `transit_fixes`.
-#' @return data.table with columns `end_cluster_` and `mortality_status`.
+#' @return data.table with columns `end_cluster_`, `end_of_track_`,
+#'   `cluster_status`, `mortality_status` and `mortality_basis`.
 #' @author Julie W. Turner
 clean_end_clusters <- function(DT, params, crs) {
   DT[, end_cluster_ := flag_end_clusters(t_, x_, y_, params$zeta, params$theta_hours * 3600,
                                          params$max_moves %||% 2, params$transit_fixes %||% 5), by = id]
+  DT[, end_of_track_ := end_cluster_ & cumsum(end_cluster_) == 1L, by = id]
   mort <- if ('mortality' %in% names(DT)) DT$mortality %in% TRUE else rep(FALSE, nrow(DT))
-  DT[, mortality_status := data.table::fcase(mort & end_cluster_, 'likely',
-                                             end_cluster_, 'unknown',
-                                             mort, 'flag only',
-                                             default = NA_character_)]
+  DT[, cluster_status := data.table::fcase(mort & end_cluster_, 'mortality-cluster',
+                                           end_cluster_, 'unknown-cluster',
+                                           mort, 'flag-only',
+                                           default = NA_character_)]
+  DT[, .end_type := if ('deployment_end_type' %in% names(DT)) as.character(deployment_end_type) else NA_character_]
+  # one rule per animal; the end type of its last fix (its last deployment)
+  DT[, .rule := data.table::fcase(.end_type[.N] %in% 'dead', 1L,
+                                  any(cluster_status %in% 'mortality-cluster'), 2L,
+                                  !is.na(.end_type[.N]), 3L,
+                                  any(end_cluster_), 4L,
+                                  default = 5L), by = id]
+  rules <- mortality_status_rules()
+  DT[, `:=`(mortality_status = data.table::fifelse(.rule == 3L, .end_type[.N], rules$mortality_status[.rule]),
+            mortality_basis = rules$mortality_basis[.rule]), by = id]
+  DT[, c('.end_type', '.rule') := NULL]
   DT
+}
+
+#' @title How `mortality_status` is decided
+#' @description The rules [clean_end_clusters()] uses to give each animal a
+#'   `mortality_status`, in order of priority: the first that applies wins.
+#'   Rules 1 to 3 use outcomes recorded in the data; rules 4 and 5 are
+#'   inferred from cluster analysis (whether the track ends in a stationary
+#'   stretch, column `end_cluster_`) and are our best guess about the end of
+#'   the track. Mortality flags in the middle of a track (`cluster_status`
+#'   `flag-only`) are not used.
+#' @return data.table with one row per rule: `rule`, `mortality_status`
+#'   (rule 3 uses the recorded `deployment_end_type` itself, e.g.
+#'   `equipment-failure`, `removal`, `captured` or `unknown`), `evidence`,
+#'   `kind` (`recorded` or `inferred`) and `mortality_basis` (the text put in
+#'   that column).
+#' @author Julie W. Turner
+mortality_status_rules <- function() {
+  data.table::data.table(
+    rule = 1:5,
+    mortality_status = c('dead', 'dead', '<deployment_end_type>', 'unknown', 'alive'),
+    evidence = c('Movebank deployment_end_type is dead',
+                 'a mortality flag in the data within the stationary end of the track',
+                 'Movebank deployment_end_type, as recorded',
+                 'the track ends in a stationary stretch (end_cluster_), with no recorded outcome',
+                 'the track does not end in a stationary stretch, with no recorded outcome'),
+    kind = c('recorded', 'recorded', 'recorded', 'inferred', 'inferred'),
+    mortality_basis = c('recorded: deployment_end_type dead',
+                        'recorded: mortality flag at stationary end of track',
+                        'recorded: deployment_end_type',
+                        'inferred: stationary end of track (cluster analysis, best guess)',
+                        'inferred: no stationary end of track (cluster analysis, best guess)'))
+}
+
+#' @title Cleaning step: drop the stationary end of each track
+#' @description Removes the fixes flagged by `end_clusters`
+#'   ([clean_end_clusters()]) except the first (`end_of_track_`), where the
+#'   animal stopped, which becomes the track's last fix. This drops the
+#'   fixes from a dead animal or a dropped or moved collar, so that tracks
+#'   only hold fixes from when the animal was likely alive. List it after
+#'   `end_clusters`.
+#' @inheritParams clean_bounds
+#' @param params not used.
+#' @return data.table.
+#' @author Julie W. Turner
+clean_drop_end_clusters <- function(DT, params, crs) {
+  if (!all(c('end_cluster_', 'end_of_track_') %in% names(DT))) {
+    stop('[clean drop_end_clusters] list the end_clusters step before drop_end_clusters')
+  }
+  DT[!(end_cluster_ %in% TRUE) | end_of_track_ %in% TRUE]
 }
 
 #' @title Flag stationary stretches at the end of one track
@@ -491,32 +563,49 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
 
 #' @title Count fixes flagged as possible mortalities or dropped collars
 #' @description For each source, counts the cleaned fixes (and animals)
-#'   flagged by `clusters` (`defunct_cluster_`), by `end_clusters`
-#'   (`end_cluster_`), by both, and with a `mortality` flag from the data
-#'   (e.g. the old B.C. export), alone and together with each rule, and each
-#'   `mortality_status` (see [clean_end_clusters()]). Counts
-#'   only, no positions or times. Flags that are missing count as FALSE.
+#'   flagged by `clusters` (`defunct_cluster_`), with a `mortality` flag from
+#'   the data (e.g. the old B.C. export), both, and with `cluster_status`
+#'   `flag-only`; the fixes kept as `end_of_track_`; and, if `raw` is given,
+#'   the fixes removed by `drop_end_clusters` and those of them with a
+#'   mortality flag. It also counts the animals with each `mortality_status`
+#'   and `mortality_basis` (see [mortality_status_rules()]), and their cleaned
+#'   fixes. Counts only, no positions or times. Flags that are missing count
+#'   as FALSE; `of_fixes` is the number of cleaned fixes in the source.
 #' @param clean data.table from [clean_locations()].
+#' @param raw data.table given to [clean_locations()], or NULL.
 #' @return data.table with one row per source and flag.
 #' @author Julie W. Turner
-summarize_flags <- function(clean) {
-  get_flag <- function(col) if (col %in% names(clean)) clean[[col]] %in% TRUE else rep(FALSE, nrow(clean))
-  amt_f <- get_flag('defunct_cluster_')
-  end_f <- get_flag('end_cluster_')
-  mort <- get_flag('mortality')
-  flags <- list(`amt clusters` = amt_f, `end clusters` = end_f, `both rules` = amt_f & end_f,
-                mortality = mort, `mortality and amt clusters` = mort & amt_f,
-                `mortality and end clusters` = mort & end_f)
-  src <- if ('source' %in% names(clean)) clean$source else NA_character_
-  if ('mortality_status' %in% names(clean)) {
-    for (s in c('likely', 'unknown', 'flag only')) {
-      flags[[paste('mortality_status:', s)]] <- clean$mortality_status %in% s
-    }
+summarize_flags <- function(clean, raw = NULL) {
+  get_flag <- function(DT, col) if (col %in% names(DT)) DT[[col]] %in% TRUE else rep(FALSE, nrow(DT))
+  src_of <- function(DT) if ('source' %in% names(DT)) DT$source else rep(NA_character_, nrow(DT))
+  src <- src_of(clean)
+  totals <- data.table::data.table(source = src)[, .(of_fixes = .N), by = source]
+  amt_f <- get_flag(clean, 'defunct_cluster_')
+  mort <- get_flag(clean, 'mortality')
+  flags <- list(`amt clusters` = amt_f, mortality = mort, `mortality and amt clusters` = mort & amt_f,
+                `cluster_status: flag-only` = clean$cluster_status %in% 'flag-only',
+                `end of track (kept)` = get_flag(clean, 'end_of_track_'))
+  count <- function(DT, f, nm) {
+    data.table::data.table(source = src_of(DT), id = DT$id, f = f)[
+      , .(flag = nm, fixes = sum(f), animals = data.table::uniqueN(id[f])), by = source]
   }
-  data.table::rbindlist(purrr::imap(flags, function(f, nm) {
-    data.table::data.table(source = src, id = clean$id, f = f)[
-      , .(flag = nm, fixes = sum(f), animals = data.table::uniqueN(id[f]), of_fixes = .N), by = source]
-  }))
+  out <- purrr::imap(flags, function(f, nm) count(clean, f, nm))
+  gone <- attr(clean, 'removed')
+  if (!is.null(raw) && !is.null(gone)) {
+    rows <- raw[gone[step == 'drop_end_clusters']$row]
+    out <- c(out, list(count(rows, rep(TRUE, nrow(rows)), 'end clusters removed'),
+                       count(rows, get_flag(rows, 'mortality'), 'mortality in end clusters removed')))
+  }
+  if ('mortality_status' %in% names(clean)) {
+    out <- c(out, list(data.table::data.table(source = src, id = clean$id,
+                                              s = clean$mortality_status, b = clean$mortality_basis)[
+      !is.na(s), .(flag = paste0('mortality_status: ', s[1], ' (', b[1], ')'),
+                   fixes = .N, animals = data.table::uniqueN(id)), by = .(source, s, b)][
+      , c('s', 'b') := NULL]))
+  }
+  out <- data.table::rbindlist(out)
+  out <- merge(out, totals, by = 'source', all.x = TRUE, sort = FALSE)
+  out[is.na(fixes), fixes := 0L][]
 }
 
 #' @title Cleaning step: drop steps faster than a speed limit

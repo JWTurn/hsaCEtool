@@ -39,7 +39,8 @@ targets_config <- function(cfg) {
 #'   combine (flagging fixes an earlier-listed source also has, see
 #'   [flag_source_duplicates()]), clean (logging the fixes each step removed,
 #'   what happened to fixes flagged as mortalities, see [check_mortality()],
-#'   and counts of possible mortalities or dropped collars, see [summarize_flags()]),
+#'   counts of possible mortalities or dropped collars, see [summarize_flags()],
+#'   and how each animal's `mortality_status` was decided (`mortality_rules`, see [mortality_status_rules()])),
 #'   make the study area, and keep the locations inside it. Fixes with dates
 #'   but no times help make the study area but are then dropped
 #'   ([drop_date_only()]).
@@ -122,7 +123,8 @@ targets_locations <- function(cfg) {
                  clean_locations(locations_raw, cfg_cleaning, cfg_project$crs)),
       tar_target(cleaning_log, attr(locations_clean, 'cleaning_log')),
       tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
-      tar_target(flag_summary, summarize_flags(locations_clean))
+      tar_target(flag_summary, summarize_flags(locations_clean, locations_raw)),
+      tar_target(mortality_rules, mortality_status_rules())
     ),
     sa_targets,
     list(

@@ -195,7 +195,9 @@ test_that('end_clusters flags a stationary end, incl. a collar moved to an offic
   expect_false(any(out[id == 'short']$end_cluster_))   # stationary for under 48 h
   expect_equal(which(out[id == 'moved']$end_cluster_), 51:172)   # from the mortality site on
   expect_equal(which(out[id == 'tail']$end_cluster_), 51:113)
-  expect_true(all(out$mortality_status[out$end_cluster_] == 'unknown'))   # no mortality column
+  expect_true(all(out$cluster_status[out$end_cluster_] == 'unknown-cluster'))   # no mortality column
+  expect_equal(out[(end_of_track_)]$id, c('moved', 'tail'))
+  expect_equal(which(out[id == 'moved']$end_of_track_), 51L)   # where it stopped
   # with no moves allowed, only the office stretch
   out1 <- clean_end_clusters(copy(DT), modifyList(params, list(max_moves = 0)), crs)
   expect_equal(which(out1[id == 'moved']$end_cluster_), 113:172)
@@ -205,13 +207,45 @@ test_that('end_clusters flags a stationary end, incl. a collar moved to an offic
   expect_equal(nrow(amt_out), nrow(DT))
   expect_true(any(amt_out[id == 'live']$defunct_cluster_))
 
-  amt_out[, `:=`(end_cluster_ = out$end_cluster_, source = 's', mortality = id == 'moved')]
-  s <- summarize_flags(amt_out)
-  expect_equal(s[flag == 'end clusters']$fixes, 122 + 63)   # moved + tail
-  expect_equal(s[flag == 'mortality and end clusters']$animals, 1)
-  st <- clean_end_clusters(copy(amt_out), params, crs)$mortality_status
-  expect_equal(sum(st %in% 'likely'), 122)       # moved: flagged and in an end cluster
-  expect_equal(sum(st %in% 'flag only'), 50)     # moved: flagged before it died
-  expect_equal(sum(st %in% 'unknown'), 63)       # tail: end cluster, no flag
+  amt_out[, `:=`(source = 's', mortality = id == 'moved')]
+  st <- clean_end_clusters(copy(amt_out), params, crs)
+  expect_equal(sum(st$cluster_status %in% 'mortality-cluster'), 122)   # moved: flagged and in an end cluster
+  expect_equal(sum(st$cluster_status %in% 'flag-only'), 50)            # moved: flagged before it died
+  expect_equal(sum(st$cluster_status %in% 'unknown-cluster'), 63)      # tail: end cluster, no flag
+  status <- unique(st[, .(id, mortality_status, mortality_basis)])
+  expect_equal(nrow(status), 4)   # one per animal
+  expect_equal(status[id == 'moved']$mortality_status, 'dead')
+  expect_equal(status[id == 'tail']$mortality_status, 'unknown')
+  expect_match(status[id == 'tail']$mortality_basis, '^inferred')
+  expect_equal(status[id %in% c('live', 'short')]$mortality_status, c('alive', 'alive'))
+  s <- summarize_flags(st)
+  expect_equal(s[flag == 'mortality and amt clusters']$animals, 1)
   expect_equal(unique(s$of_fixes), nrow(DT))
+})
+
+test_that('mortality_status puts recorded outcomes first, and drop_end_clusters keeps where the animal stopped', {
+  set.seed(4)
+  t0 <- as.POSIXct('2021-06-01', tz = 'UTC')
+  # made-up tracks, one fix an hour: 10 h walking then 60 h still, or 70 h walking
+  still <- function(id) data.table(id = id, x_ = c(500000 + 1000 * (1:10), 520000 + rnorm(60, 0, 10)), y_ = 6700000)
+  walk <- function(id) data.table(id = id, x_ = 500000 + 1000 * (1:70), y_ = 6700000)
+  DT <- rbindlist(list(still('a'), still('b'), walk('c'), walk('d'), still('e')))
+  DT[, `:=`(t_ = t0 + (rowid(id) - 1) * 3600, source = 's',
+            deployment_end_type = c(a = 'dead', b = 'equipment-failure', c = 'unknown', d = NA, e = NA)[id],
+            mortality = id == 'e' & rowid(id) > 30)]
+  params <- list(zeta = 200, theta_hours = 48, max_moves = 2, transit_fixes = 5)
+  status <- unique(clean_end_clusters(copy(DT), params, crs)[, .(id, mortality_status, mortality_basis)])
+  expect_equal(status$mortality_status, c('dead', 'equipment-failure', 'unknown', 'alive', 'dead'))
+  expect_equal(status$mortality_basis, mortality_status_rules()$mortality_basis[c(1, 3, 3, 5, 2)])
+
+  cl <- clean_locations(DT, list(steps = c('end_clusters', 'drop_end_clusters'),
+                                 params = list(end_clusters = params)), crs)
+  expect_equal(cl[, .N, by = id]$N, c(11, 11, 70, 70, 11))
+  expect_true(all(cl[id %in% c('a', 'b', 'e'), end_of_track_[.N], by = id]$V1))   # last fix is where it stopped
+  expect_equal(attr(cl, 'cleaning_log')[step == 'drop_end_clusters']$removed, 3 * 59)
+  s <- summarize_flags(cl, DT)
+  expect_equal(s[flag == 'end clusters removed']$fixes, 3 * 59)
+  expect_equal(s[flag == 'mortality in end clusters removed']$fixes, 40)
+  expect_equal(sum(grepl('^mortality_status', s$flag)), 5)
+  expect_error(clean_drop_end_clusters(copy(DT), NULL, crs), 'end_clusters')
 })
