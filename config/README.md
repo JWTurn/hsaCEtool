@@ -216,7 +216,13 @@ true metres). The templates come from `landscape: template:`:
   coarser cell: 8 x 30 m = 240 m, 40 x 30 m = 1200 m and 160 x 30 m = 4800 m.
   Five 240 m cells fit exactly along a 1200 m cell, and four 1200 m cells along
   a 4800 m cell.
-- `buffer_m: 50000` is how far beyond the study area the layers extend.
+- The templates cover the extended study area (target `study_area_extended`),
+  set by `locations: study_area: extended:`: the study area wrapped in a
+  convex hull (`convex_hull: true`) and buffered by `buffer_m: 50000` (50 km),
+  so it is one continuous area, as in NMC_CEtool's
+  `3-prep-land-UPDATED.R`. Layers then include features beyond where the
+  animals were and avoid edge effects. `template: buffer_m` (0 by default)
+  can add a further margin.
 - `source:` can give your own finest template raster instead. A programmer can
   instead set `cfg$landscape$template$fun` in `<project>.R` to a function of
   `(study_area, tmpl, crs)` that returns one.

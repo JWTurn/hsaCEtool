@@ -5,7 +5,8 @@
 
 #' @title Make the template rasters
 #' @description The finest template has cells of `base_res` metres covering the
-#'   study area plus `buffer_m`, with 1 inside and NA outside. Its edges are
+#'   given area (the extended study area, see [make_study_area_extended()])
+#'   plus `buffer_m` (if above 0), with 1 inside and NA outside. Its edges are
 #'   snapped to whole multiples of every coarser cell size, so each coarser
 #'   template (`base_res` x factor) nests exactly: e.g. with 30 m cells and
 #'   factors 8, 40 and 160, the coarser templates have 240, 1200 and 4800 m cells.
@@ -15,7 +16,7 @@
 #'   Instead of building the finest template, give one in `tmpl$source` (a
 #'   source: path or url), or, in `<project>.R`, a function in `tmpl$fun` that
 #'   takes `(study_area, tmpl, crs)` and returns a SpatRaster.
-#' @param study_area SpatVector. The study area.
+#' @param study_area SpatVector. The area to cover (the extended study area).
 #' @param tmpl named list. The `landscape: template:` settings: `source`, `fun`,
 #'   `base_res`, `buffer_m`, `factors`.
 #' @param crs character. Coordinate system of every layer (the project's).
@@ -43,7 +44,8 @@ make_templates <- function(study_area, tmpl, crs, paths, out_dir) {
     terra::ifel(is.na(r[[1]]), NA, 1, filename = fine_file, datatype = 'INT1U',
                 gdal = gdal_opts, overwrite = TRUE)
   } else {
-    area <- terra::aggregate(terra::buffer(terra::project(study_area, crs), tmpl$buffer_m))
+    area <- terra::aggregate(terra::project(study_area, crs))
+    if ((tmpl$buffer_m %||% 0) > 0) area <- terra::aggregate(terra::buffer(area, tmpl$buffer_m))
     step <- tmpl$base_res * lcm(unlist(tmpl$factors))
     e <- as.vector(terra::ext(area))   # xmin, xmax, ymin, ymax
     te <- c(floor(e[1] / step), floor(e[3] / step), ceiling(e[2] / step), ceiling(e[4] / step)) * step

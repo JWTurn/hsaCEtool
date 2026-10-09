@@ -128,6 +128,10 @@ targets_locations <- function(cfg) {
     ),
     sa_targets,
     list(
+      tar_terra_vect(study_area_extended,
+                     make_study_area_extended(study_area, cfg_study_area$extended))
+    ),
+    list(
       tar_target(locations,
                  crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method))
     )

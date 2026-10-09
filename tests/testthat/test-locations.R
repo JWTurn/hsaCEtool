@@ -249,3 +249,16 @@ test_that('mortality_status puts recorded outcomes first, and drop_end_clusters 
   expect_equal(sum(grepl('^mortality_status', s$flag)), 5)
   expect_error(clean_drop_end_clusters(copy(DT), NULL, crs), 'end_clusters')
 })
+
+test_that('the extended study area is one continuous polygon around the study area', {
+  # made-up locations in two groups 100 km apart, so the study area has two parts
+  DT <- data.table(x_ = c(500000, 501000, 600000, 601000), y_ = 6700000)
+  sa <- make_study_area(DT, list(buffer_m = 1000, convex_hull = FALSE), crs = crs)
+  expect_equal(nrow(terra::disagg(sa)), 2)
+  ext <- make_study_area_extended(sa, list(buffer_m = 5000, convex_hull = TRUE))
+  expect_equal(nrow(terra::disagg(ext)), 1)
+  expect_true(terra::relate(ext, sa, 'covers')[1, 1])
+  expect_equal(terra::expanse(ext), terra::expanse(terra::buffer(terra::hull(sa), 5000)), tolerance = 0.01)
+  # without a hull, the buffer keeps the parts apart
+  expect_equal(nrow(terra::disagg(make_study_area_extended(sa, list(buffer_m = 5000, convex_hull = FALSE)))), 2)
+})

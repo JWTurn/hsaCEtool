@@ -21,6 +21,27 @@ make_study_area <- function(DT, sa_cfg, file = NULL, crs) {
   terra::vect(sa)
 }
 
+#' @title Make the extended study area for the landscape layers
+#' @description One continuous area the landscape layers (templates) cover:
+#'   the study area, wrapped in a convex hull if `convex_hull` is TRUE, then
+#'   buffered by `buffer_m` metres. Layers then include features beyond the
+#'   study area that animals may respond to, and avoid edge effects. The hull
+#'   is taken before buffering, which gives the same polygon as the hull of
+#'   the buffer but is quicker.
+#' @param study_area SpatVector polygon from [make_study_area()].
+#' @param ext_cfg named list. The `locations: study_area: extended:` settings:
+#'   `buffer_m` and `convex_hull`.
+#' @return SpatVector polygon in the study area's coordinate system.
+#' @details Adapted from NMC_CEtool `scripts/3-prep-land-UPDATED.R` (there a
+#'   100 km buffer, then a convex hull).
+#' @author Julie W. Turner
+make_study_area_extended <- function(study_area, ext_cfg) {
+  sa <- sf::st_union(sf::st_as_sf(study_area))
+  if (isTRUE(ext_cfg$convex_hull)) sa <- sf::st_convex_hull(sa)
+  if ((ext_cfg$buffer_m %||% 0) > 0) sa <- sf::st_buffer(sa, dist = ext_cfg$buffer_m)
+  terra::vect(sa)
+}
+
 #' @title Keep locations inside the study area
 #' @param DT data.table of standard locations.
 #' @param study_area SpatVector polygon.

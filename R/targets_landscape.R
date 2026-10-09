@@ -44,7 +44,7 @@ targets_templates <- function() {
   list(
     tar_target(landscape_dir, file.path(cfg_paths$outputs, cfg_project$name, 'landscape')),
     tar_target(templates,
-               make_templates(study_area, cfg_template, cfg_project$crs, cfg_paths,
+               make_templates(study_area_extended, cfg_template, cfg_project$crs, cfg_paths,
                               file.path(landscape_dir, 'templates')),
                format = 'file'),
     tar_target(template_margin,
