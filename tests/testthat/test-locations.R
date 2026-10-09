@@ -262,3 +262,31 @@ test_that('the extended study area is one continuous polygon around the study ar
   # without a hull, the buffer keeps the parts apart
   expect_equal(nrow(terra::disagg(make_study_area_extended(sa, list(buffer_m = 5000, convex_hull = FALSE)))), 2)
 })
+
+test_that('premade cleaned locations keep their sources, columns and log', {
+  DT <- toy_locations()[, `:=`(source = c(rep('s1', 50), rep('s2', 50)), mortality_status = 'alive')]
+  setattr(DT, 'cleaning_log', data.table(step = 'bounds', removed = 0L))
+  file <- withr::local_tempfile(fileext = '.rds')
+  saveRDS(DT, file)
+  out <- read_premade_locations(file, list(), crs)
+  expect_equal(out$source, DT$source)
+  expect_equal(out$mortality_status, DT$mortality_status)
+  expect_equal(attr(out, 'cleaning_log'), attr(DT, 'cleaning_log'))
+  out[, new := 1]   # can be changed by reference
+  # coordinates saved in another system are projected
+  ll <- copy(DT)[, c('x_', 'y_') := as.data.table(sf::sf_project(crs, 'EPSG:4326', cbind(x_, y_)))]
+  saveRDS(ll, file)
+  expect_equal(read_premade_locations(file, list(input_crs = 'EPSG:4326'), crs)$x_, DT$x_, tolerance = 1e-3)
+  saveRDS(DT[, .(id, t_)], file)
+  expect_error(read_premade_locations(file, list(), crs), 'columns not found: x_, y_, source')
+  expect_error(read_premade_locations(sub('rds$', 'csv', file), list(), crs), 'must be a .rds')
+})
+
+test_that('the extended study area can be read from a file', {
+  sa <- make_study_area(toy_locations(), list(buffer_m = 1000, convex_hull = FALSE), crs = crs)
+  ext <- make_study_area_extended(sa, list(buffer_m = 5000, convex_hull = TRUE))
+  file <- withr::local_tempfile(fileext = '.shp')
+  terra::writeVector(ext, file)
+  out <- make_study_area_extended(sa, list(buffer_m = 1, convex_hull = FALSE), file = file)
+  expect_equal(terra::expanse(out), terra::expanse(ext), tolerance = 1e-6)
+})

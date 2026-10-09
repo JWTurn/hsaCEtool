@@ -48,6 +48,24 @@ locations:
       user: jwturner
 ```
 
+### Premade or remade
+
+Each stage can start from files made earlier instead of being remade:
+
+- `locations: premade:` a cleaned locations file saved from the
+  `locations_clean` target (.rds). The `sources` are then not read or cleaned;
+  the file keeps each fix's `source`, the flag and `mortality_status` columns
+  and its `cleaning_log`. It is downloaded to `inputs/premade/`, so an older
+  file of the same name in `inputs/` is not mistaken for it.
+- `locations: study_area: source:` and `study_area: extended: source:` existing
+  study area polygons (a zipped shapefile from a url needs `archive:` too).
+- `landscape: template: source:` and the layer table's `path`/`url` columns:
+  existing template and layer rasters.
+
+Set to `null` (or blank in the layer table, with a `build`), each is remade.
+`NMC.yaml` has commented lines to start from the NMC files saved on the
+restricted shared drive.
+
 Movebank passwords are never written in the settings. Save yours once with
 `move2::movebank_store_credentials("<user>")`, which keeps it in your computer's
 keyring.

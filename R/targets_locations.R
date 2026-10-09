@@ -44,14 +44,22 @@ targets_config <- function(cfg) {
 #'   make the study area, and keep the locations inside it. Fixes with dates
 #'   but no times help make the study area but are then dropped
 #'   ([drop_date_only()]).
+#'
+#'   With `locations: premade:` set, a cleaned locations file (saved from
+#'   `locations_clean`) is read instead ([read_premade_locations()]) and the
+#'   sources are neither read nor cleaned. The study area and extended study
+#'   area are each built, or read from their `source:` if one is set.
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
 targets_locations <- function(cfg) {
   src_targets <- list()
   src_names <- character()
-  for (i in seq_along(cfg$locations$sources)) {
-    src <- cfg$locations$sources[[i]]
+  premade <- cfg$locations$premade
+  # with premade cleaned locations, the sources are not read
+  sources <- if (is.null(premade)) cfg$locations$sources else list()
+  for (i in seq_along(sources)) {
+    src <- sources[[i]]
     nm <- paste0('locations_source_', i)
     cue <- tar_cue(mode = if (isTRUE(src$refresh)) 'always' else 'thorough')
     if (identical(src$type, 'movebank')) {
@@ -97,8 +105,27 @@ targets_locations <- function(cfg) {
     src_names <- c(src_names, nm)
   }
 
-  combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs),
-                        list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
+  clean_targets <- if (is.null(premade)) {
+    combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs),
+                          list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
+    list(
+      tar_target_raw('locations_raw', combine),
+      tar_target(locations_clean,
+                 clean_locations(locations_raw, cfg_cleaning, cfg_project$crs)),
+      tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
+      tar_target(flag_summary, summarize_flags(locations_clean, locations_raw))
+    )
+  } else {
+    # premade cleaned locations, downloaded apart from any older file of the same name
+    premade <- utils::modifyList(list(subfolder = 'premade'), premade)
+    list(
+      tar_target_raw('locations_premade_file', substitute(get_source(SRC, cfg_paths), list(SRC = premade)),
+                     format = 'file', cue = tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')),
+      tar_target_raw('locations_clean', substitute(read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
+                                                   list(SRC = premade))),
+      tar_target(flag_summary, summarize_flags(locations_clean))
+    )
+  }
 
   sa_src <- cfg$locations$study_area$source
   sa_targets <- if (is.null(sa_src)) {
@@ -114,23 +141,31 @@ targets_locations <- function(cfg) {
                                                  file = study_area_file, crs = cfg_project$crs))
     )
   }
-
-  c(
-    src_targets,
-    list(
-      tar_target_raw('locations_raw', combine),
-      tar_target(locations_clean,
-                 clean_locations(locations_raw, cfg_cleaning, cfg_project$crs)),
-      tar_target(cleaning_log, attr(locations_clean, 'cleaning_log')),
-      tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
-      tar_target(flag_summary, summarize_flags(locations_clean, locations_raw)),
-      tar_target(mortality_rules, mortality_status_rules())
-    ),
-    sa_targets,
+  ext_src <- cfg$locations$study_area$extended$source
+  ext_targets <- if (is.null(ext_src)) {
     list(
       tar_terra_vect(study_area_extended,
                      make_study_area_extended(study_area, cfg_study_area$extended))
+    )
+  } else {
+    list(
+      tar_target_raw('study_area_extended_file', substitute(get_source(SRC, cfg_paths), list(SRC = ext_src)),
+                     format = 'file'),
+      tar_terra_vect(study_area_extended,
+                     make_study_area_extended(study_area, cfg_study_area$extended,
+                                              file = study_area_extended_file))
+    )
+  }
+
+  c(
+    src_targets,
+    clean_targets,
+    list(
+      tar_target(cleaning_log, attr(locations_clean, 'cleaning_log')),
+      tar_target(mortality_rules, mortality_status_rules())
     ),
+    sa_targets,
+    ext_targets,
     list(
       tar_target(locations,
                  crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method))

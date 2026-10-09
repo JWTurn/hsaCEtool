@@ -139,6 +139,40 @@ read_movebank <- function(file, src, loc_cfg, crs) {
   standardize_locations(DT, src, loc_cfg, crs)
 }
 
+#' @title Read premade cleaned locations
+#' @description Reads cleaned locations saved from the `locations_clean`
+#'   target (a .rds data.table with `id`, `t_`, `x_`, `y_` and `source`), used
+#'   instead of reading and cleaning `locations: sources:` when
+#'   `locations: premade:` is set. Everything saved with it is kept: the
+#'   `source` of each fix, the flag and `mortality_status` columns, any
+#'   `date_only` fixes, and the `cleaning_log`. Coordinates are taken to be in
+#'   the source's `input_crs` (by default the project's) and are projected to
+#'   the project's coordinate system if that differs.
+#' @param file character. Path from [get_source()].
+#' @param src named list. The `locations: premade:` source.
+#' @param crs character. Project coordinate system.
+#' @return data.table of cleaned locations.
+#' @author Julie W. Turner
+read_premade_locations <- function(file, src, crs) {
+  file <- file[1]
+  if (tolower(tools::file_ext(file)) != 'rds') {
+    stop('locations: premade: must be a .rds file saved from locations_clean, not ', file, call. = FALSE)
+  }
+  DT <- readRDS(file)
+  data.table::setDT(DT)
+  missing <- setdiff(c('id', 't_', 'x_', 'y_', 'source'), names(DT))
+  if (length(missing)) {
+    stop('locations: premade: columns not found: ', paste(missing, collapse = ', '),
+         '. Use a file saved from locations_clean.', call. = FALSE)
+  }
+  input_crs <- src$input_crs %||% crs
+  if (!identical(sf::st_crs(input_crs), sf::st_crs(crs))) {
+    xy <- sf::sf_project(sf::st_crs(input_crs), sf::st_crs(crs), as.matrix(DT[, .(x_, y_)]))
+    DT[, `:=`(x_ = xy[, 1], y_ = xy[, 2])]
+  }
+  DT[]
+}
+
 #' @title Put locations in the pipeline's standard form
 #' @description Renames the ID, time and coordinate columns to `id`, `t_`, `x_`
 #'   and `y_` (the names \pkg{amt} uses), makes `id` text and `t_` a date-time

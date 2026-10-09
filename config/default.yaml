@@ -43,7 +43,10 @@ locations:
     # - type: movebank
     #   study: "Klaza caribou"
     #   user: jwturner        # password is read from keyring::key_get("movebank", user)
-  columns:                # names of the columns in the input data (default for every source)
+  # Premade: cleaned locations saved from the locations_clean target (a .rds;
+  # a source: path or url) to use instead of reading and cleaning `sources`.
+  premade: null
+  columns:               # names of the columns in the input data (default for every source)
     id: id                # animal (collar deployment) ID
     datetime: t_          # fix date and time (UTC)
     x: x_                 # x coordinate (easting or longitude)
@@ -98,8 +101,9 @@ locations:
     buffer_m: 20000       # otherwise, buffer this far around every location ...
     convex_hull: false    # ... and optionally wrap the buffer in a convex hull
     # One continuous area the landscape layers cover (target study_area_extended):
-    # the study area wrapped in a convex hull, then buffered.
-    extended: {buffer_m: 50000, convex_hull: true}
+    # the study area wrapped in a convex hull, then buffered, or an existing
+    # polygon (source: path or url).
+    extended: {source: null, buffer_m: 50000, convex_hull: true}
   crop_method: bbox       # keep locations inside the study area's bounding box ("bbox") or the polygon itself ("within")
 
 # Movement tracks and random steps (integrated step selection analysis) -------

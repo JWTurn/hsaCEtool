@@ -8,14 +8,17 @@
 #'   prepInputs uses to read the file; by default chosen from `target_file`'s
 #'   type: `terra::rast` for rasters, `sf::st_read` for vector files, `readRDS`
 #'   for .rds, `data.table::fread` for .csv), and `refresh` (TRUE to download
-#'   afresh, see [prep_inputs_fresh()]).
+#'   afresh, see [prep_inputs_fresh()]), and `subfolder` (a folder inside
+#'   `paths$inputs` to download to, e.g. to keep a file apart from an older
+#'   download with the same name).
 #' @param paths named list. The `paths:` settings (`data_in`, `inputs`).
 #' @return character. Path(s) to the file; for a shapefile, the `.shp` first and
 #'   then its companion files, so that `format = "file"` targets notice changes to any of them.
 #' @author Julie W. Turner
 get_source <- function(src, paths) {
   if (!is.null(src$url) && nzchar(src$url)) {
-    reproducible::checkPath(paths$inputs, create = TRUE)
+    dest <- if (nzchar(src$subfolder %||% '')) file.path(paths$inputs, src$subfolder) else paths$inputs
+    reproducible::checkPath(dest, create = TRUE)
     if (is.null(src$target_file)) stop('Set target_file for ', src$url, call. = FALSE)
     fun <- as_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file)),
                                tif = , tiff = , grd = 'terra::rast',
@@ -28,10 +31,10 @@ get_source <- function(src, paths) {
       url = src$url,
       targetFile = src$target_file,
       archive = src$archive,
-      destinationPath = paths$inputs,
+      destinationPath = dest,
       fun = fun
     )
-    path <- file.path(paths$inputs, src$target_file)
+    path <- file.path(dest, src$target_file)
   } else if (!is.null(src$path) && nzchar(src$path)) {
     path <- src$path
     if (!file.exists(path) && nzchar(paths$data_in %||% '')) {

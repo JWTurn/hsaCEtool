@@ -102,7 +102,11 @@ check_config <- function(cfg) {
   }
 
   # location sources
-  if (length(cfg$locations$sources) == 0) {
+  premade <- cfg$locations$premade
+  if (!is.null(premade) && is.null(premade$path) && is.null(premade$url)) {
+    add('locations: premade: give a path or a url')
+  }
+  if (length(cfg$locations$sources) == 0 && is.null(premade)) {
     add('locations: sources is empty, so there are no caribou locations to read')
   }
   for (i in seq_along(cfg$locations$sources)) {

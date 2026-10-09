@@ -55,3 +55,12 @@ test_that('a key named y stays a name, not TRUE', {
   expect_equal(out$columns, list(x = 'lon', y = 'lat'))
   expect_true(out$keep)
 })
+
+test_that('premade locations can replace the sources', {
+  dir <- withr::local_tempdir()
+  file.copy(testthat::test_path('..', '..', 'config', 'default.yaml'), dir)
+  yaml::write_yaml(list(locations = list(premade = list(path = 'clean.rds'))), file.path(dir, 'PRE.yaml'))
+  expect_equal(read_config('PRE', config_dir = dir)$locations$premade$path, 'clean.rds')
+  yaml::write_yaml(list(locations = list(premade = list(target_file = 'clean.rds'))), file.path(dir, 'BAD.yaml'))
+  expect_error(read_config('BAD', config_dir = dir), 'premade: give a path or a url')
+})
