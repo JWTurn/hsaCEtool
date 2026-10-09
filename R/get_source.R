@@ -17,12 +17,12 @@ get_source <- function(src, paths) {
   if (!is.null(src$url) && nzchar(src$url)) {
     reproducible::checkPath(paths$inputs, create = TRUE)
     if (is.null(src$target_file)) stop('Set target_file for ', src$url, call. = FALSE)
-    fun <- src$fun %||% switch(tolower(tools::file_ext(src$target_file)),
+    fun <- as_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file)),
                                tif = , tiff = , grd = 'terra::rast',
                                shp = , gpkg = , geojson = 'sf::st_read',
                                rds = 'readRDS',
                                csv = 'data.table::fread',
-                               stop('Set fun for ', src$target_file, call. = FALSE))
+                               stop('Set fun for ', src$target_file, call. = FALSE)))
     get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
     get(
       url = src$url,
@@ -59,6 +59,22 @@ get_source <- function(src, paths) {
     path <- c(path, sidecars[file.exists(sidecars)])
   }
   path
+}
+
+#' @title Turn a reader given as text into the function itself
+#' @description [reproducible::prepInputs()] reads text such as
+#'   `"sf::st_read"` as code only when it is typed in the call itself; passed in
+#'   a variable, it looks for an object with that name and fails. So readers
+#'   from the settings (or the defaults chosen by file type) are converted
+#'   first and passed as a variable holding the function: `fun = fun`, not
+#'   `fun = as_reader(fun)`, as prepInputs re-runs that expression elsewhere.
+#' @param fun character (e.g. `"sf::st_read"`), a function, or `NA` (download
+#'   without reading).
+#' @return The function, or `fun` unchanged if it is not text.
+#' @keywords internal
+#' @noRd
+as_reader <- function(fun) {
+  if (is.character(fun)) eval(str2lang(fun)) else fun
 }
 
 #' @title Download afresh with prepInputs, replacing the kept copy

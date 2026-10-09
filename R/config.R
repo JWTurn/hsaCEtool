@@ -45,7 +45,9 @@ read_config <- function(project, config_dir = 'config') {
 
 #' @title Read one YAML settings file
 #' @description Like `yaml::read_yaml()`, but a bare `y` or `n` stays text
-#'   rather than becoming TRUE/FALSE, so `columns: {x: lon, y: lat}` works.
+#'   rather than becoming TRUE/FALSE, so `columns: {x: lon, y: lat}` works, and
+#'   whole numbers too large for R's integers (e.g. Movebank study IDs) are kept
+#'   as numbers rather than becoming NA.
 #' @param file character. Path to a .yaml file.
 #' @return named list.
 #' @keywords internal
@@ -53,7 +55,11 @@ read_config <- function(project, config_dir = 'config') {
 read_settings_file <- function(file) {
   yaml::read_yaml(file, handlers = list(
     'bool#yes' = function(x) if (x %in% c('y', 'Y')) x else TRUE,
-    'bool#no' = function(x) if (x %in% c('n', 'N')) x else FALSE
+    'bool#no' = function(x) if (x %in% c('n', 'N')) x else FALSE,
+    'int' = function(x) {
+      i <- suppressWarnings(as.integer(x))
+      if (is.na(i)) as.numeric(x) else i
+    }
   ))
 }
 

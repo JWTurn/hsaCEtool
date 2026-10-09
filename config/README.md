@@ -75,6 +75,12 @@ Prairie Creek 2015-18 file shows the reverse (12 h in spring, 14 h in fall),
 which fits UTC times from a collar scheduled by local time, so its hours are
 read as UTC.
 
+Some older files have dates but no times of day (in NMC, Chisana and
+Redstone). Mark such a source `date_only: true`: its fixes are given noon UTC
+on their date and a `date_only` column. They are cleaned only with
+`cleaning: date_only_steps:` (by default `bounds` and `exclude_points`), help
+shape the study area, and are then left out of tracks and steps.
+
 ### B.C. telemetry (`type: bc`)
 
 The B.C. caribou telemetry comes as overlapping exports. A `type: bc` source
@@ -115,6 +121,39 @@ Where sources overlap (e.g. Little Rancheria collars on Movebank and in the B.C.
 export), list the source that should win first: fixes another, earlier-listed
 source also has are flagged in `dup_source` (`locations: source_duplicates:`),
 and the cleaning step `source_duplicates` removes them.
+
+### Cleaning
+
+Cleaning first removes exact duplicates (same animal, time and position), then
+runs the steps in `locations: cleaning: steps:` in order (the available steps
+are listed in `default.yaml`). Fixes of one animal at the same time but at
+different positions are left for the `duplicates` step, which keeps the fix
+with the best DOP (dilution of precision, a GPS accuracy score). If any remain
+after the steps, for example because `duplicates` is not listed, the first of
+each is kept with a warning, so each animal has one fix per time.
+
+- The target `cleaning_log` counts the fixes each step removed. The cleaned
+  locations also carry an attribute `removed`, naming the step that removed
+  each fix (by its row in `locations_raw`).
+- The target `mortality_check` counts, by source and animal, the fixes flagged
+  as mortalities (column `mortality`, e.g. from the old B.C. export) that each
+  step removed, and those kept. It is empty if no source has the column.
+- Two steps flag possible dead animals or dropped collars without removing
+  anything. `clusters` uses amt's rule (`defunct_cluster_`): it flags
+  everything after the last stretch of short steps lasting `theta_hours`,
+  even if the animal moves on later, so it also flags many live animals.
+  `end_clusters` (`end_cluster_`) flags only the end of a track that stays
+  within `zeta` metres for at least `theta_hours`; it also catches a collar
+  picked up and taken elsewhere (e.g. to an office): two stationary stretches
+  joined by up to `transit_fixes` fixes on the move, or a stationary stretch
+  followed by up to `transit_fixes` fixes before the data end (picked up and
+  switched off). Known offices can also go in `exclude_points`.
+- `end_clusters` also adds `mortality_status`: `likely` (a `mortality` flag
+  in a stationary end of track), `unknown` (a stationary end with no
+  mortality flag), `flag only` (a mortality flag elsewhere; in B.C. several
+  such animals moved on for years, so these look like false alarms). The
+  target `flag_summary` counts, by source, the fixes each rule flags, both,
+  those with a `mortality` flag, and each `mortality_status`.
 
 The comparison behind these rules (counts only) is in
 `inputs/bc_compare/BC_telemetry_comparison.md`, kept with the downloads rather

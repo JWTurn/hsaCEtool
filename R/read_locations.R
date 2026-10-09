@@ -33,11 +33,11 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #' @return data.table of locations.
 #' @author Julie W. Turner
 download_locations <- function(src, loc_cfg, crs, paths) {
-  fun <- src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
+  fun <- as_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
                              rds = 'readRDS',
                              csv = 'data.table::fread',
                              shp = , gpkg = , geojson = 'sf::st_read',
-                             stop('Set target_file (or fun) for ', src$url, call. = FALSE))
+                             stop('Set target_file (or fun) for ', src$url, call. = FALSE)))
   reproducible::checkPath(paths$inputs, create = TRUE)
   get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
   obj <- get(url = src$url, targetFile = src$target_file, archive = src$archive,
@@ -64,25 +64,54 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
   standardize_locations(obj, src, loc_cfg, crs)
 }
 
-#' @title Download caribou locations from Movebank
-#' @description Downloads one Movebank study with \pkg{move2}, drops records
-#'   without a position, adds each deployment's animal ID, sex, start/end times,
-#'   duty cycle and end type (from the study's deployment, or track, table), and
-#'   puts it in standard form.
+#' @title Download a Movebank study and save it
+#' @description Downloads one Movebank study with \pkg{move2} and saves it,
+#'   unchanged, as `<inputs>/movebank/<name>.rds`. Kept apart from
+#'   [read_movebank()] so that changes to how locations are read or cleaned
+#'   don't download the study again; only a change to the study, or
+#'   `refresh: true`, does.
 #'   The Movebank password is never stored in the settings: it is read from the
 #'   system keyring, where it is saved once with
 #'   `move2::movebank_store_credentials(<user>)`. You must have accepted the
-#'   study's terms of use on movebank.org.
-#' @inheritParams read_locations_file
-#' @param src named list. `study` (name or ID), `user`, optional `name`, and
-#'   `id_from_deployment` (TRUE to use the deployment ID as animal ID, as needed
-#'   for e.g. the Southern Lakes and Clear Creek studies).
-#' @return data.table of locations.
+#'   study's terms of use on movebank.org. If Movebank asks for fewer requests
+#'   (its rate limit), the download is tried again after 1 and then 5 minutes.
+#' @param src named list. `study` (name or ID), `user` and optional `name`.
+#' @param paths named list. The `paths:` settings (`inputs`).
+#' @return character. Path to the saved file.
 #' @details Adapted from NMC_CEtool `scripts/1-DL-data.R` and caribouLocPrep `dataPrep_YT()`.
 #' @author Julie W. Turner
-download_movebank <- function(src, loc_cfg, crs) {
+download_movebank <- function(src, paths) {
   options(move2_movebank_key_name = 'movebank')
-  dat <- move2::movebank_download_study(src$study, removeDuplicatedTimestamps = TRUE)
+  for (wait in c(0, 60, 300)) {
+    if (wait) {
+      message('[movebank ', src$name %||% src$study, '] rate limit reached; retrying in ', wait, ' s')
+      Sys.sleep(wait)
+    }
+    dat <- tryCatch(move2::movebank_download_study(src$study, removeDuplicatedTimestamps = TRUE),
+                    error = function(e) e)
+    if (!inherits(dat, 'error') || !grepl('rate limit', conditionMessage(dat))) break
+  }
+  if (inherits(dat, 'error')) stop(dat)
+  dir <- reproducible::checkPath(file.path(paths$inputs, 'movebank'), create = TRUE)
+  file <- file.path(dir, paste0(src$name %||% src$study, '.rds'))
+  saveRDS(dat, file)
+  file
+}
+
+#' @title Read a saved Movebank study
+#' @description Reads a study saved by [download_movebank()], drops records
+#'   without a position, adds each deployment's animal ID, sex, start/end times,
+#'   duty cycle and end type (from the study's deployment, or track, table), and
+#'   puts it in standard form.
+#' @inheritParams read_locations_file
+#' @param file character. Path from [download_movebank()].
+#' @param src named list. `study`, optional `name`, and `id_from_deployment`
+#'   (TRUE to use the deployment ID as animal ID, as needed for e.g. the
+#'   Southern Lakes and Clear Creek studies).
+#' @return data.table of locations.
+#' @author Julie W. Turner
+read_movebank <- function(file, src, loc_cfg, crs) {
+  dat <- readRDS(file)
   dat <- dat[!sf::st_is_empty(dat), ]   # records without a position
 
   xy <- sf::st_coordinates(dat)
@@ -123,6 +152,12 @@ download_movebank <- function(src, loc_cfg, crs) {
 #'   in time zone `tz` (e.g. `America/Whitehorse` for Yukon local time,
 #'   which follows daylight saving until November 2020), and converted to UTC
 #'   with [local_to_utc()].
+#'
+#'   A source with `date_only: true` has dates but no times of day (e.g. the
+#'   Chisana and Redstone files). Its fixes are given noon UTC on their date
+#'   and a `date_only` column (TRUE): they are cleaned with
+#'   `cleaning: date_only_steps:` only, help shape the study area, and are left
+#'   out of tracks and steps (see [clean_locations()]).
 #' @inheritParams read_locations_file
 #' @param DT data.frame of locations.
 #' @return data.table.
@@ -148,7 +183,10 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
 
   DT[, id := as.character(id)]
   tz <- src$tz %||% loc_cfg$tz %||% 'UTC'
-  if (!is.null(cols$hour)) {
+  if (isTRUE(src$date_only)) {
+    # only the date is known: noon UTC stands in for the time of day
+    DT[, t_ := as.POSIXct(format(as.Date(t_)), tz = 'UTC') + 12 * 3600]
+  } else if (!is.null(cols$hour)) {
     # a date column plus a whole-hour column, as clock time in tz
     DT[, t_ := as.POSIXct(format(as.Date(t_)), tz = 'UTC') + as.numeric(DT[[cols$hour]]) * 3600]
     if (tz != 'UTC') DT[, t_ := local_to_utc(t_, tz)]
@@ -164,6 +202,7 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
     DT[, `:=`(x_ = xy[, 1], y_ = xy[, 2])]
   }
   DT[, source := src$name %||% NA_character_]
+  if (isTRUE(src$date_only)) DT[, date_only := TRUE]
   DT[]
 }
 

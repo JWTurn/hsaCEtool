@@ -11,7 +11,13 @@ targets_config <- function(cfg) {
   list(
     tar_target(cfg_project, cfg$project),
     tar_target(cfg_paths, cfg$paths),
-    tar_target(cfg_locations, cfg$locations),
+    # only what the readers use, so cleaning or study area edits don't rerun downloads
+    tar_target(cfg_locations, cfg$locations[intersect(c('columns', 'input_crs', 'keep_columns', 'tz'),
+                                                      names(cfg$locations))]),
+    tar_target(cfg_source_duplicates, cfg$locations$source_duplicates),
+    tar_target(cfg_cleaning, cfg$locations$cleaning),
+    tar_target(cfg_study_area, cfg$locations$study_area),
+    tar_target(cfg_crop_method, cfg$locations$crop_method),
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
     tar_target(cfg_template, cfg$landscape$template),
@@ -31,8 +37,12 @@ targets_config <- function(cfg) {
 #'   file, a URL, a Movebank study, or the B.C. telemetry exports combined by
 #'   [read_bc_locations()], with a `_log` target counting each step), then:
 #'   combine (flagging fixes an earlier-listed source also has, see
-#'   [flag_source_duplicates()]), clean, make the study area, and keep the
-#'   locations inside it.
+#'   [flag_source_duplicates()]), clean (logging the fixes each step removed,
+#'   what happened to fixes flagged as mortalities, see [check_mortality()],
+#'   and counts of possible mortalities or dropped collars, see [summarize_flags()]),
+#'   make the study area, and keep the locations inside it. Fixes with dates
+#'   but no times help make the study area but are then dropped
+#'   ([drop_date_only()]).
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
@@ -45,8 +55,13 @@ targets_locations <- function(cfg) {
     cue <- tar_cue(mode = if (isTRUE(src$refresh)) 'always' else 'thorough')
     if (identical(src$type, 'movebank')) {
       src_targets <- c(src_targets, list(
-        tar_target_raw(nm, substitute(download_movebank(SRC, cfg_locations, cfg_project$crs),
-                                      list(SRC = src)), cue = cue)
+        # download one at a time, on the main process (Movebank limits parallel
+        # requests); depends only on the study, so reading changes don't re-download
+        tar_target_raw(paste0(nm, '_download'),
+                       substitute(download_movebank(SRC, cfg_paths), list(SRC = src[intersect(c('study', 'user', 'name'), names(src))])),
+                       format = 'file', cue = cue, deployment = 'main'),
+        tar_target_raw(nm, substitute(read_movebank(FILE, SRC, cfg_locations, cfg_project$crs),
+                                      list(FILE = as.symbol(paste0(nm, '_download')), SRC = src)))
       ))
     } else if (identical(src$type, 'bc')) {
       files <- list(NEW = quote(NULL), OLD = quote(NULL), REF = quote(NULL))
@@ -81,21 +96,20 @@ targets_locations <- function(cfg) {
     src_names <- c(src_names, nm)
   }
 
-  combine <- substitute(flag_source_duplicates(data.table::rbindlist(SRCS, fill = TRUE),
-                                               cfg_locations$source_duplicates, cfg_project$crs),
+  combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs),
                         list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
 
   sa_src <- cfg$locations$study_area$source
   sa_targets <- if (is.null(sa_src)) {
     list(
-      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_locations$study_area,
+      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area,
                                                  file = NULL, crs = cfg_project$crs))
     )
   } else {
     list(
       tar_target_raw('study_area_file', substitute(get_source(SRC, cfg_paths), list(SRC = sa_src)),
                      format = 'file'),
-      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_locations$study_area,
+      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area,
                                                  file = study_area_file, crs = cfg_project$crs))
     )
   }
@@ -105,13 +119,15 @@ targets_locations <- function(cfg) {
     list(
       tar_target_raw('locations_raw', combine),
       tar_target(locations_clean,
-                 clean_locations(locations_raw, cfg_locations$cleaning, cfg_project$crs)),
-      tar_target(cleaning_log, attr(locations_clean, 'cleaning_log'))
+                 clean_locations(locations_raw, cfg_cleaning, cfg_project$crs)),
+      tar_target(cleaning_log, attr(locations_clean, 'cleaning_log')),
+      tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
+      tar_target(flag_summary, summarize_flags(locations_clean))
     ),
     sa_targets,
     list(
       tar_target(locations,
-                 crop_locations(locations_clean, study_area, cfg_locations$crop_method))
+                 crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method))
     )
   )
 }

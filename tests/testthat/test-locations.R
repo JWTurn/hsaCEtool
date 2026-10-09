@@ -61,9 +61,43 @@ test_that('clean_locations runs steps in order, logs them, and accepts custom st
                    custom = list(mine = function(DT, params, crs) DT[id == 'a']))
   out <- clean_locations(DT, cleaning, crs)
   log <- attr(out, 'cleaning_log')
-  expect_equal(log$step, c('same_time_duplicates', 'dop', 'mine'))
+  expect_equal(log$step, c('exact_duplicates', 'dop', 'mine'))
   expect_equal(log$removed, c(1, 20, 40))
   expect_equal(unique(out$id), 'a')
+  # the removed attribute agrees with the log
+  removed <- attr(out, 'removed')
+  expect_equal(removed[, .N, by = step]$N, c(1, 20, 40))
+  expect_false('.row' %in% names(out))
+})
+
+test_that('fixes at the same time but different positions are resolved by DOP', {
+  DT <- toy_locations(5)[id == 'a']
+  clash <- copy(DT[1])[, `:=`(x_ = x_ + 50, gps_dop = 8)]   # same time as row 1 (DOP 2)
+  DT <- rbind(DT, clash)
+  cleaning <- list(steps = list('duplicates'),
+                   params = list(duplicates = list(gamma_minutes = 15, dop_column = 'gps_dop')))
+  out <- clean_locations(DT, cleaning, crs)
+  expect_equal(nrow(out), 5)
+  expect_equal(out$x_[1], DT$x_[1])   # lower DOP kept
+  expect_equal(attr(out, 'removed'), data.table(row = 6L, step = 'duplicates'))
+  expect_equal(attr(out, 'cleaning_log')$step, c('exact_duplicates', 'duplicates'))
+
+  # without the duplicates step, the first is kept, with a warning
+  expect_warning(out <- clean_locations(DT, list(steps = list()), crs), 'share their animal and time')
+  expect_false(anyDuplicated(out, by = c('id', 't_')) > 0)
+  expect_equal(attr(out, 'cleaning_log')$step, c('exact_duplicates', 'same_time_duplicates'))
+  expect_equal(attr(out, 'removed')$step, 'same_time_duplicates')
+})
+
+test_that('check_mortality counts flagged fixes kept or removed by step', {
+  raw <- toy_locations(5)[, `:=`(source = 's', mortality = c(TRUE, TRUE, FALSE, NA, FALSE,
+                                                             FALSE, FALSE, FALSE, FALSE, TRUE))]
+  cleaning <- list(steps = list('drop_first'),
+                   custom = list(drop_first = function(DT, params, crs) DT[!(id == 'a' & t_ == min(t_))]))
+  out <- suppressMessages(clean_locations(raw, cleaning, crs))
+  expect_equal(check_mortality(raw, out),
+               data.table(source = 's', id = c('a', 'a', 'b'), step = c('drop_first', 'kept', 'kept'), n = 1L))
+  expect_equal(nrow(check_mortality(raw[, !'mortality'], out)), 0)
 })
 
 test_that('study area, cropping and subsetting', {
@@ -89,4 +123,95 @@ test_that('fixes another source also has are flagged, then dropped by the cleani
   expect_equal(out[source == 'bc']$dup_source, c('movebank', 'movebank', NA, NA, 'movebank'))
   expect_equal(nrow(clean_source_duplicates(out, NULL, 'EPSG:3154')), 7)
   expect_true(all(is.na(flag_source_duplicates(a, list(), 'EPSG:3154')$dup_source)))
+})
+
+test_that('date-only fixes get noon UTC, light cleaning, and are dropped before tracks', {
+  DT <- data.table::data.table(animal = 'd', day = as.Date(c('2005-06-01', '2005-06-01', '2005-06-02')),
+                               lon = c(-130, -130.1, -150), lat = 62)
+  src <- list(columns = list(id = 'animal', datetime = 'day', x = 'lon', y = 'lat'),
+              input_crs = 'EPSG:4326', name = 'old', date_only = TRUE)
+  dated <- standardize_locations(DT, src, list(keep_columns = list()), crs)
+  expect_equal(format(dated$t_, '%Y-%m-%d %H:%M', tz = 'UTC'),
+               c('2005-06-01 12:00', '2005-06-01 12:00', '2005-06-02 12:00'))
+  expect_true(all(dated$date_only))
+
+  raw <- data.table::rbindlist(list(toy_locations(5), dated), fill = TRUE)
+  cleaning <- list(steps = list('mine'), date_only_steps = list('bounds'),
+                   params = list(bounds = list(xmin = -142, ymin = 50, xmax = -120, ymax = 70)),
+                   custom = list(mine = function(DT, params, crs) DT[id == 'a']))
+  # two date-only fixes on one day are both kept, with no same-time warning
+  expect_no_warning(out <- suppressMessages(clean_locations(raw, cleaning, crs)))
+  expect_equal(nrow(out[(date_only)]), 2)   # the one outside bounds removed
+  expect_equal(attr(out, 'cleaning_log')$step, c('exact_duplicates', 'mine', 'bounds (date only)'))
+  expect_equal(attr(out, 'cleaning_log')$removed, c(0, 5, 1))
+  timed <- drop_date_only(out)
+  expect_equal(nrow(timed), 5)
+  expect_false('date_only' %in% names(timed))
+})
+
+test_that('combine_locations makes units and factor columns plain', {
+  a <- toy_locations(5)[id == 'a'][, `:=`(source = 'movebank', sex = factor('f'))]
+  a[, gps_dop := units::set_units(gps_dop, 1)]
+  b <- toy_locations(5)[id == 'b'][, `:=`(source = 'bc', sex = 'm')]
+  out <- combine_locations(list(a, b), list(), crs)
+  expect_type(out$gps_dop, 'double')
+  expect_false(inherits(out$gps_dop, 'units'))
+  expect_type(out$sex, 'character')
+  expect_equal(nrow(out), 10)
+  expect_true(inherits(a$gps_dop, 'units'))   # inputs left as they were
+})
+
+test_that('flag_duplicates_fast gives the same result as amt::flag_duplicates', {
+  set.seed(5)
+  n <- 300
+  # made-up track: irregular gaps from 1 to 40 minutes, DOPs with many ties
+  t <- as.POSIXct('2021-01-01', tz = 'UTC') + cumsum(sample(c(0, 60, 300, 600, 1200, 2400), n, replace = TRUE))
+  DT <- data.table(t_ = t, x_ = 500000 + cumsum(rnorm(n, 0, 50)), y_ = 6700000 + cumsum(rnorm(n, 0, 50)),
+                   dop = sample(c(1, 2, 2, 3, 99), n, replace = TRUE))
+  amt_flag <- amt::flag_duplicates(amt::make_track(DT, x_, y_, t_, all_cols = TRUE),
+                                   gamma = lubridate::minutes(15), DOP = 'dop')$duplicate_
+  expect_equal(flag_duplicates_fast(DT$t_, DT$x_, DT$y_, DT$dop, 15 * 60), amt_flag)
+  expect_gt(sum(amt_flag), 0)
+})
+
+test_that('end_clusters flags a stationary end, incl. a collar moved to an office, but not a live animal', {
+  set.seed(3)
+  t0 <- as.POSIXct('2021-06-01', tz = 'UTC')
+  jitter <- function(n) rnorm(n, 0, 10)
+  # made-up tracks, one fix an hour
+  live <- data.table(id = 'live', x_ = 500000 + 50 * (1:100), y_ = 6700000)            # slow, steady walker
+  moved <- data.table(id = 'moved',
+                      x_ = c(500000 + 1000 * (1:50), 560000 + jitter(60), 580000, 600000, 620000 + jitter(60)),
+                      y_ = 6700000 + c(rep(0, 50), jitter(60), 0, 0, jitter(60)))   # walks, dies, collar taken to an office
+  short <- data.table(id = 'short', x_ = c(500000 + 1000 * (1:50), 560000 + jitter(20)), y_ = 6700000)
+  # stationary for 60 h, then picked up: 3 fixes on the move before the data end
+  tail <- data.table(id = 'tail', x_ = c(500000 + 1000 * (1:50), 560000 + jitter(60), 570000, 580000, 590000),
+                     y_ = 6700000)
+  DT <- rbindlist(list(live, moved, short, tail))[, t_ := t0 + (seq_len(.N) - 1) * 3600, by = id]
+  params <- list(zeta = 200, theta_hours = 48, max_moves = 2, transit_fixes = 5)
+  out <- clean_end_clusters(copy(DT), params, crs)
+  expect_equal(nrow(out), nrow(DT))   # flags only
+  expect_false(any(out[id == 'live']$end_cluster_))
+  expect_false(any(out[id == 'short']$end_cluster_))   # stationary for under 48 h
+  expect_equal(which(out[id == 'moved']$end_cluster_), 51:172)   # from the mortality site on
+  expect_equal(which(out[id == 'tail']$end_cluster_), 51:113)
+  expect_true(all(out$mortality_status[out$end_cluster_] == 'unknown'))   # no mortality column
+  # with no moves allowed, only the office stretch
+  out1 <- clean_end_clusters(copy(DT), modifyList(params, list(max_moves = 0)), crs)
+  expect_equal(which(out1[id == 'moved']$end_cluster_), 113:172)
+
+  # amt's rule only flags too, and flags the live walker (all its steps are short)
+  amt_out <- clean_clusters(copy(DT), list(zeta = 200, eta = 3, theta_hours = 48), crs)
+  expect_equal(nrow(amt_out), nrow(DT))
+  expect_true(any(amt_out[id == 'live']$defunct_cluster_))
+
+  amt_out[, `:=`(end_cluster_ = out$end_cluster_, source = 's', mortality = id == 'moved')]
+  s <- summarize_flags(amt_out)
+  expect_equal(s[flag == 'end clusters']$fixes, 122 + 63)   # moved + tail
+  expect_equal(s[flag == 'mortality and end clusters']$animals, 1)
+  st <- clean_end_clusters(copy(amt_out), params, crs)$mortality_status
+  expect_equal(sum(st %in% 'likely'), 122)       # moved: flagged and in an end cluster
+  expect_equal(sum(st %in% 'flag only'), 50)     # moved: flagged before it died
+  expect_equal(sum(st %in% 'unknown'), 63)       # tail: end cluster, no flag
+  expect_equal(unique(s$of_fixes), nrow(DT))
 })
