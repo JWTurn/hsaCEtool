@@ -292,7 +292,12 @@ true metres). The templates come from `landscape: template:`:
   `(study_area, tmpl, crs)` that returns one.
 
 A built layer's `resolution` must be `base_res` times one of the factors (e.g.
-240), and it needs `first_year` and `last_year`.
+240). Its `first_year` and `last_year` can be left blank: it is then built for
+`tracks: min_year` to `max_year`, or, where those are `null`, for the first to
+the last year of the steps that come out of track preparation (target
+`step_years`; the layers then wait for the tracks). Fill them in for a layer
+whose source covers fewer years (e.g. harvest from CanLaD ends in 2024).
+Elevation and northness do not change by year: leave both blank.
 
 Distances (to harvest and human disturbance) are measured over the template
 plus `landscape: distance_margin_m` (default 10 km) on every side, so a road or
@@ -309,7 +314,9 @@ Built from the Canada Landsat Disturbance maps (CanLaD, 30 m): the 1965-1984
 maps (disturbance type 3 = harvest, with the year from the matching year map)
 and the annual maps from 1985 (value 2 = harvesting). Settings are under
 `landscape: harvest:`. "Recent" harvest means the last `recent_years` years,
-that year included (default 2).
+that year included (default 2). A `harvest_pa`, `harvest_dens` or
+`harvest_dist` row can give its own number of years in its `class` column (e.g.
+`10`), so several windows can be built side by side.
 
 | `build` | Each cell holds |
 |---|---|
@@ -317,6 +324,60 @@ that year included (default 2).
 | `harvest_pa` | 1 if any of its 30 m cells had recent harvest, otherwise 0 |
 | `harvest_dens` | The proportion of its 30 m cells with recent harvest |
 | `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell (including those in the margin) |
+
+### Fire (`build: fire_*`)
+
+Built from the National Burned Area Composite (NBAC, all fires 1972-2025 in
+one file) and, for earlier fires, the National Fire Database polygons (NFDB
+"pre-1972"; `landscape: fire: pre1972: false` leaves them out). As in
+NMC_CEtool, an older fire with no valid year takes it from its report date or
+its ID. Fires up to the first year built (e.g. 2012) are put onto the 30 m
+template together, keeping each cell's most recent fire, then each later year
+on its own: every fire layer needs only each cell's most recent fire up to its
+year. Settings are under `landscape: fire:`.
+
+| `build` | Each cell holds |
+|---|---|
+| `fire_year` | The most recent fire year up to that year, in any of its 30 m cells (blank = never burned). Use with `time_since: TRUE` and `ts_nodata` (e.g. 200) for years since fire |
+| `fire_pa` | 1 if any of its 30 m cells burned in the past n years, otherwise 0 |
+| `fire_dens` | The proportion of its 30 m cells burned in the past n years (that year included) |
+| `fire_dist` | The mean distance (m) from its 30 m cells to the nearest 30 m cell burned in the past n years |
+
+n is the row's `class` (e.g. `2` and `60` for burned in the past 2 or 60
+years, as in NMC_CEtool), or `landscape: fire: recent_years` if blank. Add a
+row for each cutoff wanted.
+
+### Forest age (`build: forest_age`)
+
+The mean age of each cell's forested 30 m cells (not forest = blank), from
+`landscape: forest_age: source:` either `scanfi` (SCANFI v2: a map every 5
+years, 1985-2025, which already accounts for fire and harvest up to its year)
+or `ntems` (NTEMS: 2019 only, as in NMC_CEtool). Each year uses the latest map
+at or before it plus the years since; years before the first map use it minus
+the years before (stands then younger than 0 are blank). With
+`reset_by_disturbance: true` (default), a forested 30 m cell burned (NBAC/NFDB)
+or harvested (CanLaD) after the map's year gets the years since that
+disturbance instead; going back before a map, a cell disturbed in between is
+blank, as its age then is unknown.
+
+### Terrain (`build: elevation` or `northness`)
+
+From a 30 m elevation model, `landscape: terrain: source:` either `mrdem`
+(NRCan's MRDEM-30 bare-earth model, read straight from the web) or your own
+raster (a source: path or url). Put onto the 30 m template (bilinear), then:
+
+| `build` | Each cell holds |
+|---|---|
+| `elevation` | The mean elevation (m) of its 30 m cells |
+| `northness` | cos(aspect): 1 facing north, -1 facing south, 0 facing east or west, and 0 on flat ground |
+
+Aspect is measured from true north. In a projected coordinate system the
+grid's north differs from true north away from the central meridian (across
+the NMC study area in UTM zone 7, by up to about 20 degrees), so aspect is
+turned by that angle first. With `northness: fine` (default), northness is
+worked out for every 30 m cell and then averaged; with `coarse`, it is worked
+out from each cell's mean elevation, as in NMC_CEtool. Slopes at the template's
+edge use the elevation in the distance margin.
 
 ### Land cover (`build: landcover` or `landcover_cell`)
 

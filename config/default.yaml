@@ -144,8 +144,9 @@ tracks:
   n_random: 30            # random (available) steps per observed step
   sl_distr: gamma         # distribution fitted to step lengths: gamma, exp, lnorm, hnorm or unif
   ta_distr: vonmises      # distribution fitted to turning angles: vonmises or unif
-  min_year: 2012          # keep steps from this year ...
-  max_year: 2025          # ... to this year
+  min_year: null          # keep steps from this year ... (null = from the first year in the data)
+  max_year: null          # ... to this year (null = to the last). Built landscape layers with
+                          # blank years in the layer table cover these years too (target layer_years)
   year_interval: 5        # round years down to this interval (column int.year)
   buffer_round_m: 50      # median step length is rounded down to this, for neighbourhood layers
 
@@ -245,6 +246,51 @@ landscape:
         210: coniferous
         220: broadleaf
         230: mixedwood
+
+  # Terrain: elevation and northness (build: elevation, northness), which do not
+  # change by year. Northness is cos(aspect), with aspect measured from true north
+  # (not the grid's north): 1 facing north, -1 south, 0 east, west or flat.
+  terrain:
+    source: mrdem         # mrdem (NRCan MRDEM-30, 30 m bare-earth elevation) or your own
+                          # elevation raster (a source: path or url)
+    mrdem:
+      url: "https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dtm.tif"
+    northness: fine       # fine (worked out at 30 m, then averaged) or coarse (from the
+                          # mean elevation at each resolution, as in NMC_CEtool)
+    access: stream        # stream or download; MRDEM is 84 GB, so stream unless you have it locally
+
+  # Fire: National Burned Area Composite (NBAC, 1972 on) plus older fires from the
+  # National Fire Database (NFDB). Each fire year of every 30 m cell is kept
+  # (build: fire_year = most recent fire up to that year, for years since fire;
+  # fire_pa, fire_dens, fire_dist = burned in the past n years, with n the
+  # layer's class, e.g. 2 or 60, or recent_years below).
+  fire:
+    nbac:
+      url: "https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2025_20260513_shp.zip"
+      target_file: NBAC_merged_1972_to_2025_20260513.shp
+    nfdb:
+      url: "https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly_pre1972.zip"
+      target_file: NFDB_poly_pre1972_20250630.shp
+    pre1972: true         # true (add NFDB fires before 1972) or false (NBAC only)
+    last_year: 2025       # last year of fires in nbac
+    recent_years: 2       # years counted as recent for rows without a class
+
+  # Forest age: yearly age of forested 30 m cells (build: forest_age), averaged
+  # over each cell's forested 30 m cells. Each year uses the latest map at or
+  # before it plus the years since (or, before the first map, minus the years).
+  forest_age:
+    source: scanfi        # scanfi (SCANFI v2, a map every 5 years 1985-2025) or ntems
+                          # (NTEMS, 2019 only, as in NMC_CEtool)
+    reset_by_disturbance: true  # true: a cell burned (fire) or harvested (CanLaD) after the
+                          # map's year gets the years since; false: map ages only
+    scanfi:
+      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/SCANFI/v2/SCANFI_age_median_{year}_v2_20260119.tif"
+      years: [1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
+    ntems:
+      url: "https://opendata.nfis.org/downloads/forest_change/CA_forest_age_2019.zip"
+      archive_file: CA_forest_age_2019.tif   # the raster inside the zip
+      years: [2019]
+      zero_is_na: true    # 0 means not forest
 
   # Human disturbance: roads, trails, seismic lines, mines, clearings... from one
   # or more sources, each sorted into categories (e.g. paved, unpaved, lfother) by
