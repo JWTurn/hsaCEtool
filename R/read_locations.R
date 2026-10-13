@@ -101,7 +101,8 @@ download_movebank <- function(src, paths) {
 #' @title Read a saved Movebank study
 #' @description Reads a study saved by [download_movebank()], drops records
 #'   without a position, adds each deployment's animal ID, sex, start/end times,
-#'   duty cycle and end type (from the study's deployment, or track, table), and
+#'   duty cycle, end type, study site, group and comments (from the study's
+#'   deployment, or track, table; the last three can hold the herd), and
 #'   puts it in standard form.
 #' @inheritParams read_locations_file
 #' @param file character. Path from [download_movebank()].
@@ -121,7 +122,8 @@ read_movebank <- function(file, src, loc_cfg, crs) {
   meta <- data.table::as.data.table(sf::st_drop_geometry(move2::mt_track_data(dat)))
   meta_cols <- intersect(c(track_col, 'deployment_id', 'individual_local_identifier', 'tag_local_identifier',
                            'sex', 'deploy_on_timestamp', 'deploy_off_timestamp', 'duty_cycle',
-                           'deployment_end_type', 'individual_number_of_deployments'), names(meta))
+                           'deployment_end_type', 'individual_number_of_deployments',
+                           'study_site', 'group_id', 'individual_comments'), names(meta))
   meta <- meta[, unique(meta_cols), with = FALSE]
   DT <- merge(DT[, setdiff(names(DT), setdiff(names(meta), track_col)), with = FALSE], meta,
               by = track_col, all.x = TRUE)

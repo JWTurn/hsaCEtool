@@ -290,3 +290,34 @@ test_that('the extended study area can be read from a file', {
   out <- make_study_area_extended(sa, list(buffer_m = 1, convex_hull = FALSE), file = file)
   expect_equal(terra::expanse(out), terra::expanse(ext), tolerance = 1e-6)
 })
+
+test_that('finish_locations codes sex, adds study and herd, and keeps only the listed columns', {
+  DT <- toy_locations(3)[, `:=`(source = c('bc', 'bc', 'yk', 'pc', 'mb', 'mb'),
+                                sex = c('Female', 'NA', NA, NA, 'm', NA), Gender = c(NA, NA, NA, 'F', NA, NA),
+                                herd = c('Pink Mountain', 'Level-Kawdy', NA, NA, NA, NA),
+                                Herd = c(NA, NA, NA, 'Redstone South', NA, NA),
+                                group_id = c(NA, NA, NA, NA, 'Clear Creek', NA),
+                                notes = c(NA, NA, 'Solex collar', NA, NA, 'Hess subpopulation'),
+                                study_site = c(NA, NA, NA, NA, 'Hart River', 'Hart River'), gps_dop = 1)]
+  herd_cfg <- list(columns = list('herd', 'Herd', 'group_id', list(column = 'notes', sources = 'mb'), 'study_site'),
+                   by_source = list(yk = 'Wolf Lake', pc = 'Prairie Creek'),
+                   rename = list(HessSubpopulation = 'Hess', PinkMountain = 'PinkMtn'))
+  out <- finish_locations(DT, list(keep = c('sex', 'juris', 'study', 'herd', 'not_here'), herd = herd_cfg,
+                                   juris = list(by_source = list(bc = 'BC', mb = 'YT')),
+                                   study = list(columns = list(list(column = 'herd', sources = 'bc')),
+                                                by_source = list(pc = 'Prairie Creek'))))
+  expect_equal(names(out), c('id', 'source', 't_', 'x_', 'y_', 'sex', 'juris', 'study', 'herd'))
+  expect_equal(out$juris, c('bc', 'bc', NA, NA, 'yt', 'yt'))   # lower case
+  expect_equal(out$sex, c('f', NA, NA, 'f', 'm', NA))
+  # B.C. study from its herd column; then by_source; then the source
+  expect_equal(out$study, c('PinkMountain', 'LevelKawdy', 'Yk', 'PrairieCreek', 'Mb', 'Mb'))
+  # columns in order (notes only for source mb, so not 'Solex collar'), then
+  # by_source, then CamelCase, then rename
+  expect_equal(out$herd, c('PinkMtn', 'LevelKawdy', 'WolfLake', 'RedstoneSouth', 'ClearCreek', 'Hess'))
+  expect_true('gps_dop' %in% names(DT))   # input unchanged
+  # no keep list: every column kept
+  expect_true(all(c('gps_dop', 'Gender') %in% names(finish_locations(DT, list(herd = herd_cfg)))))
+  expect_equal(standardize_sex(c('M', 'male', 'f', 'Unknown', '')), c('m', 'm', 'f', NA, NA))
+  expect_equal(to_camel(c('Moose Lake (previously Tay River)', 'BC', 'PrairieCreek', NA)),
+               c('MooseLakePreviouslyTayRiver', 'BC', 'PrairieCreek', NA))
+})

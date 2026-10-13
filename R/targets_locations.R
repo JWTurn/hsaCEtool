@@ -18,6 +18,11 @@ targets_config <- function(cfg) {
     tar_target(cfg_cleaning, cfg$locations$cleaning),
     tar_target(cfg_study_area, cfg$locations$study_area),
     tar_target(cfg_crop_method, cfg$locations$crop_method),
+    # columns kept after cleaning (with the columns tracks are split by) and how study, herd and juris are made
+    tar_target(cfg_finish, list(
+      keep = if (length(cfg$locations$keep_after_cleaning)) unique(c(unlist(cfg$locations$keep_after_cleaning), unlist(cfg$tracks$split_by))),
+      study = cfg$locations$study, herd = cfg$locations$herd, juris = cfg$locations$juris
+    )),
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
     tar_target(cfg_template, cfg$landscape$template),
@@ -43,7 +48,9 @@ targets_config <- function(cfg) {
 #'   and how each animal's `mortality_status` was decided (`mortality_rules`, see [mortality_status_rules()])),
 #'   make the study area, and keep the locations inside it. Fixes with dates
 #'   but no times help make the study area but are then dropped
-#'   ([drop_date_only()]).
+#'   ([drop_date_only()]). `locations` keeps only the columns needed later,
+#'   with `sex` coded and `study`, `herd` and `juris` added ([finish_locations()]); `herd_check`
+#'   counts animals by source, jurisdiction, study and herd.
 #'
 #'   With `locations: premade:` set, a cleaned locations file (saved from
 #'   `locations_clean`) is read instead ([read_premade_locations()]) and the
@@ -168,7 +175,10 @@ targets_locations <- function(cfg) {
     ext_targets,
     list(
       tar_target(locations,
-                 crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method))
+                 crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method) |>
+                   finish_locations(cfg_finish)),
+      # animals by source, jurisdiction, study and herd, to check the names (counts only)
+      tar_target(herd_check, locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)])
     )
   )
 }

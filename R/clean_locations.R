@@ -109,6 +109,157 @@ drop_date_only <- function(DT) {
   DT[]
 }
 
+#' @title Standardize sex, add study, herd and jurisdiction, and keep only the columns needed later
+#' @description Run after cleaning (on `locations`), so `locations_clean`
+#'   keeps every column. `sex` is filled from `Gender` where `sex` is missing,
+#'   then coded `f`, `m` or NA (e.g. "Female", "F" and "f" all become `f`;
+#'   "Unknown" and "NA" become NA). `study`, `herd` and `juris` are made by
+#'   [make_study()], [make_herd()] and [make_juris()]. Then only
+#'   `id`, `source`, `t_`, `x_`, `y_` and the `keep` columns are kept; `keep`
+#'   columns not in the data are skipped.
+#' @param DT data.table of cleaned locations.
+#' @param fin_cfg named list: `keep` (character; NULL or empty keeps every
+#'   column), `study`, `herd` and `juris` (the `locations: study:`, `herd:` and
+#'   `juris:` settings).
+#' @return data.table.
+#' @author Julie W. Turner
+finish_locations <- function(DT, fin_cfg) {
+  DT <- data.table::copy(DT)
+  if ('Gender' %in% names(DT)) {
+    if (!'sex' %in% names(DT)) DT[, sex := NA_character_]
+    DT[is.na(sex) | !nzchar(trimws(sex)), sex := as.character(Gender)]
+  }
+  if ('sex' %in% names(DT)) DT[, sex := standardize_sex(sex)]
+  DT[, `:=`(study = make_study(DT, fin_cfg$study), herd = make_herd(DT, fin_cfg$herd),
+             juris = make_juris(DT, fin_cfg$juris))]
+
+  keep <- unlist(fin_cfg$keep)
+  if (length(keep)) {
+    DT <- DT[, unique(c('id', 'source', 't_', 'x_', 'y_', intersect(keep, names(DT)))), with = FALSE]
+  }
+  DT[]
+}
+
+#' @title Code sex as f, m or NA
+#' @param x character.
+#' @return character.
+#' @keywords internal
+#' @noRd
+standardize_sex <- function(x) {
+  x <- tolower(trimws(as.character(x)))
+  data.table::fcase(x %in% c('f', 'female'), 'f', x %in% c('m', 'male'), 'm', default = NA_character_)
+}
+
+#' @title Study of each fix
+#' @description Taken from the first of `study_cfg$columns` that has a value
+#'   (e.g. the herd column for B.C. fixes, whose export has no study), otherwise
+#'   the name given to the source in `study_cfg$by_source` (e.g. to put two
+#'   sources of one study together), otherwise the source's name. Then put in
+#'   CamelCase ([to_camel()]) and renamed with `study_cfg$rename` (old: new).
+#' @param DT data.table of locations with `source`.
+#' @param study_cfg named list. The `locations: study:` settings: `columns`
+#'   (as in [make_herd()]), `by_source` and `rename`.
+#' @return character, one value per row of `DT`.
+#' @author Julie W. Turner
+make_study <- function(DT, study_cfg) {
+  study <- name_from_columns(DT, study_cfg$columns)
+  by_source <- unlist(study_cfg$by_source)
+  fill <- is.na(study) & DT$source %in% names(by_source)
+  study[fill] <- by_source[DT$source[fill]]
+  study[is.na(study)] <- DT$source[is.na(study)]
+  rename_names(to_camel(study), study_cfg$rename)
+}
+
+#' @title Herd of each fix
+#' @description Taken from the first of `herd_cfg$columns` that has a value
+#'   (e.g. the B.C. `herd` column, or Movebank's `group_id` then `study_site`),
+#'   otherwise from `herd_cfg$by_source`, which names the herd of each source.
+#'   A column can be limited to some sources, e.g. `{column:
+#'   individual_comments, sources: [TayRiver]}` where only those studies use it
+#'   for herd. Names are then put in CamelCase ([to_camel()]) and renamed with
+#'   `herd_cfg$rename` (old: new, both in CamelCase), so a herd has one name in
+#'   every source. Fixes with no herd get NA.
+#' @param DT data.table of locations with `source`.
+#' @param herd_cfg named list. The `locations: herd:` settings: `columns`,
+#'   `by_source` and `rename`.
+#' @return character, one value per row of `DT`.
+#' @author Julie W. Turner
+make_herd <- function(DT, herd_cfg) {
+  herd <- name_from_columns(DT, herd_cfg$columns)
+  by_source <- unlist(herd_cfg$by_source)
+  fill <- is.na(herd) & DT$source %in% names(by_source)
+  herd[fill] <- by_source[DT$source[fill]]
+  rename_names(to_camel(herd), herd_cfg$rename)
+}
+
+#' @title Jurisdiction each fix's data come from
+#' @description Taken from the first of `juris_cfg$columns` that has a value
+#'   (as in [make_herd()]), otherwise from `juris_cfg$by_source` (source name:
+#'   jurisdiction, e.g. bc, yt, nt), in lower case. Fixes with neither get NA.
+#' @param DT data.table of locations with `source`.
+#' @param juris_cfg named list. The `locations: juris:` settings: `columns` and
+#'   `by_source`.
+#' @return character, one value per row of `DT`.
+#' @author Julie W. Turner
+make_juris <- function(DT, juris_cfg) {
+  juris <- name_from_columns(DT, juris_cfg$columns)
+  by_source <- unlist(juris_cfg$by_source)
+  fill <- is.na(juris) & DT$source %in% names(by_source)
+  juris[fill] <- by_source[DT$source[fill]]
+  tolower(unname(juris))
+}
+
+#' @title Value from the first of several columns that has one
+#' @param DT data.table of locations with `source`.
+#' @param columns list. Column names, or `list(column =, sources =)` to use a
+#'   column for those sources only. Columns not in `DT` are skipped.
+#' @return character, one value per row of `DT` (NA where none has a value).
+#' @keywords internal
+#' @noRd
+name_from_columns <- function(DT, columns) {
+  out <- rep(NA_character_, nrow(DT))
+  for (spec in as.list(columns)) {
+    col <- if (is.list(spec)) spec$column else spec
+    if (!col %in% names(DT)) next
+    v <- trimws(as.character(DT[[col]]))
+    fill <- is.na(out) & !is.na(v) & nzchar(v) & v != 'NA'
+    if (is.list(spec) && length(spec$sources)) fill <- fill & DT$source %in% unlist(spec$sources)
+    out[fill] <- v[fill]
+  }
+  out
+}
+
+#' @title Rename names listed as old: new
+#' @param x character.
+#' @param rename named list (old: new); NULL for none.
+#' @return character.
+#' @keywords internal
+#' @noRd
+rename_names <- function(x, rename) {
+  rename <- unlist(rename)
+  hit <- x %in% names(rename)
+  x[hit] <- rename[x[hit]]
+  unname(x)
+}
+
+#' @title Write names in CamelCase
+#' @description Words (separated by spaces, hyphens or other punctuation) are
+#'   joined, each starting with a capital: "Pink Mountain" becomes
+#'   `PinkMountain` and "Level-Kawdy" `LevelKawdy`. Names already in CamelCase
+#'   are unchanged.
+#' @param x character.
+#' @return character.
+#' @keywords internal
+#' @noRd
+to_camel <- function(x) {
+  out <- purrr::map_chr(strsplit(as.character(x), '[^A-Za-z0-9]+'), function(w) {
+    w <- w[nzchar(w)]
+    paste0(toupper(substring(w, 1, 1)), substring(w, 2), collapse = '')
+  })
+  out[is.na(x) | !nzchar(out)] <- NA_character_
+  out
+}
+
 #' @title Check what cleaning did with fixes flagged as mortalities
 #' @description Some sources (e.g. the old B.C. export) flag fixes recorded
 #'   after an animal died (column `mortality`). Counts, for each source and
