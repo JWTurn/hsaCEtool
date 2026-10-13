@@ -202,12 +202,42 @@ The comparison behind these rules (counts only) is in
 `inputs/bc_compare/BC_telemetry_comparison.md`, kept with the downloads rather
 than in git.
 
+### After cleaning: columns kept, sex, study and herd
+
+`locations_clean` keeps every column. The target `locations` (the fixes used
+for tracks) keeps only `id`, `source`, `t_`, `x_`, `y_` and the columns in
+`locations: keep_after_cleaning:` (by default `mortality_status`,
+`mortality_basis`, `deployment_end_type`, `sex`, `juris`, `study` and `herd`), so tracks
+and steps stay small. Columns listed but not in the data are skipped; `[]`
+keeps every column. Before that:
+
+- `sex` is coded `f`, `m` or blank (NA), whatever the source used (`Female`,
+  `F`, `f`; `Unknown` becomes blank), and filled from a `Gender` column where
+  `sex` is missing.
+- `juris` is the jurisdiction the data come from, in lower case (e.g. `bc`,
+  `yt`, `nt`), set for each source in `locations: juris: by_source:` (`source
+  name: juris`), or taken from `juris: columns:` as for `herd`.
+- `study` is taken from the first column in `locations: study: columns:` that
+  has a value (as for `herd` below; e.g. B.C. fixes, which have no study, use
+  their herd), otherwise from `study: by_source:` (`source name: study`, e.g. to
+  join two sources from one study), otherwise it is the source's name.
+- `herd` is taken from the first column in `locations: herd: columns:` that has
+  a value, otherwise from `herd: by_source:` (`source name: herd`). A column can
+  be used for some sources only: `{column: individual_comments, sources:
+  [TayRiver]}`. Movebank studies can hold the herd in `group_id`,
+  `study_site` or `individual_comments`.
+- `study` and `herd` are written in CamelCase ("Pink Mountain" becomes
+  `PinkMountain`). `herd: rename:` (`old: new`, both in CamelCase) then gives a
+  herd the same name in every source. The target `herd_check` counts animals by
+  source, jurisdiction, study and herd, to check the names.
+
 ## Landscape layers: `layers_<project>.csv`
 
 Each landscape layer is one row of a table named in `landscape: layers:`. To add
 a layer, add a row. Each layer's values are extracted at the start and/or end of
-every step (`extract: where:`). They become columns `<name>_start` and
-`<name>_end` in the final table, `issa_data`.
+every step (`extract: where:`), as columns `<name>_start` and `<name>_end`.
+The table used to fit models will be made from these, with only the layers a
+model uses (still to come).
 
 | Column | Meaning |
 |---|---|
@@ -222,6 +252,12 @@ every step (`extract: where:`). They become columns `<name>_start` and
 
 Each step gets the raster for its year. Steps after `last_year` use the last
 raster, and steps before `first_year` use the first.
+
+Extraction runs one year at a time (target `extracted`, one branch per year):
+that year's raster of every layer is read at that year's step starts and ends,
+layers on the same grid together. Each year's table holds `row`, the step's
+row number in `steps`, and every layer's values. Changing any layer re-extracts
+every year.
 
 ## Layers the pipeline builds
 

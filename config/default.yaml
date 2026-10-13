@@ -106,6 +106,33 @@ locations:
     extended: {source: null, buffer_m: 50000, convex_hull: true}
   crop_method: bbox       # keep locations inside the study area's bounding box ("bbox") or the polygon itself ("within")
 
+  # After cleaning (target locations): sex is coded f, m or NA (filled from
+  # Gender where sex is missing), juris, study and herd are added, and only id, source,
+  # t_, x_, y_ and these columns are kept, so tracks and steps stay small.
+  # locations_clean keeps every column. [] keeps every column.
+  keep_after_cleaning: [mortality_status, mortality_basis, deployment_end_type, sex, juris, study, herd]
+  # Study of each fix: from the first of `columns` with a value (as for herd
+  # below), otherwise by_source (source name: study; e.g. to join two sources of
+  # one study), otherwise the source's name. In CamelCase, then `rename`.
+  study:
+    columns: []
+    by_source: {}
+    rename: {}
+  # Herd of each fix: from the first of `columns` with a value (an entry can be
+  # {column: <name>, sources: [<source names>]} to use it for those sources only),
+  # otherwise from by_source (source name: herd). Names are put in CamelCase
+  # (Pink Mountain -> PinkMountain), then renamed with `rename` (old: new) so a
+  # herd has one name in every source. Target herd_check counts animals by herd.
+  herd:
+    columns: [herd]
+    by_source: {}
+    rename: {}
+  # Jurisdiction the data come from, in lower case (e.g. bc, yt, nt): from the first of
+  # `columns` with a value (as for herd), otherwise by_source (source name: juris).
+  juris:
+    columns: []
+    by_source: {}
+
 # Movement tracks and random steps (integrated step selection analysis) -------
 tracks:
   split_by: id            # column(s) that define one track; each is processed separately
