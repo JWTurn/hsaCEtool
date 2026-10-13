@@ -46,44 +46,56 @@ test_that('get_layer_files finds one file per year', {
   expect_error(get_layer_files('val_{year}.tif', NA, NA, NA, 2018L, 2021L, list(data_in = dir)), 'not found')
 })
 
-test_that('extract_layer matches each step to its year, clamping outside years', {
+test_that('extract_year matches each step to its year, clamping outside years', {
   dir <- withr::local_tempdir()
   toy_rasters(dir)
-  files <- file.path(dir, paste0('val_', 2018:2020, '.tif'))
-  out <- extract_layer(toy_steps(), files, 2018L, 2020L, 'val', 'both', crs = crs)
-  expect_named(out, c('val_start', 'val_end'))
+  index <- make_layer_index(data.table(name = c('val', 'elev'), first_year = c(2018L, NA), last_year = c(2020L, NA),
+                                       time_since = FALSE, ts_nodata = NA_real_),
+                            list(file.path(dir, paste0('val_', 2018:2020, '.tif')), file.path(dir, 'elev.tif')))
+  out <- extract_all_years(toy_steps(), index)
+  expect_named(out, c('row', 'val_start', 'val_end', 'elev_start', 'elev_end'))
+  expect_equal(out$row, 1:4)
   expect_equal(out$val_end, c(2018, 2018, 2019, 2020))
   expect_equal(out$val_start, c(2018, 2018, 2019, NA))   # missing start coordinates
-  expect_named(extract_layer(toy_steps(), files, 2018L, 2020L, 'val', 'end'), 'val_end')
+  expect_equal(out$elev_end, c(100, 10, 91, 100))         # cells numbered from the top left
+  expect_named(extract_all_years(toy_steps(), index, 'end'), c('row', 'val_end', 'elev_end'))
+  expect_error(extract_year(make_step_points(toy_steps()), index), 'one year')
 })
 
-test_that('extract_layer adds years since disturbance', {
+test_that('extract_year adds years since disturbance', {
   dir <- withr::local_tempdir()
   toy_rasters(dir)
-  files <- file.path(dir, paste0('fires_', 2018:2020, '.tif'))
-  out <- extract_layer(toy_steps(), files, 2018L, 2020L, 'fires', 'end', time_since = TRUE, ts_nodata = 200)
+  z <- file.path(dir, 'zero.tif')
+  terra::writeRaster(terra::rast(terra::rast(file.path(dir, 'val_2018.tif')), vals = 0), z)
+  index <- make_layer_index(data.table(name = c('fires', 'harv'), first_year = 2018L, last_year = 2020L,
+                                       time_since = TRUE, ts_nodata = c(200, 100)),
+                            list(file.path(dir, paste0('fires_', 2018:2020, '.tif')), rep(z, 3)))
+  out <- extract_all_years(toy_steps(), index, 'end')
   # bottom half burned (year - 5); top half never burned
   expect_equal(out$ts_fires_end, c(4, 200, 5, 6))
   # 0 = never disturbed, as in the 250 m harvest rasters
-  z <- file.path(dir, 'zero.tif')
-  terra::writeRaster(terra::rast(terra::rast(files[1]), vals = 0), z)
-  out0 <- extract_layer(toy_steps(), rep(z, 3), 2018L, 2020L, 'harv', 'end', time_since = TRUE, ts_nodata = 100)
-  expect_equal(out0$ts_harv_end, rep(100, 4))
+  expect_equal(out$ts_harv_end, rep(100, 4))
 })
 
-test_that('extract_layer reads static layers', {
+test_that('extract_year reads stacks on different grids and coordinate systems like terra::extract', {
   dir <- withr::local_tempdir()
   toy_rasters(dir)
-  out <- extract_layer(toy_steps(), file.path(dir, 'elev.tif'), NA, NA, 'elev', 'end', crs = crs)
-  expect_equal(out$elev_end, c(100, 10, 91, 100))   # cells numbered from the top left
-})
-
-test_that('combine_extracted joins layers and catches mistakes', {
-  steps <- toy_steps()
-  a <- data.table(a_end = 1:4)
-  b <- data.table(b_end = 5:8)
-  out <- combine_extracted(steps, a, b)
-  expect_equal(names(out), c(names(steps), 'a_end', 'b_end'))
-  expect_error(combine_extracted(steps, a[1:2]), 'one row per step')
-  expect_error(combine_extracted(steps, data.table(year = 1:4)), 'already in the steps')
+  # a coarser grid in another coordinate system, covering the toy area
+  a <- terra::project(terra::rast(file.path(dir, 'elev.tif')), 'EPSG:3005', res = 200)
+  terra::writeRaster(a, file.path(dir, 'other.tif'))
+  index <- make_layer_index(data.table(name = c('val', 'elev', 'other'), first_year = c(2018L, NA, NA),
+                                       last_year = c(2020L, NA, NA), time_since = FALSE, ts_nodata = NA_real_),
+                            list(file.path(dir, paste0('val_', 2018:2020, '.tif')), file.path(dir, 'elev.tif'),
+                                 file.path(dir, 'other.tif')))
+  set.seed(3)
+  # made-up steps: shared starts, as for an observed step and its random steps
+  steps <- data.table(year = 2019L, x1_ = rep(c(150, 820), each = 5), y1_ = rep(c(330, 610), each = 5),
+                      x2_ = runif(10, 0, 1000), y2_ = runif(10, 0, 1000))
+  out <- extract_all_years(steps, index)
+  pts_start <- terra::vect(as.matrix(steps[, .(x1_, y1_)]), crs = crs)
+  pts_end <- terra::vect(as.matrix(steps[, .(x2_, y2_)]), crs = crs)
+  expect_equal(out$elev_end, terra::extract(terra::rast(file.path(dir, 'elev.tif')), pts_end)[[2]])
+  expect_equal(out$other_end, terra::extract(a, terra::project(pts_end, 'EPSG:3005'))[[2]])
+  expect_equal(out$other_start, terra::extract(a, terra::project(pts_start, 'EPSG:3005'))[[2]])
+  expect_equal(out$val_start, rep(2019, 10))
 })

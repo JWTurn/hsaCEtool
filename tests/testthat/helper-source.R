@@ -15,3 +15,10 @@ toy_locations <- function(n = 50) {
     gps_dop = rep(c(2, 12, NA, 3, 4), length.out = 2 * n)
   )
 }
+
+# Extract every year of made-up steps, as the extracted branches would, rows in step order
+extract_all_years <- function(steps, index, where = 'both') {
+  pts <- make_step_points(steps)
+  out <- rbindlist(purrr::map(split(pts, by = 'tar_group'), extract_year, index = index, where = where, crs = 'EPSG:3154'))
+  out[order(row)]
+}

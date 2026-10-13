@@ -1,86 +1,117 @@
 # === Extracting layer values at steps --------------------------------------------
 # Replaces NMC_CEtool extract_by_year(), extract_pt() and calc_ts() (Julie W.
-# Turner, Alec L. Robitaille), and the chain of ~80 extraction targets: each
-# layer is extracted by its own target and the results are joined at the end.
+# Turner, Alec L. Robitaille). As in extractLand's extractLandscape(), steps are
+# extracted one year at a time: that year's raster of every layer is stacked
+# (one stack per grid) and read at the step points in one call, so each raster
+# is opened once per year and no layer needs its own copy of the steps.
 
-#' @title Extract one layer's values at the start and/or end of each step
-#' @description For a yearly layer, each step gets the raster for its `year`.
-#'   Steps after `last_year` use the last raster, and steps before `first_year`
-#'   use the first (in NMC_CEtool, `extract_by_year()` filled later years the
-#'   same way). If `time_since` is TRUE, also adds the years since the
-#'   disturbance year held in the raster; places with no disturbance, or a
-#'   disturbance after the step's year, get `ts_nodata`. No disturbance can be
-#'   NA or 0 in the raster (e.g. NA in harv1000 but 0 in harv250).
-#' @param DT data.table of steps with `x1_`, `y1_`, `x2_`, `y2_` and `year`.
-#' @param files character. Raster file(s) from [get_layer_files()], in year order.
-#' @param first_year,last_year integer. NA for a layer that does not change.
-#' @param name character. Layer name, used for the new columns.
-#' @param where character. "start", "end" or "both".
-#' @param time_since logical. Add years since disturbance?
-#' @param ts_nodata numeric. Years since, where there is no disturbance.
-#' @param crs character. Coordinate system of the steps.
-#' @return data.table with the new columns only, one row per row of `DT`.
+#' @title Layer table with each layer's files
+#' @description Adds the files found for each layer ([get_layer_files()]) to
+#'   the layer table, for [extract_year()].
+#' @param layers data.table from [read_layers()].
+#' @param files list of character vectors, one per row of `layers`, in order.
+#' @return data.table: `name`, `first_year`, `last_year`, `time_since`,
+#'   `ts_nodata` and list column `files`.
 #' @author Julie W. Turner
-extract_layer <- function(DT, files, first_year, last_year, name, where = 'both',
-                          time_since = FALSE, ts_nodata = NA, crs = NULL) {
+make_layer_index <- function(layers, files) {
+  if (length(files) != nrow(layers)) stop('Need one set of files per layer')
+  idx <- data.table::as.data.table(layers)[, .(name, first_year, last_year, time_since, ts_nodata)]
+  idx[, files := unname(files)]
+  idx[]
+}
+
+#' @title Step points, grouped by year
+#' @description Only what extraction needs, grouped so that each year is
+#'   extracted by its own branch.
+#' @param steps data.table from [prep_steps()].
+#' @return data.table: `row` (row number in `steps`), `year`, `x1_`, `y1_`,
+#'   `x2_`, `y2_` and `tar_group`, sorted by year.
+#' @author Julie W. Turner
+make_step_points <- function(steps) {
+  pts <- steps[, .(row = .I, year, x1_, y1_, x2_, y2_)]
+  data.table::setorder(pts, year, row)
+  pts[, tar_group := .GRP, by = year]
+  pts[]
+}
+
+#' @title Extract every layer at one year's steps
+#' @description Each layer's raster for the steps' year is used. Steps after
+#'   `last_year` use the last raster, and steps before `first_year` the first
+#'   (in NMC_CEtool, `extract_by_year()` filled later years the same way);
+#'   layers that do not change use their one raster. Rasters on the same grid
+#'   are stacked and read in one call. Each distinct point is read once: start
+#'   and end points are read together, and an observed step and its random
+#'   steps share a start. Points are reprojected once per grid whose coordinate
+#'   system differs from `crs`.
+#'
+#'   For a layer with `time_since`, also adds the years since the disturbance
+#'   year held in the raster; places with no disturbance, or a disturbance
+#'   after the step's year, get `ts_nodata`. No disturbance can be NA or 0 in
+#'   the raster (e.g. NA in harv1000 but 0 in harv250).
+#' @param pts data.table from [make_step_points()], for one year.
+#' @param index data.table from [make_layer_index()].
+#' @param where character. "start", "end" or "both".
+#' @param crs character. Coordinate system of the steps.
+#' @return data.table, one row per row of `pts`: `row`, then for each layer
+#'   `<name>_start` (with `ts_<name>_start`) and `<name>_end` (with `ts_<name>_end`).
+#' @author Julie W. Turner
+extract_year <- function(pts, index, where = 'both', crs = NULL) {
+  yr <- unique(pts$year)
+  if (length(yr) != 1) stop('extract_year() needs the steps of one year, not ', length(yr))
   ends <- switch(where, start = 'start', end = 'end', both = c('start', 'end'))
   coords <- list(start = c('x1_', 'y1_'), end = c('x2_', 'y2_'))
-  out <- list()
-  for (e in ends) {
-    vals <- extract_values(DT, coords[[e]], files, first_year, last_year, crs)
-    out[[paste(name, e, sep = '_')]] <- vals
-    if (isTRUE(time_since)) {
-      ts <- DT$year - vals
-      ts[is.na(ts) | ts < 0 | vals <= 0] <- ts_nodata
-      out[[paste('ts', name, e, sep = '_')]] <- ts
+  n <- nrow(pts)
+
+  # distinct points, start and end together
+  P <- data.table::rbindlist(purrr::map(ends, function(e) {
+    data.table::setnames(pts[, coords[[e]], with = FALSE], c('x', 'y'))
+  }))
+  U <- unique(P[!is.na(x) & !is.na(y)])
+  U[, u := .I]
+  pos <- U[P, on = c('x', 'y'), u]
+  xy <- as.matrix(U[, .(x, y)])
+
+  # each layer's raster for this year, stacked by grid
+  file_for <- function(files, first_year, last_year) {
+    if (is.na(first_year)) return(files[1])
+    files[min(max(yr, first_year), last_year) - first_year + 1]
+  }
+  files <- purrr::pmap_chr(list(index$files, index$first_year, index$last_year), file_for)
+  rasts <- purrr::map(files, function(f) terra::rast(f)[[1]])
+  grid <- purrr::map_chr(rasts, grid_key)
+  vals <- list()
+  for (g in unique(grid)) {
+    i <- which(grid == g)
+    s <- terra::rast(rasts[i])
+    p <- xy
+    if (!is.null(crs) && !terra::same.crs(s, crs)) {
+      p <- terra::crds(terra::project(terra::vect(xy, crs = crs), terra::crs(s)))
+    }
+    v <- terra::extract(s, p)
+    vals[index$name[i]] <- as.list(v)
+  }
+
+  out <- data.table::data.table(row = pts$row)
+  for (k in seq_len(nrow(index))) {
+    nm <- index$name[k]
+    for (j in seq_along(ends)) {
+      v <- vals[[nm]][pos[(j - 1) * n + seq_len(n)]]
+      data.table::set(out, j = paste(nm, ends[j], sep = '_'), value = v)
+      if (isTRUE(index$time_since[k])) {
+        ts <- yr - v
+        ts[is.na(ts) | ts < 0 | v <= 0] <- index$ts_nodata[k]
+        data.table::set(out, j = paste('ts', nm, ends[j], sep = '_'), value = ts)
+      }
     }
   }
-  data.table::as.data.table(out)
+  out[]
 }
 
-#' @title Raster values at one set of coordinates, matching each step's year
-#' @inheritParams extract_layer
-#' @param coords character. Names of the x and y columns.
-#' @return numeric vector, one value per row of `DT`.
+#' @title Text that is the same for rasters on the same grid
+#' @param r SpatRaster.
+#' @return character.
 #' @keywords internal
 #' @noRd
-extract_values <- function(DT, coords, files, first_year, last_year, crs = NULL) {
-  vals <- rep(NA_real_, nrow(DT))
-  xy <- as.matrix(DT[, coords, with = FALSE])
-  ok <- stats::complete.cases(xy)
-
-  at <- function(file, i) {
-    r <- terra::rast(file)
-    pts <- xy[i, , drop = FALSE]
-    if (!is.null(crs) && !terra::same.crs(r, crs)) {
-      pts <- terra::crds(terra::project(terra::vect(pts, crs = crs), terra::crs(r)))
-    }
-    terra::extract(r[[1]], pts)[[1]]
-  }
-
-  if (is.na(first_year)) {
-    vals[ok] <- at(files[1], which(ok))
-    return(vals)
-  }
-  yr <- pmin(pmax(DT$year, first_year), last_year)
-  for (y in sort(unique(yr[ok]))) {
-    i <- which(ok & yr == y)
-    vals[i] <- at(files[y - first_year + 1], i)
-  }
-  vals
-}
-
-#' @title Join the extracted layers to the steps
-#' @param steps data.table of steps.
-#' @param ... data.tables from [extract_layer()], one per layer.
-#' @return data.table: `steps` with every layer's columns added.
-#' @author Julie W. Turner
-combine_extracted <- function(steps, ...) {
-  parts <- list(...)
-  n <- purrr::map_int(parts, nrow)
-  if (any(n != nrow(steps))) stop('Extracted layers do not have one row per step')
-  new <- unlist(purrr::map(parts, names))
-  clash <- intersect(new, names(steps))
-  if (length(clash)) stop('Extracted columns already in the steps: ', paste(clash, collapse = ', '))
-  purrr::reduce(parts, cbind, .init = data.table::copy(steps))
+grid_key <- function(r) {
+  paste(c(as.vector(terra::ext(r)), terra::nrow(r), terra::ncol(r), terra::crs(r, proj = TRUE)), collapse = '|')
 }
