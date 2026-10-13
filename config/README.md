@@ -343,6 +343,16 @@ the crew package). Each worker uses memory and temporary disk space, so start
 with 2-4. `run: memfrac:` is the share of the computer's memory the workers
 share for raster work.
 
+## Checking web sources
+
+Layers built from web sources (SCANFI land cover, CanLaD harvest) ask the
+server on every run whether the files have changed. When the layers are
+already built and are not being remade, set `run: check_web_files: false`
+(usually in `local.yaml`) to skip that check, so a slow or unavailable server
+does not stop the run. These files have their version in their name, so a
+new release is still noticed when its web address is updated in the
+settings. Set it back to `true` when remaking the layers.
+
 ## Programmer settings: `<project>.R`
 
 The file must end with a function that takes the settings and returns them.
