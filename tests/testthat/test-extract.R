@@ -99,3 +99,48 @@ test_that('extract_year reads stacks on different grids and coordinate systems l
   expect_equal(out$other_start, terra::extract(a, terra::project(pts_start, 'EPSG:3005'))[[2]])
   expect_equal(out$val_start, rep(2019, 10))
 })
+
+test_that('each year is saved as a Parquet file that can be read by column', {
+  dir <- withr::local_tempdir()
+  toy_rasters(dir)
+  index <- make_layer_index(data.table(name = 'val', first_year = 2018L, last_year = 2020L,
+                                       time_since = FALSE, ts_nodata = NA_real_),
+                            list(file.path(dir, paste0('val_', 2018:2020, '.tif'))))
+  pts <- make_step_points(toy_steps())
+  f <- write_extracted_year(pts[year == 2019L], index, crs = crs, out_dir = file.path(dir, 'out'))
+  expect_equal(basename(f), 'extracted_2019.parquet')
+  back <- nanoparquet::read_parquet(f, col_select = c('row', 'val_end'))
+  expect_equal(names(back), c('row', 'val_end'))
+  expect_equal(back$val_end, extract_year(pts[year == 2019L], index, crs = crs)$val_end)
+})
+
+test_that('availability summarizes each layer for used and available steps, overall and by group', {
+  dir <- withr::local_tempdir()
+  toy_rasters(dir)
+  index <- make_layer_index(data.table(name = c('elev', 'fires'), first_year = c(NA, 2018L),
+                                       last_year = c(NA, 2020L), time_since = c(FALSE, TRUE),
+                                       ts_nodata = c(NA, 200)),
+                            list(file.path(dir, 'elev.tif'), file.path(dir, paste0('fires_', 2018:2020, '.tif'))))
+  # made-up steps in two years and two jurisdictions; one end outside the rasters
+  steps <- data.table(year = rep(c(2018L, 2019L), each = 4), case_ = rep(c(TRUE, FALSE, FALSE, FALSE), 2),
+                      juris = rep(c('yt', 'bc'), 4), study = 'A',
+                      x1_ = 50, y1_ = 950, x2_ = c(50, 150, 250, 2000, 50, 150, 250, 350), y2_ = 50)
+  files <- purrr::map_chr(split(make_step_points(steps), by = 'tar_group'), write_extracted_year,
+                          index = index, crs = crs, out_dir = dir)
+  groups <- make_step_groups(steps, c('juris', 'study'))
+  out <- summarize_availability(files, 'elev', groups, c('juris', 'study'))
+  expect_equal(unique(out$column), c('elev_start', 'elev_end'))
+  expect_named(out, c('layer', 'column', 'where', 'used', 'juris', 'study', 'n', 'min', 'mean', 'median',
+                      'max', 'share_above_0', 'share_missing'))
+  # overall available ends: 92, 93, NA (outside), 92, 93, 94 (cells along the bottom row)
+  avail <- out[column == 'elev_end' & used == FALSE & juris == 'all']
+  expect_equal(avail[, .(n, min, mean, median, max, share_above_0)],
+               data.table(n = 6L, min = 92, mean = 92.8, median = 93, max = 94, share_above_0 = 1))
+  expect_equal(avail$share_missing, 1 / 6)
+  # by jurisdiction, then by jurisdiction and study
+  expect_equal(out[column == 'elev_end' & juris == 'yt' & study == 'all', sort(n)], c(2L, 2L))
+  expect_equal(nrow(out[column == 'elev_end' & study == 'A']), 3)   # used yt, available yt, available bc
+  # time since fire is summarized too
+  expect_true(all(c('ts_fires_start', 'ts_fires_end') %in% summarize_availability(files, 'fires', groups, 'juris')$column))
+  expect_error(make_step_groups(steps, 'herd'), 'keep_after_cleaning')
+})

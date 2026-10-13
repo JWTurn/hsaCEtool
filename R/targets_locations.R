@@ -33,7 +33,8 @@ targets_config <- function(cfg) {
       access = cfg$landscape$access,
       cache = if (nzchar(cfg$paths$input_cache %||% '')) cfg$paths$input_cache else cfg$paths$inputs
     )),
-    tar_target(cfg_extract, cfg$extract)
+    tar_target(cfg_extract, cfg$extract[setdiff(names(cfg$extract), 'availability_by')]),
+    tar_target(cfg_availability_by, cfg$extract$availability_by)
   )
 }
 

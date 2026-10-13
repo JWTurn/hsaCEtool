@@ -107,6 +107,24 @@ extract_year <- function(pts, index, where = 'both', crs = NULL) {
   out[]
 }
 
+#' @title Extract one year and save it as a Parquet file
+#' @description Runs [extract_year()] and writes the table to
+#'   `extracted_<year>.parquet` in `out_dir`. Parquet stores data by column, so
+#'   later steps read only the columns they need (`nanoparquet::read_parquet(
+#'   col_select = )`). The files hold step row numbers with layer values, so
+#'   they are confidential like the steps (kept in `outputs/`).
+#' @inheritParams extract_year
+#' @param out_dir character. Folder to write to.
+#' @return character. The file written.
+#' @author Julie W. Turner
+write_extracted_year <- function(pts, index, where = 'both', crs = NULL, out_dir) {
+  out <- extract_year(pts, index, where = where, crs = crs)
+  reproducible::checkPath(out_dir, create = TRUE)
+  file <- file.path(out_dir, paste0('extracted_', unique(pts$year), '.parquet'))
+  nanoparquet::write_parquet(out, file)
+  file
+}
+
 #' @title Text that is the same for rasters on the same grid
 #' @param r SpatRaster.
 #' @return character.
