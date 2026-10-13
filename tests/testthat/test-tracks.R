@@ -29,3 +29,15 @@ test_that('filter_years and fit_step_distr', {
   expect_equal(nrow(filter_years(DT, 2012, 2019)), 0)
   expect_error(fit_step_distr(NULL, 'sl_', 'gamma'), 'No tracks are left')
 })
+
+test_that('make_random_steps skips an animal whose bursts all have fewer than 3 steps', {
+  set.seed(5)
+  t0 <- as.POSIXct('2020-03-01', tz = 'UTC')
+  # made-up track: fixes in pairs 2 days apart, so every burst has 1 step
+  DT <- data.table(id = 'a', t_ = t0 + rep(0:9 * 48, each = 2) * 3600 + rep(c(0, 3600), 10),
+                   x_ = 500000 + cumsum(runif(20, 50, 500)), y_ = 6700000 + cumsum(runif(20, 50, 500)))
+  trk <- amt::make_track(DT, x_, y_, t_, id = id, crs = 'EPSG:3154') |>
+    amt::track_resample(rate = lubridate::hours(1), tolerance = lubridate::minutes(10))
+  s <- amt::steps_by_burst(trk)
+  expect_null(make_random_steps(s, n_rand = 2))
+})

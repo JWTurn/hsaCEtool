@@ -38,7 +38,9 @@ resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 
 
 #' @title Make random steps
 #' @description Pairs each observed step with `n_rand` random (available) steps
-#'   drawn from the step-length and turning-angle distributions.
+#'   drawn from the step-length and turning-angle distributions. Bursts with
+#'   fewer than 3 steps are dropped first (as amt::random_steps() would), and an
+#'   animal with none left gets NULL rather than an error.
 #' @param DT `steps_xyt` for one animal, or NULL.
 #' @param n_rand integer. Random steps per observed step.
 #' @param sl.distr,ta.distr fitted distributions from `amt::fit_distr()`; if
@@ -47,6 +49,9 @@ resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 
 #' @author Julie W. Turner
 make_random_steps <- function(DT, n_rand = 10, sl.distr = NULL, ta.distr = NULL) {
   if (is.null(DT) || nrow(DT) == 0) return()
+  n <- table(DT$burst_)
+  DT <- DT[DT$burst_ %in% names(n)[n >= 3], ]
+  if (nrow(DT) == 0) return()
   if (is.null(sl.distr)) sl.distr <- amt::fit_distr(DT$sl_, 'gamma')
   if (is.null(ta.distr)) ta.distr <- amt::fit_distr(DT$ta_, 'vonmises')
   amt::random_steps(DT, n_control = n_rand, sl_distr = sl.distr, ta_distr = ta.distr)
