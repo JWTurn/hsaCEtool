@@ -255,9 +255,19 @@ raster, and steps before `first_year` use the first.
 
 Extraction runs one year at a time (target `extracted`, one branch per year):
 that year's raster of every layer is read at that year's step starts and ends,
-layers on the same grid together. Each year's table holds `row`, the step's
-row number in `steps`, and every layer's values. Changing any layer re-extracts
-every year.
+layers on the same grid together. Each year is saved as
+`outputs/<project>/extracted/extracted_<year>.parquet` (Parquet stores data by
+column, so later steps read only the columns they need). Each file holds `row`,
+the step's row number in `steps`, and every layer's values; like the steps, these
+files are confidential. Changing any layer re-extracts every year.
+
+To help choose and combine covariates, the target `availability` (also saved as
+`outputs/<project>/availability.csv`) summarizes every layer's start and end
+values for used and available steps: number of steps, min, mean, median, max,
+share above 0 and share missing. Each layer is summarized overall, then split by
+the columns in `extract: availability_by:` (by default jurisdiction, then study,
+then herd; "all" where not split). It holds summaries only, no positions or
+times.
 
 ## Layers the pipeline builds
 

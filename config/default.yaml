@@ -135,15 +135,15 @@ locations:
 
 # Movement tracks and random steps (integrated step selection analysis) -------
 tracks:
-  split_by: id            # column(s) that define one track; each is processed separately
+  split_by: id            # column(s) that define one track, e.g. id or [id, year]; each is processed separately
   rate_hours: 11          # resample every track to one fix per this many hours
   tolerance_minutes: 120  # allowed deviation from that rate
   min_burst_n: 3          # drop runs of regular fixes ("bursts") with fewer fixes than this
   min_steps: 20           # drop tracks with fewer steps than this after resampling
   max_step_quantile: 0.99 # drop steps longer than this quantile of each track's step lengths
   n_random: 30            # random (available) steps per observed step
-  sl_distr: gamma         # distribution fitted to step lengths
-  ta_distr: vonmises      # distribution fitted to turning angles
+  sl_distr: gamma         # distribution fitted to step lengths: gamma, exp, lnorm, hnorm or unif
+  ta_distr: vonmises      # distribution fitted to turning angles: vonmises or unif
   min_year: 2012          # keep steps from this year ...
   max_year: 2025          # ... to this year
   year_interval: 5        # round years down to this interval (column int.year)
@@ -159,7 +159,9 @@ subset:
 landscape:
   layers: ""              # table of layers (CSV), relative to the config folder; see config/README.md.
                           # Each layer either uses existing rasters (path or url) or is built
-                          # by the pipeline from source data (column `build`).
+                          # by the pipeline from source data (column `build`: harvest_year,
+                          # harvest_pa, harvest_dens, harvest_dist, landcover, landcover_cell,
+                          # disturb_dist, disturb_pa or disturb_dens).
 
   # Template rasters: the grids every built layer is written onto, in the
   # project's crs (so distances are in true metres). All resolutions nest exactly.
@@ -173,7 +175,7 @@ landscape:
   # How national rasters (e.g. CanLaD) are read: "stream" reads only the part
   # covering the study area straight from the web (nothing stored); "download"
   # saves each whole file once to paths: input_cache and reads it from there.
-  access: stream
+  access: stream          # stream or download
 
   # Distances (to harvest and human disturbance) also count features up to this
   # far beyond the template, so that a road just outside it is not missed
@@ -252,6 +254,8 @@ landscape:
   disturbance:
     lookups: {}           # tables the rules can use, e.g. a reclassification spreadsheet
     sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup}]}
+                          # Categories are your own names (e.g. paved, unpaved); category drop
+                          # leaves features out
                           # Downloads are kept in paths: input_cache and not repeated; add
                           # refresh: true to a source or lookup to download it again every run
 
@@ -270,4 +274,9 @@ run:
 
 # Extracting layer values at steps --------------------------------------------
 extract:
-  where: both             # extract at the step's "start", "end", or "both"
+  where: both             # extract at the step's start, end, or both
+  # Columns the availability summaries (target availability, file
+  # outputs/<project>/availability.csv) are split by, broad to fine: each layer
+  # is summarized overall, then by the first column, the first two, and so on.
+  # Any columns kept after cleaning (locations: keep_after_cleaning), or [] for overall only.
+  availability_by: [juris, study, herd]
