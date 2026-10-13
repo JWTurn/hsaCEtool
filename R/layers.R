@@ -9,7 +9,9 @@
 #'       `prop_water_1000` gives `prop_water_1000_start` and `prop_water_1000_end`}
 #'     \item{family, resolution}{for your reference (e.g. landcover, 1000)}
 #'     \item{first_year, last_year}{years with a raster; blank for a layer that
-#'       does not change (e.g. elevation)}
+#'       does not change (e.g. elevation). For a built yearly layer, blank
+#'       means the layer year range: `tracks: min_year` and `max_year`, or the
+#'       steps' first and last year (see [layer_year_range()])}
 #'     \item{path}{local file; for a yearly layer, `{year}` marks where the year goes}
 #'     \item{url, target_file, archive}{or a download (see `get_source()`); `{year}` allowed}
 #'     \item{time_since}{TRUE if the raster holds the year of a disturbance (fire,
@@ -18,10 +20,13 @@
 #'     \item{build}{instead of path or url: the builder that makes the layer
 #'       from source data, e.g. `harvest_year` (see config/README.md)}
 #'     \item{class}{for land-cover builds: the class, as named in the settings;
-#'       for disturbance builds: the category (e.g. paved)}
+#'       for disturbance builds: the category (e.g. paved); for harvest and
+#'       fire pa, dens and dist: the years counted as recent (blank = the
+#'       setting's recent_years)}
 #'   }
 #' @param file character. Path to the CSV.
-#' @return data.table, one row per layer.
+#' @return data.table, one row per layer, with an added column `yearly`
+#'   (TRUE for a layer that changes by year).
 #' @author Julie W. Turner
 read_layers <- function(file) {
   if (!file.exists(file)) stop('Layer table not found: ', file, call. = FALSE)
@@ -45,13 +50,23 @@ read_layers <- function(file) {
   add(duplicated(layers$name), 'names used more than once')
   add(make.names(layers$name) != layers$name, 'names must be letters, numbers, . and _ and not start with a number')
   add(is.na(layers$path) & is.na(layers$url) & is.na(layers$build), 'no path, url or build')
-  yearly <- !is.na(layers$first_year)
-  add(yearly & (is.na(layers$last_year) | layers$last_year < layers$first_year), 'last_year missing or before first_year')
+  static <- layers$build %in% c('elevation', 'northness')
+  given <- !is.na(layers$first_year) | !is.na(layers$last_year)
+  # built layers are yearly unless static; their blank years use the layer year range
+  yearly <- given | (!is.na(layers$build) & !static)
+  add(!is.na(layers$first_year) & !is.na(layers$last_year) & layers$last_year < layers$first_year,
+      'last_year before first_year')
+  add(is.na(layers$build) & given & (is.na(layers$first_year) | is.na(layers$last_year)),
+      'layers that are not built need both first_year and last_year, or neither')
   has_year <- grepl('{year}', paste(layers$path, layers$url, layers$target_file), fixed = TRUE)
   add(yearly & is.na(layers$build) & !has_year, 'yearly layer without {year} in its path, url or target_file')
-  add(!is.na(layers$build) & !yearly, 'built layers need first_year and last_year')
+  add(static & given, 'elevation and northness do not change by year: leave first_year and last_year blank')
+  windowed <- layers$build %in% c('harvest_pa', 'harvest_dens', 'harvest_dist', 'fire_pa', 'fire_dens', 'fire_dist')
+  bad_win <- windowed & !is.na(layers$class) & !grepl('^[1-9][0-9]*$', layers$class %||% '')
+  add(bad_win, 'class (years counted as recent) must be a whole number above 0')
   add(!yearly & has_year, '{year} in path but no first_year/last_year')
   add(layers$time_since & !yearly, 'time_since needs a yearly layer')
+  layers[, yearly := yearly]
 
   if (length(problems)) {
     stop('Problems in layer table ', file, ':\n  - ', paste(problems, collapse = '\n  - '), call. = FALSE)

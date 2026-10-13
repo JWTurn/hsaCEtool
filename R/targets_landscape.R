@@ -17,7 +17,13 @@ targets_landscape <- function(cfg) {
   if (is.null(cfg$layers) || nrow(cfg$layers) == 0) return(list())
   existing <- cfg$layers[is.na(build)]
   built <- cfg$layers[!is.na(build)]
-  out <- list()
+  # years for built layers with blank first_year or last_year: tracks: min_year
+  # and max_year, or (only if one is not set) the steps' years
+  out <- if (length(cfg$tracks$min_year) && length(cfg$tracks$max_year)) {
+    list(tar_target(layer_years, layer_year_range(cfg_tracks$min_year, cfg_tracks$max_year)))
+  } else {
+    list(tar_target(layer_years, layer_year_range(cfg_tracks$min_year, cfg_tracks$max_year, step_years)))
+  }
   if (nrow(existing)) {
     out <- c(out, list(tarchetypes::tar_map(
       values = existing[, .(name, path, url, target_file, archive, first_year, last_year)],
@@ -31,9 +37,16 @@ targets_landscape <- function(cfg) {
     # web sources (format url) are checked for changes on every run unless
     # run: check_web_files is false, e.g. while the layers are not being remade
     web_cue <- tar_cue(file = !isFALSE(cfg$run$check_web_files))
-    out <- c(out, targets_templates(), targets_harvest(built, web_cue),
+    # forest age reset by fire and harvest needs both histories
+    age <- built[build == 'forest_age']
+    reset <- nrow(age) > 0 && isTRUE(cfg$landscape$forest_age$reset_by_disturbance)
+    age_first <- if (reset) age$first_year
+    out <- c(out, targets_templates(), targets_harvest(built, web_cue, need_history = reset),
              targets_landcover(built, cfg$landscape$landcover$window_m, web_cue),
-             targets_disturbance(built, cfg$landscape$disturbance))
+             targets_disturbance(built, cfg$landscape$disturbance),
+             targets_terrain(built, cfg$landscape$terrain, web_cue),
+             targets_fire(built, cfg$landscape$fire, need_history = reset, age_first = age_first),
+             targets_forest_age(built, cfg$landscape$forest_age, web_cue))
   }
   out
 }
@@ -62,14 +75,18 @@ targets_templates <- function() {
 #'   1965-1984 maps, the combined harvest history, then for each harvest
 #'   metric (year, pa, dens, dist) one target per output year building every
 #'   resolution asked for, and one `layer_files_<name>` per layer-table row.
+#'   A `harvest_pa`, `harvest_dens` or `harvest_dist` row with a `class` uses
+#'   that many years as recent, instead of `landscape: harvest: recent_years`.
 #' @param built data.table. The layer-table rows with a `build`.
 #' @param web_cue tar_cue for the web sources (see `run: check_web_files`).
+#' @param need_history logical. Make the harvest history even without harvest
+#'   rows (forest age uses it).
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-targets_harvest <- function(built, web_cue = tar_cue()) {
+targets_harvest <- function(built, web_cue = tar_cue(), need_history = FALSE) {
   harv <- built[startsWith(build, 'harvest_')]
-  if (nrow(harv) == 0) return(list())
+  if (nrow(harv) == 0 && !need_history) return(list())
   out <- list(
     tar_target(canlad_years,
                seq(cfg_harvest$canlad_annual$first_year, cfg_harvest$canlad_annual$last_year)),
@@ -90,21 +107,36 @@ targets_harvest <- function(built, web_cue = tar_cue()) {
     tar_target(harvest_history,
                unique(data.table::rbindlist(c(list(harvest_old), harvest_annual))))
   )
-  for (b in unique(harv$build)) {
-    rows <- harv[build == b]
+  # rows with a window (class) of their own get their own targets and file names
+  harv[, key := fifelse(is.na(class) | build == 'harvest_year', build, paste0(build, '_w', class))]
+  for (k in unique(harv$key)) {
+    rows <- harv[key == k]
+    b <- rows$build[1]
     metric <- sub('^harvest_', '', b)
-    files_nm <- paste0(b, '_files')
-    years_nm <- paste0(b, '_years')
-    out <- c(out, list(
-      tar_target_raw(years_nm, substitute(seq(A, B), list(A = min(rows$first_year), B = max(rows$last_year)))),
-      tar_target_raw(files_nm, substitute(
+    files_nm <- paste0(k, '_files')
+    years_nm <- paste0(k, '_years')
+    if (k == b) {
+      cmd <- substitute(
         build_harvest_layers(harvest_history, METRIC, RES, YEARS, cfg_harvest$recent_years,
                              templates, file.path(landscape_dir, 'harvest'), margin = template_margin),
-        list(METRIC = metric, RES = sort(unique(rows$resolution)), YEARS = as.symbol(years_nm))),
+        list(METRIC = metric, RES = sort(unique(rows$resolution)), YEARS = as.symbol(years_nm)))
+      prefix <- b
+    } else {
+      win <- as.integer(rows$class[1])
+      cmd <- substitute(
+        build_harvest_layers(harvest_history, METRIC, RES, YEARS, WIN,
+                             templates, file.path(landscape_dir, 'harvest'), PREFIX, margin = template_margin),
+        list(METRIC = metric, RES = sort(unique(rows$resolution)), YEARS = as.symbol(years_nm),
+             WIN = win, PREFIX = paste0('harvest_w', win)))
+      prefix <- paste0('harvest_w', win, '_', metric)
+    }
+    out <- c(out, list(
+      tar_target_raw(years_nm, years_call(rows)),
+      tar_target_raw(files_nm, cmd,
         pattern = substitute(map(YEARS), list(YEARS = as.symbol(years_nm))),
         format = 'file')
     ))
-    out <- c(out, pick_targets(rows, files_nm, function(i) b))
+    out <- c(out, pick_targets(rows, files_nm, function(i) prefix))
   }
   out
 }
@@ -123,7 +155,7 @@ targets_landcover <- function(built, window_m, web_cue = tar_cue()) {
   lc <- built[build %in% c('landcover', 'landcover_cell')]
   if (nrow(lc) == 0) return(list())
   out <- list(
-    tar_target_raw('landcover_years', substitute(seq(A, B), list(A = min(lc$first_year), B = max(lc$last_year)))),
+    tar_target_raw('landcover_years', years_call(lc)),
     tar_target(landcover_source, cfg_landcover[[cfg_landcover$source]]),
     tar_target(landcover_file, fill_year(landcover_source$url, landcover_years),
                pattern = map(landcover_years), format = 'url', cue = web_cue),
@@ -203,8 +235,8 @@ targets_disturbance <- function(built, dcfg) {
       tar_target_raw(hist_nm, substitute(disturbance_cells(FEATURES, CL, template_margin),
                                          list(FEATURES = all_features, CL = cl))),
       tar_target_raw(years_nm, substitute(disturbance_years(H, FY, LY),
-                                          list(H = as.symbol(hist_nm), FY = min(cr$first_year),
-                                               LY = max(cr$last_year))))
+                                          list(H = as.symbol(hist_nm), FY = year_bound(cr$first_year, 1),
+                                               LY = year_bound(cr$last_year, 2))))
     ))
     for (b in unique(cr$build)) {
       metric <- sub('^disturb_', '', b)
@@ -224,6 +256,150 @@ targets_disturbance <- function(built, dcfg) {
   }
   out
 }
+#' @title Targets: terrain layers
+#' @description The elevation model (NRCan MRDEM-30, tracked by its web
+#'   address, or your own raster), then elevation and northness at every
+#'   resolution asked for, and one `layer_files_<name>` per layer-table row.
+#' @param built data.table. The layer-table rows with a `build`.
+#' @param tcfg named list. `landscape: terrain:`.
+#' @param web_cue tar_cue for the web sources (see `run: check_web_files`).
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+targets_terrain <- function(built, tcfg, web_cue = tar_cue()) {
+  rows <- built[build %in% c('elevation', 'northness')]
+  if (nrow(rows) == 0) return(list())
+  src <- if (identical(tcfg$source, 'mrdem')) {
+    tar_target(terrain_source, cfg_terrain$mrdem$url, format = 'url', cue = web_cue)
+  } else {
+    tar_target_raw('terrain_source', substitute(get_source(SRC, cfg_paths)[1], list(SRC = tcfg$source)),
+                   format = 'file')
+  }
+  out <- list(
+    src,
+    tar_target_raw('terrain_files', substitute(
+      build_terrain_layers(terrain_source, templates, template_margin, RES, cfg_terrain$northness,
+                           file.path(landscape_dir, 'terrain'), cfg_terrain$access, cfg_access$cache),
+      list(RES = sort(unique(rows$resolution)))),
+      format = 'file')
+  )
+  c(out, pick_targets(rows, 'terrain_files', function(i) paste0('terrain_', rows$build[i])))
+}
+
+#' @title Targets: fire history and the fire layers
+#' @description Downloads NBAC and (unless `pre1972: false`) the NFDB fires
+#'   before 1972, keeps the fires in the template's area, puts each year's fires
+#'   onto the 30 m grid (those up to the first year built together, later
+#'   years one target each, in parallel), then for each fire
+#'   metric and window of years one target per output year, and one
+#'   `layer_files_<name>` per layer-table row. The window of a `fire_pa`,
+#'   `fire_dens` or `fire_dist` row is its `class` (years), or `landscape:
+#'   fire: recent_years`.
+#' @param built data.table. The layer-table rows with a `build`.
+#' @param fcfg named list. `landscape: fire:`.
+#' @param need_history logical. Make the fire history even without fire rows
+#'   (forest age uses it).
+#' @param age_first integer or NULL. With forest age reset by disturbance: the
+#'   forest age rows' first years (NA = the layer year range's first).
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+targets_fire <- function(built, fcfg, need_history = FALSE, age_first = NULL) {
+  rows <- built[startsWith(build, 'fire_')]
+  if (nrow(rows) == 0 && !need_history) return(list())
+  rows[, window := fifelse(build == 'fire_year', NA_integer_,
+                           as.integer(fifelse(is.na(class), as.character(fcfg$recent_years), class)))]
+  # every layer needs only each cell's most recent fire up to its year, so fires
+  # up to the first year built go onto the grid together, later years one by one
+  first <- year_bound(c(rows$first_year, age_first), 1)
+  nfdb <- !isFALSE(fcfg$pre1972)
+  out <- list(
+    tar_target_raw('fire_nbac_download', substitute(
+      download_disturbance(URL, FILE, file.path(cfg_access$cache, 'fire', 'nbac')),
+      list(URL = fcfg$nbac$url, FILE = fcfg$nbac$target_file)), format = 'file'),
+    if (nfdb) tar_target_raw('fire_nfdb_download', substitute(
+      download_disturbance(URL, FILE, file.path(cfg_access$cache, 'fire', 'nfdb')),
+      list(URL = fcfg$nfdb$url, FILE = fcfg$nfdb$target_file)), format = 'file'),
+    tar_target_raw('fire_polygons', substitute(
+      prep_fire_polygons(fire_nbac_download, NFDB, template_margin, cfg_project$crs,
+                         file.path(landscape_dir, 'fire', 'fires.gpkg')),
+      list(NFDB = if (nfdb) quote(fire_nfdb_download) else NULL)), format = 'file'),
+    tar_target_raw('fire_groups', substitute(fire_year_groups(fire_polygons, FIRST + 1L), list(FIRST = first)),
+                   iteration = 'list'),
+    tar_target(fire_history_parts, fire_cells(fire_polygons, fire_groups, template_margin),
+               pattern = map(fire_groups), iteration = 'list'),
+    tar_target(fire_history, unique(data.table::rbindlist(fire_history_parts)))
+  )
+  out <- Filter(Negate(is.null), out)
+  if (nrow(rows) == 0) return(out)
+  rows[, key := fifelse(is.na(window), build, paste0(build, '_w', window))]
+  for (k in unique(rows$key)) {
+    kr <- rows[key == k]
+    metric <- sub('^fire_', '', kr$build[1])
+    win <- kr$window[1]
+    prefix <- if (is.na(win)) 'fire' else paste0('fire_w', win)
+    files_nm <- paste0(k, '_files')
+    years_nm <- paste0(k, '_years')
+    out <- c(out, list(
+      tar_target_raw(years_nm, years_call(kr)),
+      tar_target_raw(files_nm, substitute(
+        build_harvest_layers(fire_history, METRIC, RES, YEARS, WIN, templates,
+                             file.path(landscape_dir, 'fire'), PREFIX, margin = template_margin),
+        list(METRIC = metric, RES = sort(unique(kr$resolution)), YEARS = as.symbol(years_nm),
+             WIN = if (is.na(win)) Inf else win, PREFIX = prefix)),
+        pattern = substitute(map(YEARS), list(YEARS = as.symbol(years_nm))),
+        format = 'file')
+    ))
+    out <- c(out, pick_targets(kr, files_nm, function(i) paste0(prefix, '_', metric)))
+  }
+  out
+}
+
+#' @title Targets: yearly forest age
+#' @description The forest age maps needed (`landscape: forest_age: source`,
+#'   SCANFI every 5 years or NTEMS 2019), each tracked by its web address and
+#'   put onto the finest template, then one target per year building every
+#'   resolution asked for, and one `layer_files_<name>` per layer-table row.
+#'   With `reset_by_disturbance`, uses the fire and harvest histories.
+#' @param built data.table. The layer-table rows with a `build`.
+#' @param acfg named list. `landscape: forest_age:`.
+#' @param web_cue tar_cue for the web sources (see `run: check_web_files`).
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+targets_forest_age <- function(built, acfg, web_cue = tar_cue()) {
+  rows <- built[build == 'forest_age']
+  if (nrow(rows) == 0) return(list())
+  resets <- if (isTRUE(acfg$reset_by_disturbance)) {
+    quote(unique(data.table::rbindlist(list(harvest_history, fire_history))))
+  } else {
+    quote(NULL)
+  }
+  out <- list(
+    tar_target_raw('forest_age_map_years', substitute(
+      age_maps_used(unlist(cfg_forest_age[[cfg_forest_age$source]]$years), FY, LY),
+      list(FY = year_bound(rows$first_year, 1), LY = year_bound(rows$last_year, 2)))),
+    tar_target(forest_age_map_file, fill_year(cfg_forest_age[[cfg_forest_age$source]]$url, forest_age_map_years),
+               pattern = map(forest_age_map_years), format = 'url', cue = web_cue),
+    tar_target(forest_age_maps,
+               prep_forest_age_map(forest_age_map_file, templates,
+                                   file.path(landscape_dir, 'forest_age', cfg_forest_age$source,
+                                             paste0('map_', forest_age_map_years, '.tif')),
+                                   cfg_forest_age[[cfg_forest_age$source]]$archive_file,
+                                   isTRUE(cfg_forest_age[[cfg_forest_age$source]]$zero_is_na),
+                                   cfg_access$access, cfg_access$cache),
+               pattern = map(forest_age_map_file, forest_age_map_years), format = 'file'),
+    tar_target_raw('forest_age_resets', resets),
+    tar_target_raw('forest_age_years', years_call(rows)),
+    tar_target_raw('forest_age_files', substitute(
+      build_forest_age_year(forest_age_maps, forest_age_map_years, forest_age_years, forest_age_resets,
+                            RES, templates, file.path(landscape_dir, 'forest_age', cfg_forest_age$source),
+                            margin = template_margin),
+      list(RES = sort(unique(rows$resolution)))),
+      pattern = quote(map(forest_age_years)), format = 'file')
+  )
+  c(out, pick_targets(rows, 'forest_age_files', function(i) 'forest_age'))
+}
 #' @title One layer_files_<name> target per row, picking its files from a builder
 #' @param rows data.table. Layer-table rows.
 #' @param files_nm character. Name of the builder's files target.
@@ -234,10 +410,37 @@ targets_disturbance <- function(built, dcfg) {
 #' @noRd
 pick_targets <- function(rows, files_nm, prefix, fill = FALSE) {
   purrr::map(seq_len(nrow(rows)), function(i) {
+    yearly <- isTRUE(rows$yearly[i])
     tar_target_raw(paste0('layer_files_', rows$name[i]), substitute(
       pick_layer_files(FILES, PREFIX, RES, FY, LY, FILL),
       list(FILES = as.symbol(files_nm), PREFIX = prefix(i), RES = rows$resolution[i],
-           FY = rows$first_year[i], LY = rows$last_year[i], FILL = fill)),
+           FY = if (yearly) year_bound(rows$first_year[i], 1) else NA,
+           LY = if (yearly) year_bound(rows$last_year[i], 2) else NA, FILL = fill)),
       format = 'file')
   })
+}
+
+#' @title First or last year of some layer-table rows, for a target's command
+#' @description The earliest `first_year` (or latest `last_year`) as a number
+#'   when all rows give one; otherwise a call that fills blanks from the
+#'   `layer_years` target.
+#' @param x integer. The rows' first_year (or last_year).
+#' @param which 1 for first (earliest), 2 for last (latest).
+#' @return integer, or a call.
+#' @keywords internal
+#' @noRd
+year_bound <- function(x, which) {
+  x <- as.integer(x)
+  if (length(x) && !anyNA(x)) return(if (which == 1) min(x) else max(x))
+  substitute(FUN(fill_years(X, layer_years[I])),
+             list(FUN = as.name(if (which == 1) 'min' else 'max'), X = x, I = which))
+}
+
+#' @title The years some layer-table rows are built for, for a target's command
+#' @param rows data.table. Layer-table rows.
+#' @return call: `seq(first, last)`.
+#' @keywords internal
+#' @noRd
+years_call <- function(rows) {
+  substitute(seq(A, B), list(A = year_bound(rows$first_year, 1), B = year_bound(rows$last_year, 2)))
 }

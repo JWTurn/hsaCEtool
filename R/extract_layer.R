@@ -10,12 +10,19 @@
 #'   the layer table, for [extract_year()].
 #' @param layers data.table from [read_layers()].
 #' @param files list of character vectors, one per row of `layers`, in order.
+#' @param years integer or NULL. First and last year (target `layer_years`)
+#'   for yearly layers (column `yearly`) with blank years.
 #' @return data.table: `name`, `first_year`, `last_year`, `time_since`,
 #'   `ts_nodata` and list column `files`.
 #' @author Julie W. Turner
-make_layer_index <- function(layers, files) {
+make_layer_index <- function(layers, files, years = NULL) {
+  layers <- data.table::as.data.table(layers)
   if (length(files) != nrow(layers)) stop('Need one set of files per layer')
-  idx <- data.table::as.data.table(layers)[, .(name, first_year, last_year, time_since, ts_nodata)]
+  if (!is.null(years) && 'yearly' %in% names(layers)) {
+    layers[yearly & is.na(first_year), first_year := as.integer(years[1])]
+    layers[yearly & is.na(last_year), last_year := as.integer(years[2])]
+  }
+  idx <- layers[, .(name, first_year, last_year, time_since, ts_nodata)]
   idx[, files := unname(files)]
   idx[]
 }

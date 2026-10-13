@@ -138,12 +138,19 @@ harvest_distance <- function(cells, fine, grid = fine) {
 #' @param files character. Files from a builder, e.g. [build_harvest_layers()].
 #' @param prefix character. File name start, e.g. "harvest_year".
 #' @param res numeric. Cell size (m).
-#' @param first_year,last_year integer. Years wanted.
+#' @param first_year,last_year integer. Years wanted; NA for a layer that does
+#'   not change (e.g. elevation), whose file has no year: `<prefix>_<res>m.tif`.
 #' @param fill logical. For a year without its own file, use the latest
 #'   earlier one (layers built only in years they change, e.g. disturbance).
 #' @return character. One file per year, in year order.
 #' @author Julie W. Turner
 pick_layer_files <- function(files, prefix, res, first_year, last_year, fill = FALSE) {
+  if (is.na(first_year)) {
+    want <- sprintf('%s_%sm.tif', prefix, res)
+    found <- files[match(want, basename(files))]
+    if (is.na(found)) stop('Not built: ', want, call. = FALSE)
+    return(found)
+  }
   if (isTRUE(fill)) {
     pat <- sprintf('^%s_%sm_([0-9]{4})[.]tif$', prefix, res)
     mine <- files[grepl(pat, basename(files))]

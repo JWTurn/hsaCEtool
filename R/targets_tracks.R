@@ -41,6 +41,7 @@ targets_tracks <- function(cfg) {
     tar_target(distparams, calc_distribution_parameters(randsteps), pattern = map(randsteps)),
 
     tar_target(steps, prep_steps(randsteps, cfg_tracks)),
+    tar_target(step_years, sort(unique(steps$year))),
 
     tar_target(step_buffer, calc_step_buffer(steps, cfg_tracks$buffer_round_m))
   )

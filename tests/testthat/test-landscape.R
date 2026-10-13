@@ -140,14 +140,12 @@ test_that('pick_layer_files picks one file per year and reports missing years', 
   expect_error(pick_layer_files(files, 'harvest_pa', 240, 2013, 2016), '2015')
 })
 
-test_that('read_layers accepts built layers', {
+test_that('read_layers accepts built layers, with or without years', {
   dir <- withr::local_tempdir()
   writeLines(c('name,resolution,first_year,last_year,path,time_since,ts_nodata,build',
                'harv240,240,2012,2024,,TRUE,100,harvest_year',
-               'bad,240,,,,FALSE,,harvest_pa'), file.path(dir, 'l.csv'))
-  err <- tryCatch(read_layers(file.path(dir, 'l.csv')), error = conditionMessage)
-  expect_match(err, 'built layers need first_year and last_year: bad')
-  writeLines(readLines(file.path(dir, 'l.csv'))[1:2], file.path(dir, 'l.csv'))
+               'pa240,240,,,,FALSE,,harvest_pa'), file.path(dir, 'l.csv'))
   l <- read_layers(file.path(dir, 'l.csv'))
-  expect_equal(l$build, 'harvest_year')
+  expect_equal(l$build, c('harvest_year', 'harvest_pa'))
+  expect_equal(l$yearly, c(TRUE, TRUE))   # blank years: the layer year range
 })

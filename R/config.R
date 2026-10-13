@@ -137,7 +137,7 @@ check_config <- function(cfg) {
   if (!cfg$locations$crop_method %in% c('bbox', 'within')) {
     add('locations: crop_method must be "bbox" or "within"')
   }
-  if (cfg$tracks$min_year > cfg$tracks$max_year) {
+  if (length(cfg$tracks$min_year) && length(cfg$tracks$max_year) && cfg$tracks$min_year > cfg$tracks$max_year) {
     add('tracks: min_year is after max_year')
   }
   if (!cfg$landscape$access %in% c('stream', 'download')) {
@@ -145,7 +145,8 @@ check_config <- function(cfg) {
   }
   if (!is.null(cfg$layers)) {
     builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist', 'landcover', 'landcover_cell',
-                'disturb_dist', 'disturb_pa', 'disturb_dens')
+                'disturb_dist', 'disturb_pa', 'disturb_dens', 'elevation', 'northness',
+                'fire_year', 'fire_pa', 'fire_dens', 'fire_dist', 'forest_age')
     built <- cfg$layers[!is.na(build)]
     bad <- built[!build %in% builds]$name
     if (length(bad)) {
@@ -170,7 +171,9 @@ check_config <- function(cfg) {
           add('layer table: class not in landscape: landcover: ', lcs$source, ': classes: ',
               paste(bad, collapse = ', '))
         }
-        bad <- lc[first_year < src$first_year | last_year > src$last_year]$name
+        fy <- fill_years(lc$first_year, cfg$tracks$min_year %||% NA)
+        ly <- fill_years(lc$last_year, cfg$tracks$max_year %||% NA)
+        bad <- lc$name[(!is.na(fy) & fy < src$first_year) | (!is.na(ly) & ly > src$last_year)]
         if (length(bad)) {
           add('layer table: ', lcs$source, ' land cover covers ', src$first_year, '-', src$last_year,
               ' only: ', paste(bad, collapse = ', '))
@@ -179,6 +182,38 @@ check_config <- function(cfg) {
       bad <- setdiff(names(lcs$window_m), as.character(res_ok))
       if (length(bad)) {
         add('landscape: landcover: window_m has resolutions without a template: ', paste(bad, collapse = ', '))
+      }
+    }
+    if (any(built$build %in% c('elevation', 'northness'))) {
+      tc <- cfg$landscape$terrain
+      if (!identical(tc$source, 'mrdem') && !is.list(tc$source)) {
+        add('landscape: terrain: source must be mrdem or a source (path or url)')
+      }
+      if (!tc$northness %in% c('fine', 'coarse')) add('landscape: terrain: northness must be "fine" or "coarse"')
+      if (!tc$access %in% c('stream', 'download')) add('landscape: terrain: access must be "stream" or "download"')
+    }
+    fr <- built[startsWith(build, 'fire_')]
+    if (nrow(fr)) {
+      fc <- cfg$landscape$fire
+      if (!nzchar(fc$nbac$url %||% '')) add('landscape: fire: nbac needs a url')
+      ly <- fill_years(fr$last_year, cfg$tracks$max_year %||% NA)
+      bad <- fr$name[!is.na(ly) & ly > fc$last_year]
+      if (length(bad)) add('layer table: fire layers go to ', fc$last_year, ' only (landscape: fire: last_year): ',
+                           paste(bad, collapse = ', '))
+      bad <- fr[build == 'fire_year' & !is.na(class)]$name
+      if (length(bad)) add('layer table: fire_year layers take no class: ', paste(bad, collapse = ', '))
+    }
+    ar <- built[build == 'forest_age']
+    if (nrow(ar)) {
+      ac <- cfg$landscape$forest_age
+      src <- ac[[ac$source %||% '']]
+      if (is.null(src)) {
+        add('landscape: forest_age: source "', ac$source, '" has no settings (scanfi or ntems)')
+      } else if (length(src$years) == 0 || !nzchar(src$url %||% '')) {
+        add('landscape: forest_age: ', ac$source, ' needs a url and years')
+      }
+      if (isTRUE(ac$reset_by_disturbance) && !nzchar(cfg$landscape$fire$nbac$url %||% '')) {
+        add('landscape: forest_age: reset_by_disturbance needs landscape: fire: nbac')
       }
     }
     dr <- built[startsWith(build, 'disturb_')]

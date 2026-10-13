@@ -29,6 +29,9 @@ targets_config <- function(cfg) {
     tar_target(cfg_margin, cfg$landscape$distance_margin_m %||% 0),
     tar_target(cfg_harvest, cfg$landscape$harvest),
     tar_target(cfg_landcover, cfg$landscape$landcover),
+    tar_target(cfg_terrain, cfg$landscape$terrain),
+    tar_target(cfg_fire, cfg$landscape$fire),
+    tar_target(cfg_forest_age, cfg$landscape$forest_age),
     tar_target(cfg_access, list(
       access = cfg$landscape$access,
       cache = if (nzchar(cfg$paths$input_cache %||% '')) cfg$paths$input_cache else cfg$paths$inputs

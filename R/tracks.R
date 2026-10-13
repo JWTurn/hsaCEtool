@@ -71,8 +71,8 @@ calc_distribution_parameters <- function(steps) {
 #' @title Finish the step table
 #' @description Converts random steps to a data.table, adds `year` (of the
 #'   step's end) and `int.year` (year rounded down to `year_interval`), keeps
-#'   `min_year` to `max_year`, and adds `indiv_step_id`, a step ID that is
-#'   unique across animals.
+#'   `min_year` to `max_year` (null = no limit), and adds `indiv_step_id`, a
+#'   step ID that is unique across animals.
 #' @param randsteps `random_steps` for all animals.
 #' @param trk_cfg named list. The `tracks:` settings.
 #' @return data.table.
@@ -81,7 +81,7 @@ prep_steps <- function(randsteps, trk_cfg) {
   DT <- data.table::as.data.table(randsteps)
   DT[, `:=`(year = as.integer(format(t2_, '%Y', tz = 'UTC')))]
   DT[, int.year := year %/% trk_cfg$year_interval * trk_cfg$year_interval]
-  DT <- DT[year >= trk_cfg$min_year & year <= trk_cfg$max_year]
+  DT <- DT[year >= (trk_cfg$min_year %||% -Inf) & year <= (trk_cfg$max_year %||% Inf)]
   DT[, indiv_step_id := paste(id, step_id_, sep = '_')]
   DT[]
 }
@@ -102,12 +102,34 @@ calc_step_buffer <- function(steps, round_m = 50) {
 #' @description Done before making tracks so that years outside the analysis
 #'   are not resampled only to be dropped later. Uses the year of each fix.
 #' @param DT data.table of standard locations.
-#' @param min_year,max_year integer.
+#' @param min_year,max_year integer, or NULL for no limit.
 #' @return data.table.
 #' @author Julie W. Turner
 filter_years <- function(DT, min_year, max_year) {
   yr <- as.integer(format(DT$t_, '%Y', tz = 'UTC'))
-  DT[yr >= min_year & yr <= max_year]
+  DT[yr >= (min_year %||% -Inf) & yr <= (max_year %||% Inf)]
+}
+
+#' @title First and last year of the landscape layers
+#' @description `tracks: min_year` and `max_year` if set, otherwise the first
+#'   and last year of the steps. Built layers whose `first_year` or
+#'   `last_year` is blank in the layer table use these.
+#' @param min_year,max_year integer, or NULL.
+#' @param step_years integer. Years of the steps, or NULL when both are set.
+#' @return integer: first and last year.
+#' @author Julie W. Turner
+layer_year_range <- function(min_year, max_year, step_years = NULL) {
+  as.integer(c(min_year %||% min(step_years), max_year %||% max(step_years)))
+}
+
+#' @title Fill blank years with the layer year range
+#' @param x integer. Years from the layer table (NA where blank).
+#' @param default integer. The year to use where blank.
+#' @return integer.
+#' @keywords internal
+#' @noRd
+fill_years <- function(x, default) {
+  as.integer(ifelse(is.na(x), default, x))
 }
 
 #' @title Fit a step-length or turning-angle distribution to all steps
