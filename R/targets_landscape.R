@@ -28,8 +28,11 @@ targets_landscape <- function(cfg) {
     )))
   }
   if (nrow(built)) {
-    out <- c(out, targets_templates(), targets_harvest(built),
-             targets_landcover(built, cfg$landscape$landcover$window_m),
+    # web sources (format url) are checked for changes on every run unless
+    # run: check_web_files is false, e.g. while the layers are not being remade
+    web_cue <- tar_cue(file = !isFALSE(cfg$run$check_web_files))
+    out <- c(out, targets_templates(), targets_harvest(built, web_cue),
+             targets_landcover(built, cfg$landscape$landcover$window_m, web_cue),
              targets_disturbance(built, cfg$landscape$disturbance))
   }
   out
@@ -60,17 +63,18 @@ targets_templates <- function() {
 #'   metric (year, pa, dens, dist) one target per output year building every
 #'   resolution asked for, and one `layer_files_<name>` per layer-table row.
 #' @param built data.table. The layer-table rows with a `build`.
+#' @param web_cue tar_cue for the web sources (see `run: check_web_files`).
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-targets_harvest <- function(built) {
+targets_harvest <- function(built, web_cue = tar_cue()) {
   harv <- built[startsWith(build, 'harvest_')]
   if (nrow(harv) == 0) return(list())
   out <- list(
     tar_target(canlad_years,
                seq(cfg_harvest$canlad_annual$first_year, cfg_harvest$canlad_annual$last_year)),
     tar_target(canlad_annual_file, fill_year(cfg_harvest$canlad_annual$url, canlad_years),
-               pattern = map(canlad_years), format = 'url'),
+               pattern = map(canlad_years), format = 'url', cue = web_cue),
     tar_target(harvest_annual,
                canlad_annual_harvest(canlad_annual_file, canlad_years, template_margin,
                                      cfg_harvest$canlad_annual$code,
@@ -78,7 +82,7 @@ targets_harvest <- function(built) {
                pattern = map(canlad_annual_file, canlad_years), iteration = 'list'),
     tar_target(canlad_old_files,
                c(cfg_harvest$canlad_old$type_url, cfg_harvest$canlad_old$year_url),
-               format = 'url'),
+               format = 'url', cue = web_cue),
     tar_target(harvest_old,
                canlad_old_harvest(canlad_old_files[1], canlad_old_files[2], template_margin,
                                   cfg_harvest$canlad_old$code,
@@ -111,17 +115,18 @@ targets_harvest <- function(built) {
 #'   `layer_files_<name>` per layer-table row.
 #' @param built data.table. The layer-table rows with a `build`.
 #' @param window_m named list. `landscape: landcover: window_m`.
+#' @param web_cue tar_cue for the web sources (see `run: check_web_files`).
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-targets_landcover <- function(built, window_m) {
+targets_landcover <- function(built, window_m, web_cue = tar_cue()) {
   lc <- built[build %in% c('landcover', 'landcover_cell')]
   if (nrow(lc) == 0) return(list())
   out <- list(
     tar_target_raw('landcover_years', substitute(seq(A, B), list(A = min(lc$first_year), B = max(lc$last_year)))),
     tar_target(landcover_source, cfg_landcover[[cfg_landcover$source]]),
     tar_target(landcover_file, fill_year(landcover_source$url, landcover_years),
-               pattern = map(landcover_years), format = 'url'),
+               pattern = map(landcover_years), format = 'url', cue = web_cue),
     tar_target_raw('landcover_files', substitute(
       build_landcover_year(landcover_file, landcover_years, landcover_source$classes, RES,
                            cfg_landcover$window_m, templates,
