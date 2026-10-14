@@ -80,6 +80,11 @@ locations:
     #   end_clusters    flag (not drop) a stationary end of track, incl. a collar moved to an office: column end_cluster_;
     #                   also adds cluster_status, mortality_status and mortality_basis (see target mortality_rules)
     #   drop_end_clusters  drop the stationary end of track flagged by end_clusters, except its first fix (list after end_clusters)
+    #   captures        give each fix to the animal wearing the collar then, from a capture log (locations: captures);
+    #                   drops fixes from before a collar was put on, fills sex; logged in target animal_decisions
+    #   mortality_records  recorded deaths (locations: mortality_records): status dead, drops fixes after death
+    #   long_gaps       split a track at silences of more than max_gap_days into separate animals (id_2, ...),
+    #                   dropping pieces of min_fixes fixes or fewer
     #   speed           drop steps faster than a speed limit (simple, quick version)
     #   min_points      drop animals with too few fixes
     params:
@@ -94,6 +99,16 @@ locations:
       end_clusters: {zeta: 200, theta_hours: 48, max_moves: 2, transit_fixes: 5}  # max_moves: times a collar may have been moved; transit_fixes: fixes while moved
       speed: {max_m_per_hr: 12000}
       min_points: {n: 3}
+      mortality_records: {after_days: 1}          # drop fixes more than this many days after a recorded death
+      long_gaps: {max_gap_days: 365, min_fixes: 3}
+
+  # Records kept outside the location data, used by the cleaning steps captures
+  # and mortality_records. Each is a source (path or url, target_file, archive)
+  # plus the location source it belongs to and its column names.
+  captures: null          # a capture log: {source, url or path, target_file, archive, collar_column,
+                          #   date_order (dmy or mdy, for dates with slashes; default dmy),
+                          #   columns: {id, capture_id, date, collar, sex, recapture, herd}}
+  mortality_records: []   # list of {source, url or path, target_file, archive, date_order, columns: {id, date, cause}}
 
   # Study area: the area landscape layers are prepared for.
   study_area:

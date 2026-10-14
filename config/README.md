@@ -202,6 +202,41 @@ The comparison behind these rules (counts only) is in
 `inputs/bc_compare/BC_telemetry_comparison.md`, kept with the downloads rather
 than in git.
 
+### Records kept outside the location data
+
+Three cleaning steps correct animals from records kept apart from the
+locations, and say what they did in the target `animal_decisions` (one row per
+animal and action, with the number of fixes and the reason; IDs only, no dates
+or positions). It is written to `outputs/<project>/decisions/animal_decisions.csv`,
+restricted storage that is not in git, to report back to the data owners.
+
+- `captures` uses a capture log (`locations: captures:`; for NMC the B.C. WLRS
+  log, matched on collar serial) of which animal each collar was put on, and
+  when. It acts only where the log is clear: fixes filed under an animal the
+  log shows wearing the collar first, after the collar was put on another
+  animal, are moved to that animal (e.g. a collar redeployed after a death but
+  still filed under the dead animal). Fixes from before an animal's logged
+  capture, and fixes the log gives to another animal, are kept and logged to
+  check. It also fills missing `sex` from the log (B.C. `FALSE` is read as
+  female, as Excel turns F into FALSE) and adds `deployment_start`, so
+  `capture_effect` drops the first days after each capture. Dates written with
+  slashes are read in `date_order` (`dmy` or `mdy`).
+- `mortality_records` uses recorded deaths (`locations: mortality_records:`;
+  for NMC the B.C. mortality table, matched on WLH ID): the animal's
+  `mortality_status` becomes `dead` (the first rule in `mortality_rules`) and
+  fixes more than `after_days` (default 1) after the death are dropped.
+  Records for animals not in the data are skipped with a warning.
+- `long_gaps` splits a track at a silence of more than `max_gap_days`
+  (default 365) into separate animals (`id`, `id_2`, ...), as it usually joins
+  two deployments, and drops pieces of `min_fixes` (default 3) fixes or fewer
+  as stray fixes.
+
+The target `animal_lookup` (also in `outputs/<project>/decisions/`) links each
+animal across recaptures, new IDs, collars and study periods: captures from
+the capture log with the fixes under our IDs, animals with more than one
+collar but no logged recapture, and Movebank animals with more than one
+deployment.
+
 ### After cleaning: columns kept, sex, study and herd
 
 `locations_clean` keeps every column. The target `locations` (the fixes used
