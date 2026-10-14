@@ -31,7 +31,7 @@ build_terrain_layers <- function(sourceFile, templates, margin, resolutions, nor
                                  access = 'stream', cache = 'inputs') {
   northness <- match.arg(northness, c('fine', 'coarse'))
   reproducible::checkPath(out_dir, create = TRUE)
-  dem_file <- warp_resample(raster_source(sourceFile, access, cache), margin, method = 'bilinear')
+  dem_file <- warp_dem(raster_source(sourceFile, access, cache), margin)
   on.exit(unlink(dem_file), add = TRUE)
   dem <- terra::rast(dem_file)
   fine <- terra::rast(templates[1])
@@ -115,6 +115,65 @@ mean_to_template <- function(r, templates, res) {
   tr <- terra::rast(template_file(templates, res))
   a <- terra::aggregate(r, round(res / terra::res(r)[1]), fun = 'mean', na.rm = TRUE)
   terra::mask(a, tr)
+}
+
+#' @title Put an elevation model onto a template grid
+#' @description Like [warp_resample()] with bilinear resampling, for a large
+#'   elevation model read from the web (e.g. MRDEM): the template's area is cut
+#'   from the model in its own projection in `tiles` x `tiles` pieces, each
+#'   retried up to `attempts` times if a web read fails (one dropped request
+#'   would otherwise fail the whole step), then joined and put onto the grid.
+#'   Every file is written as BigTIFF: elevation is stored as decimals, which
+#'   compress poorly, so the area can pass the 4 GB limit of a plain TIFF.
+#' @param src character. Raster to read (see [raster_source()]).
+#' @param template character. Template raster file.
+#' @param dst character. File to write.
+#' @param tiles integer. Pieces along each side.
+#' @param attempts integer. Tries per piece.
+#' @return `dst`.
+#' @keywords internal
+#' @noRd
+warp_dem <- function(src, template, dst = tempfile(fileext = '.tif'), tiles = 4, attempts = 5) {
+  tr <- terra::rast(template)
+  e <- as.vector(terra::ext(tr))
+  big <- c('-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES', '-co', 'BIGTIFF=YES')
+  if (grepl('/vsicurl/', src, fixed = TRUE)) {
+    s_r <- terra::rast(src)
+    area <- terra::project(terra::as.polygons(terra::ext(tr), crs = terra::crs(tr)), terra::crs(s_r))
+    b <- as.vector(terra::ext(terra::buffer(area, 1000)))
+    # tile edges on the model's own cell edges, so neighbouring tiles meet without gaps
+    snap <- function(v, origin, res) origin + round((v - origin) / res) * res
+    xs <- snap(seq(b[1], b[2], length.out = tiles + 1), terra::xmin(s_r), terra::res(s_r)[1])
+    ys <- snap(seq(b[3], b[4], length.out = tiles + 1), terra::ymin(s_r), terra::res(s_r)[2])
+    pieces <- character()
+    on.exit(unlink(pieces), add = TRUE)
+    for (i in seq_len(tiles)) for (j in seq_len(tiles)) {
+      out <- tempfile(fileext = '.tif')
+      for (k in seq_len(attempts)) {
+        ok <- tryCatch({
+          sf::gdal_utils('translate', src, out,
+                         options = c('-projwin', xs[i], ys[j + 1], xs[i + 1], ys[j], big),
+                         config_options = c(GDAL_HTTP_MERGE_CONSECUTIVE_RANGES = 'YES', GDAL_HTTP_MULTIPLEX = 'YES',
+                                            GDAL_NUM_THREADS = 'ALL_CPUS', CPL_VSIL_CURL_CHUNK_SIZE = '4194304',
+                                            GDAL_DISABLE_READDIR_ON_OPEN = 'EMPTY_DIR'))
+          TRUE
+        }, error = function(err) FALSE)
+        if (ok) break
+        unlink(out)
+        if (k == attempts) stop('Could not read part of ', src, ' after ', attempts, ' tries', call. = FALSE)
+        Sys.sleep(30 * k)
+      }
+      pieces <- c(pieces, out)
+    }
+    vrt <- tempfile(fileext = '.vrt')
+    on.exit(unlink(vrt), add = TRUE)
+    sf::gdal_utils('buildvrt', pieces, vrt)
+    src <- vrt
+  }
+  sf::gdal_utils('warp', src, dst, options = c(
+    '-t_srs', terra::crs(tr), '-te', e[1], e[3], e[2], e[4], '-tr', terra::res(tr),
+    '-r', 'bilinear', '-ot', 'Float32', big, '-overwrite', '-multi', '-wo', 'NUM_THREADS=ALL_CPUS'))
+  dst
 }
 
 #' @title Put a raster onto a template grid with a chosen resampling method
