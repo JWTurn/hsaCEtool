@@ -71,8 +71,10 @@ calc_distribution_parameters <- function(steps) {
 #' @title Finish the step table
 #' @description Converts random steps to a data.table, adds `year` (of the
 #'   step's end) and `int.year` (year rounded down to `year_interval`), keeps
-#'   `min_year` to `max_year` (null = no limit), and adds `indiv_step_id`, a
-#'   step ID that is unique across animals.
+#'   `min_year` to `max_year` (null = no limit), drops tracks with fewer than
+#'   `min_steps` used steps left (after resampling, short bursts, long steps
+#'   and years outside the range have been removed), and adds
+#'   `indiv_step_id`, a step ID that is unique across animals.
 #' @param randsteps `random_steps` for all animals.
 #' @param trk_cfg named list. The `tracks:` settings.
 #' @return data.table.
@@ -82,6 +84,11 @@ prep_steps <- function(randsteps, trk_cfg) {
   DT[, `:=`(year = as.integer(format(t2_, '%Y', tz = 'UTC')))]
   DT[, int.year := year %/% trk_cfg$year_interval * trk_cfg$year_interval]
   DT <- DT[year >= (trk_cfg$min_year %||% -Inf) & year <= (trk_cfg$max_year %||% Inf)]
+  # min_steps again, on the steps that are left
+  if (length(trk_cfg$min_steps)) {
+    n <- DT[case_ == TRUE, .N, by = id]
+    DT <- DT[id %in% n[N >= trk_cfg$min_steps]$id]
+  }
   DT[, indiv_step_id := paste(id, step_id_, sep = '_')]
   DT[]
 }

@@ -41,3 +41,12 @@ test_that('make_random_steps skips an animal whose bursts all have fewer than 3 
   s <- amt::steps_by_burst(trk)
   expect_null(make_random_steps(s, n_rand = 2))
 })
+
+test_that('prep_steps drops tracks with fewer than min_steps used steps left', {
+  t0 <- as.POSIXct('2020-03-01', tz = 'UTC')
+  rs <- data.table(id = rep(c('a', 'b'), c(25 * 3, 10 * 3)), case_ = rep(c(TRUE, FALSE, FALSE), 35),
+                   step_id_ = rep(c(1:25, 1:10), each = 3), t2_ = t0, sl_ = 1)
+  out <- prep_steps(rs, list(year_interval = 5, min_steps = 20))
+  expect_equal(unique(out$id), 'a')
+  expect_equal(nrow(out[case_ == TRUE]), 25)
+})
