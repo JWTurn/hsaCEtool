@@ -116,16 +116,60 @@ targets_locations <- function(cfg) {
     src_names <- c(src_names, nm)
   }
 
+  # records kept outside the location data: a capture log and recorded deaths
+  rec_targets <- list()
+  cap <- cfg$locations$captures
+  if (!is.null(cap) && is.null(premade)) {
+    rec_targets <- c(rec_targets, list(
+      tar_target_raw('captures_file', substitute(get_source(SRC, cfg_paths), list(SRC = utils::modifyList(list(subfolder = 'records'), cap))),
+                     format = 'file'),
+      tar_target_raw('capture_log', substitute(read_capture_log(captures_file, COLS, SOURCE, ORDER),
+                                               list(COLS = cap$columns, SOURCE = cap$source, ORDER = cap$date_order %||% 'dmy')))
+    ))
+  }
+  morts <- cfg$locations$mortality_records
+  mort_names <- character()
+  for (i in seq_along(if (is.null(premade)) morts)) {
+    mr <- morts[[i]]
+    nm <- paste0('mortality_records_', i)
+    rec_targets <- c(rec_targets, list(
+      tar_target_raw(paste0(nm, '_file'), substitute(get_source(SRC, cfg_paths), list(SRC = utils::modifyList(list(subfolder = 'records'), mr))),
+                     format = 'file'),
+      tar_target_raw(nm, substitute(read_mortality_records(FILE, COLS, SOURCE, ORDER),
+                                    list(FILE = as.symbol(paste0(nm, '_file')), COLS = mr$columns, SOURCE = mr$source,
+                                         ORDER = mr$date_order %||% 'dmy')))
+    ))
+    mort_names <- c(mort_names, nm)
+  }
+  # the cleaning settings, with the record tables for the steps that use them
+  clean_cfg <- substitute(add_record_tables(cfg_cleaning, CAP, MORT, CAPSRC, CAPCOL),
+                          list(CAP = if (!is.null(cap)) quote(capture_log) else NULL,
+                               MORT = if (length(mort_names)) as.call(c(quote(list), purrr::map(mort_names, as.symbol))) else NULL,
+                               CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id'))
+
   clean_targets <- if (is.null(premade)) {
     combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs),
                           list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
-    list(
+    c(rec_targets, list(
       tar_target_raw('locations_raw', combine),
-      tar_target(locations_clean,
-                 clean_locations(locations_raw, cfg_cleaning, cfg_project$crs)),
+      tar_target_raw('locations_clean',
+                     substitute(clean_locations(locations_raw, CFG, cfg_project$crs), list(CFG = clean_cfg))),
+      # what the corrections did to each animal (capture log, recorded deaths, long
+      # silences), and a lookup of animals, IDs and collars, for reporting to the
+      # data owners; written to outputs/ (restricted storage, not git)
+      tar_target(animal_decisions, attr(locations_clean, 'decisions')),
+      tar_target(animal_decisions_file,
+                 write_decisions(animal_decisions, file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_decisions.csv')),
+                 format = 'file'),
+      tar_target_raw('animal_lookup', substitute(make_animal_lookup(CAP, locations_clean, CAPCOL),
+                                                 list(CAP = if (!is.null(cap)) quote(capture_log) else NULL,
+                                                      CAPCOL = cap$collar_column %||% 'collar_id'))),
+      tar_target(animal_lookup_file,
+                 write_decisions(animal_lookup, file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_lookup.csv')),
+                 format = 'file'),
       tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
       tar_target(flag_summary, summarize_flags(locations_clean, locations_raw))
-    )
+    ))
   } else {
     # premade cleaned locations, downloaded apart from any older file of the same name
     premade <- utils::modifyList(list(subfolder = 'premade'), premade)

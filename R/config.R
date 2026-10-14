@@ -133,6 +133,13 @@ check_config <- function(cfg) {
       add('locations: cleaning: unknown step "', step, '"')
     }
   }
+  steps <- unlist(cfg$locations$cleaning$steps)
+  if ('captures' %in% steps && is.null(cfg$locations$captures)) {
+    add('locations: cleaning step captures needs locations: captures (a capture log)')
+  }
+  if ('mortality_records' %in% steps && length(cfg$locations$mortality_records) == 0) {
+    add('locations: cleaning step mortality_records needs locations: mortality_records')
+  }
 
   if (!cfg$locations$crop_method %in% c('bbox', 'within')) {
     add('locations: crop_method must be "bbox" or "within"')

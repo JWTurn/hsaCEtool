@@ -33,6 +33,7 @@ clean_locations <- function(DT, cleaning, crs) {
   data.table::setorder(DT, id, t_)
   removed <- list()
   log <- list()
+  decisions <- list()
   record <- function(step, before, after) {
     gone <- setdiff(before, after)
     removed[[length(removed) + 1]] <<- data.table::data.table(row = gone, step = rep(step, length(gone)))
@@ -47,13 +48,20 @@ clean_locations <- function(DT, cleaning, crs) {
                     duplicates = clean_duplicates, fast_steps = clean_fast_steps,
                     roundtrips = clean_roundtrips, clusters = clean_clusters,
                     end_clusters = clean_end_clusters, drop_end_clusters = clean_drop_end_clusters,
-                    speed = clean_speed, min_points = clean_min_points)
+                    speed = clean_speed, min_points = clean_min_points,
+                    captures = clean_captures, mortality_records = clean_mortality_records,
+                    long_gaps = clean_long_gaps)
   run_steps <- function(DT, steps, suffix = '') {
     for (step in unlist(steps)) {
       fun <- cleaning$custom[[step]] %||% available[[step]] %||%
         stop('Unknown cleaning step: ', step, '. Add it to clean_locations() or as a custom step.')
       before <- DT$.row
-      DT <- data.table::as.data.table(fun(DT, cleaning$params[[step]], crs))
+      out <- fun(DT, cleaning$params[[step]], crs)
+      # steps that correct animals (captures, mortality_records, long_gaps) say what they did
+      d <- attr(out, 'decisions')
+      if (!is.null(d) && nrow(d)) decisions[[length(decisions) + 1]] <<- data.table::data.table(step = step, d)
+      DT <- data.table::as.data.table(out)
+      data.table::setattr(DT, 'decisions', NULL)
       if (!'.row' %in% names(DT)) stop('[clean ', step, '] the step dropped column .row; keep all columns')
       record(paste0(step, suffix), before, DT$.row)
     }
@@ -92,6 +100,7 @@ clean_locations <- function(DT, cleaning, crs) {
   DT[, .row := NULL]
   data.table::setattr(DT, 'cleaning_log', data.table::rbindlist(log))
   data.table::setattr(DT, 'removed', removed)
+  data.table::setattr(DT, 'decisions', data.table::rbindlist(decisions, fill = TRUE))
   DT
 }
 
@@ -415,13 +424,15 @@ clean_deployment <- function(DT, params, crs) {
 #' @title Cleaning step: drop the days just after capture
 #' @description Animals may move unusually just after being collared. Drops
 #'   fixes in the first `days` of each animal's data (as
-#'   `amt::remove_capture_effect()`).
+#'   `amt::remove_capture_effect()`), and of each later deployment where the
+#'   `captures` step has given one (column `deployment_start`).
 #' @inheritParams clean_bounds
 #' @param params named list: `days`.
 #' @return data.table.
 #' @author Julie W. Turner
 clean_capture_effect <- function(DT, params, crs) {
-  DT[DT[, .I[t_ >= min(t_) + params$days * 86400], by = id]$V1]
+  by <- c('id', intersect('deployment_start', names(DT)))
+  DT[DT[, .I[t_ >= min(t_) + params$days * 86400], by = by]$V1]
 }
 
 #' @title Cleaning step: drop low-quality fixes
@@ -577,8 +588,9 @@ clean_clusters <- function(DT, params, crs) {
 #'     in the track; it does not affect `mortality_status`), and NA otherwise.
 #'   * `mortality_status` and `mortality_basis`, one value per animal: the
 #'     animal's fate at the end of its track, from the first rule in
-#'     [mortality_status_rules()] that applies. Recorded outcomes (Movebank's
-#'     `deployment_end_type`, the data's mortality flags) come first; the
+#'     [mortality_status_rules()] that applies. Recorded outcomes (a death in
+#'     a mortality table, from the step `mortality_records`; Movebank's
+#'     `deployment_end_type`; the data's mortality flags) come first; the
 #'     rest (`unknown`, `alive`) are inferred from the stationary end of track
 #'     and are our best guess, not an observed fate.
 #' @inheritParams clean_bounds
@@ -596,44 +608,48 @@ clean_end_clusters <- function(DT, params, crs) {
                                            mort, 'flag-only',
                                            default = NA_character_)]
   DT[, .end_type := if ('deployment_end_type' %in% names(DT)) as.character(deployment_end_type) else NA_character_]
+  DT[, .recorded := if ('mortality_date' %in% names(DT)) !is.na(mortality_date) else FALSE]
   # one rule per animal; the end type of its last fix (its last deployment)
-  DT[, .rule := data.table::fcase(.end_type[.N] %in% 'dead', 1L,
-                                  any(cluster_status %in% 'mortality-cluster'), 2L,
-                                  !is.na(.end_type[.N]), 3L,
-                                  any(end_cluster_), 4L,
-                                  default = 5L), by = id]
+  DT[, .rule := data.table::fcase(any(.recorded), 1L,
+                                  .end_type[.N] %in% 'dead', 2L,
+                                  any(cluster_status %in% 'mortality-cluster'), 3L,
+                                  !is.na(.end_type[.N]), 4L,
+                                  any(end_cluster_), 5L,
+                                  default = 6L), by = id]
   rules <- mortality_status_rules()
-  DT[, `:=`(mortality_status = data.table::fifelse(.rule == 3L, .end_type[.N], rules$mortality_status[.rule]),
+  DT[, `:=`(mortality_status = data.table::fifelse(.rule == 4L, .end_type[.N], rules$mortality_status[.rule]),
             mortality_basis = rules$mortality_basis[.rule]), by = id]
-  DT[, c('.end_type', '.rule') := NULL]
+  DT[, c('.end_type', '.recorded', '.rule') := NULL]
   DT
 }
 
 #' @title How `mortality_status` is decided
 #' @description The rules [clean_end_clusters()] uses to give each animal a
 #'   `mortality_status`, in order of priority: the first that applies wins.
-#'   Rules 1 to 3 use outcomes recorded in the data; rules 4 and 5 are
+#'   Rules 1 to 4 use outcomes recorded in the data; rules 5 and 6 are
 #'   inferred from cluster analysis (whether the track ends in a stationary
 #'   stretch, column `end_cluster_`) and are our best guess about the end of
 #'   the track. Mortality flags in the middle of a track (`cluster_status`
 #'   `flag-only`) are not used.
 #' @return data.table with one row per rule: `rule`, `mortality_status`
-#'   (rule 3 uses the recorded `deployment_end_type` itself, e.g.
+#'   (rule 4 uses the recorded `deployment_end_type` itself, e.g.
 #'   `equipment-failure`, `removal`, `captured` or `unknown`), `evidence`,
 #'   `kind` (`recorded` or `inferred`) and `mortality_basis` (the text put in
 #'   that column).
 #' @author Julie W. Turner
 mortality_status_rules <- function() {
   data.table::data.table(
-    rule = 1:5,
-    mortality_status = c('dead', 'dead', '<deployment_end_type>', 'unknown', 'alive'),
-    evidence = c('Movebank deployment_end_type is dead',
+    rule = 1:6,
+    mortality_status = c('dead', 'dead', 'dead', '<deployment_end_type>', 'unknown', 'alive'),
+    evidence = c('a recorded death in a mortality table (step mortality_records)',
+                 'Movebank deployment_end_type is dead',
                  'a mortality flag in the data within the stationary end of the track',
                  'Movebank deployment_end_type, as recorded',
                  'the track ends in a stationary stretch (end_cluster_), with no recorded outcome',
                  'the track does not end in a stationary stretch, with no recorded outcome'),
-    kind = c('recorded', 'recorded', 'recorded', 'inferred', 'inferred'),
-    mortality_basis = c('recorded: deployment_end_type dead',
+    kind = c('recorded', 'recorded', 'recorded', 'recorded', 'inferred', 'inferred'),
+    mortality_basis = c('recorded: mortality record',
+                        'recorded: deployment_end_type dead',
                         'recorded: mortality flag at stationary end of track',
                         'recorded: deployment_end_type',
                         'inferred: stationary end of track (cluster analysis, best guess)',

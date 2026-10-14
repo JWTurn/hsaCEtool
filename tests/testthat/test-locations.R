@@ -236,7 +236,7 @@ test_that('mortality_status puts recorded outcomes first, and drop_end_clusters 
   params <- list(zeta = 200, theta_hours = 48, max_moves = 2, transit_fixes = 5)
   status <- unique(clean_end_clusters(copy(DT), params, crs)[, .(id, mortality_status, mortality_basis)])
   expect_equal(status$mortality_status, c('dead', 'equipment-failure', 'unknown', 'alive', 'dead'))
-  expect_equal(status$mortality_basis, mortality_status_rules()$mortality_basis[c(1, 3, 3, 5, 2)])
+  expect_equal(status$mortality_basis, mortality_status_rules()$mortality_basis[c(2, 4, 4, 6, 3)])
 
   cl <- clean_locations(DT, list(steps = c('end_clusters', 'drop_end_clusters'),
                                  params = list(end_clusters = params)), crs)
