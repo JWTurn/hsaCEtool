@@ -154,7 +154,8 @@ tracks:
   rate_hours: 11          # resample every track to one fix per this many hours
   tolerance_minutes: 120  # allowed deviation from that rate
   min_burst_n: 3          # drop runs of regular fixes ("bursts") with fewer fixes than this
-  min_steps: 20           # drop tracks with fewer steps than this after resampling
+  min_steps: 20           # drop tracks with fewer used steps than this, after resampling and again
+                          # once all step filters (bursts, long steps, years) are done
   max_step_quantile: 0.99 # drop steps longer than this quantile of each track's step lengths
   n_random: 30            # random (available) steps per observed step
   sl_distr: gamma         # distribution fitted to step lengths: gamma, exp, lnorm, hnorm or unif
