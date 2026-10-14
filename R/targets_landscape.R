@@ -315,10 +315,10 @@ targets_fire <- function(built, fcfg, need_history = FALSE, age_first = NULL) {
   nfdb <- !isFALSE(fcfg$pre1972)
   out <- list(
     tar_target_raw('fire_nbac_download', substitute(
-      download_disturbance(URL, FILE, file.path(cfg_access$cache, 'fire', 'nbac')),
+      download_fire(URL, FILE, file.path(cfg_access$cache, 'fire', 'nbac')),
       list(URL = fcfg$nbac$url, FILE = fcfg$nbac$target_file)), format = 'file'),
     if (nfdb) tar_target_raw('fire_nfdb_download', substitute(
-      download_disturbance(URL, FILE, file.path(cfg_access$cache, 'fire', 'nfdb')),
+      download_fire(URL, FILE, file.path(cfg_access$cache, 'fire', 'nfdb')),
       list(URL = fcfg$nfdb$url, FILE = fcfg$nfdb$target_file)), format = 'file'),
     tar_target_raw('fire_polygons', substitute(
       prep_fire_polygons(fire_nbac_download, NFDB, template_margin, cfg_project$crs,

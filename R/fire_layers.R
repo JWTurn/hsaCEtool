@@ -8,6 +8,31 @@
 # cell's most recent fire up to its year: burned in the past n years means that
 # fire is within n years.
 
+#' @title Download and unzip a fire database
+#' @description The fire databases are large zip files (NBAC is 1.3 GB) on a
+#'   server that sometimes drops long downloads, so the zip is fetched in
+#'   pieces that resume when they stall (see [raster_source()]), then unzipped.
+#'   Nothing is downloaded when the files are already there.
+#' @param url character. Web address of the zip.
+#' @param files character. The shapefile(s) wanted from the zip.
+#' @param dir character. Folder to keep the download in (e.g. in `paths: input_cache`).
+#' @return character. Paths of `files` and their sidecar files (.shx, .dbf, .prj, .cpg).
+#' @author Julie W. Turner
+download_fire <- function(url, files, dir) {
+  reproducible::checkPath(dir, create = TRUE)
+  paths <- file.path(dir, files)
+  if (!all(file.exists(paths))) {
+    zip <- file.path(dir, basename(url))
+    if (!file.exists(zip)) download_parallel(url, zip, connections = 4)
+    utils::unzip(zip, exdir = dir)
+    missing <- !file.exists(paths)
+    if (any(missing)) stop('Not in ', basename(url), ': ', paste(files[missing], collapse = ', '), call. = FALSE)
+  }
+  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths),
+                                             function(b) paste0(b, c('.shx', '.dbf', '.prj', '.cpg')))))
+  c(paths, sidecars[file.exists(sidecars)])
+}
+
 #' @title Fire polygons with their year, in the project's coordinate system
 #' @description Reads the fires overlapping `template` from NBAC and,
 #'   optionally, the NFDB fires before `pre_year`. As in NMC_CEtool, an NFDB
@@ -16,7 +41,7 @@
 #'   "1965-..."); fires still without a year are left out. Written to one
 #'   GeoPackage (layer `fire`, column `year`), so later steps only rerun when
 #'   the fires change.
-#' @param nbac character. NBAC shapefile (from [download_disturbance()]; the
+#' @param nbac character. NBAC shapefile (from [download_fire()]; the
 #'   first `.shp` is used).
 #' @param nfdb character. NFDB shapefile, or NULL to leave out older fires.
 #' @param template character. Raster whose extent sets the area kept (the
