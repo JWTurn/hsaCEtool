@@ -41,7 +41,8 @@ targets_landscape <- function(cfg) {
     age <- built[build == 'forest_age']
     reset <- nrow(age) > 0 && isTRUE(cfg$landscape$forest_age$reset_by_disturbance)
     age_first <- if (reset) age$first_year
-    out <- c(out, targets_templates(), targets_harvest(built, web_cue, need_history = reset),
+    out <- c(out, targets_templates(isTRUE(cfg$locations$study_area$extended$freeze)),
+             targets_harvest(built, web_cue, need_history = reset),
              targets_landcover(built, cfg$landscape$landcover$window_m, web_cue),
              targets_disturbance(built, cfg$landscape$disturbance),
              targets_terrain(built, cfg$landscape$terrain, web_cue),
@@ -53,20 +54,23 @@ targets_landscape <- function(cfg) {
 #' @title Targets: template rasters
 #' @description The nested templates, and the finest one with a margin
 #'   (`landscape: distance_margin_m`) that distances are measured over.
+#' @param freeze logical. Never rerun the templates once built (`locations: study_area: extended: freeze`).
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-targets_templates <- function() {
+targets_templates <- function(freeze = FALSE) {
+  # frozen with the extended study area (locations: study_area: extended: freeze)
+  cue <- if (isTRUE(freeze)) tar_cue(mode = 'never') else tar_cue()
   list(
     tar_target(landscape_dir, file.path(cfg_paths$outputs, cfg_project$name, 'landscape')),
     tar_target(templates,
                make_templates(study_area_extended, cfg_template, cfg_project$crs, cfg_paths,
                               file.path(landscape_dir, 'templates')),
-               format = 'file'),
+               format = 'file', cue = cue),
     tar_target(template_margin,
                make_margin_template(templates[1], cfg_margin,
                                     file.path(landscape_dir, 'templates', 'template_margin.tif')),
-               format = 'file')
+               format = 'file', cue = cue)
   )
 }
 #' @title Targets: harvest history from CanLaD and the harvest layers

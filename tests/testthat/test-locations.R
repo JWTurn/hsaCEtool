@@ -321,3 +321,13 @@ test_that('finish_locations codes sex, adds study and herd, and keeps only the l
   expect_equal(to_camel(c('Moose Lake (previously Tay River)', 'BC', 'PrairieCreek', NA)),
                c('MooseLakePreviouslyTayRiver', 'BC', 'PrairieCreek', NA))
 })
+
+test_that('check_extended_area warns about fixes near the edge and says how to rebuild', {
+  area <- terra::vect('POLYGON ((0 0, 100000 0, 100000 100000, 0 100000, 0 0))', crs = 'EPSG:3154')
+  DT <- data.table(source = 'a', id = c('x', 'y', 'z'), x_ = c(50000, 5000, 200000), y_ = 50000)
+  expect_warning(out <- check_extended_area(DT, area, 20000, 'NMC', 'EPSG:3154'),
+                 'in config/NMC.yaml, under locations: study_area: extended:, set freeze: false')
+  expect_equal(out$fixes_near_edge, 2L)   # one near the edge, one outside
+  expect_no_warning(ok <- check_extended_area(DT[1], area, 20000, 'NMC', 'EPSG:3154'))
+  expect_equal(nrow(ok), 0)
+})

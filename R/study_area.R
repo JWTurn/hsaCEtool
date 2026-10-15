@@ -83,3 +83,42 @@ subset_locations <- function(DT, subset) {
   }
   DT
 }
+
+#' @title Check that the cleaned fixes are well inside the extended study area
+#' @description The landscape layers are built over the extended study area.
+#'   When it is fixed (`freeze: true`, or read from a `source:`), new or changed locations can
+#'   come close to its edge, where the layers would not reach far enough
+#'   around them. Warns if any cleaned fixes lie within `buffer_m` of the
+#'   edge, or outside it, and says how to rebuild the area from the data. An
+#'   area built from the data passes by design (it is the fixes' hull plus
+#'   `buffer_m`).
+#' @param locations data.table of cleaned locations (`x_`, `y_`, `id`, `source`).
+#' @param area SpatVector. The extended study area.
+#' @param buffer_m numeric. Distance from the edge that fixes should stay
+#'   beyond (`locations: study_area: extended: buffer_m`).
+#' @param project character. Project name, for the message.
+#' @param crs character. Coordinate system of `x_` and `y_`.
+#' @return data.table: by source, fixes and animals within `buffer_m` of the
+#'   edge or outside it (counts only).
+#' @author Julie W. Turner
+check_extended_area <- function(locations, area, buffer_m, project, crs) {
+  DT <- data.table::as.data.table(locations)[, .(source, id, x_, y_)]
+  inner <- terra::buffer(terra::aggregate(area), -buffer_m)
+  pts <- terra::vect(as.matrix(DT[, .(x_, y_)]), crs = crs)
+  near <- if (nrow(inner) == 0 || terra::expanse(inner) == 0) {
+    rep(TRUE, nrow(DT))
+  } else {
+    !terra::is.related(pts, inner, 'intersects')
+  }
+  out <- DT[near, .(fixes_near_edge = .N, animals = data.table::uniqueN(id)), keyby = source]
+  if (nrow(out)) {
+    warning(sprintf(paste0(
+      '%s cleaned fixes from %s animals are within %s m of the edge of the extended study area, or outside it, ',
+      'so the landscape layers may not reach far enough around them. To rebuild the extended study area (and ',
+      'all layers) from the data: in config/%s.yaml, under locations: study_area: extended:, set freeze: false ',
+      'and comment out the source line if there is one, then rerun. See target study_area_check for counts by source.'),
+      sum(out$fixes_near_edge), data.table::uniqueN(DT$id[near]), format(buffer_m, scientific = FALSE), project),
+      call. = FALSE)
+  }
+  out[]
+}

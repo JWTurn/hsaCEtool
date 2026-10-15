@@ -197,18 +197,21 @@ targets_locations <- function(cfg) {
     )
   }
   ext_src <- cfg$locations$study_area$extended$source
+  # freeze: true keeps the extended study area as built, so changes to the
+  # locations do not move it (and the templates and every layer built on it)
+  ext_cue <- if (isTRUE(cfg$locations$study_area$extended$freeze)) tar_cue(mode = 'never') else tar_cue()
   ext_targets <- if (is.null(ext_src)) {
     list(
       tar_terra_vect(study_area_extended,
-                     make_study_area_extended(study_area, cfg_study_area$extended))
+                     make_study_area_extended(study_area, cfg_study_area$extended), cue = ext_cue)
     )
   } else {
     list(
       tar_target_raw('study_area_extended_file', substitute(get_source(SRC, cfg_paths), list(SRC = ext_src)),
-                     format = 'file'),
+                     format = 'file', cue = ext_cue),
       tar_terra_vect(study_area_extended,
                      make_study_area_extended(study_area, cfg_study_area$extended,
-                                              file = study_area_extended_file))
+                                              file = study_area_extended_file), cue = ext_cue)
     )
   }
 
@@ -226,7 +229,11 @@ targets_locations <- function(cfg) {
                  crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method) |>
                    finish_locations(cfg_finish)),
       # animals by source, jurisdiction, study and herd, to check the names (counts only)
-      tar_target(herd_check, locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)])
+      tar_target(herd_check, locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)]),
+      # warns if cleaned fixes come within the buffer width of the extended study area's edge
+      tar_target(study_area_check,
+                 check_extended_area(locations_clean, study_area_extended, cfg_study_area$extended$buffer_m,
+                                     cfg_project$name, cfg_project$crs))
     )
   )
 }
