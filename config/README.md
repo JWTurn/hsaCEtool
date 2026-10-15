@@ -66,6 +66,21 @@ Set to `null` (or blank in the layer table, with a `build`), each is remade.
 `NMC.yaml` has commented lines to start from the NMC files saved on the
 restricted shared drive.
 
+To share or update these files, set `locations: premade_folder:` to a
+restricted Google Drive folder, then in R:
+
+```r
+targets::tar_source("R")
+write_premade("NMC")    # zips the current cleaned locations (.rds) and study areas (.gpkg)
+upload_premade("NMC")   # puts them in premade_folder, replacing files of the same name
+```
+
+Replacing keeps each file's link, so the `premade:` and `source:` links in the
+settings stay valid. Study areas are saved as GeoPackages, which keep the
+geometry exactly (a shapefile can differ slightly, which would rebuild every
+layer). `upload_premade()` stops if the folder is shared with anyone with the
+link, as the files hold caribou locations.
+
 Movebank passwords are never written in the settings. Save yours once with
 `move2::movebank_store_credentials("<user>")`, which keeps it in your computer's
 keyring.

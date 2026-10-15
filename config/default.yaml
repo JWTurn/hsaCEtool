@@ -46,6 +46,11 @@ locations:
   # Premade: cleaned locations saved from the locations_clean target (a .rds;
   # a source: path or url) to use instead of reading and cleaning `sources`.
   premade: null
+  # Restricted Google Drive folder the premade files are shared in (cleaned
+  # locations and study areas, zipped): write_premade() makes them from the
+  # current results and upload_premade() puts them there, replacing files of
+  # the same name so their links stay the same. null = not shared.
+  premade_folder: null
   columns:               # names of the columns in the input data (default for every source)
     id: id                # animal (collar deployment) ID
     datetime: t_          # fix date and time (UTC)
