@@ -315,6 +315,14 @@ true metres). The templates come from `landscape: template:`:
   coarser cell: 8 x 30 m = 240 m, 40 x 30 m = 1200 m and 160 x 30 m = 4800 m.
   Five 240 m cells fit exactly along a 1200 m cell, and four 1200 m cells along
   a 4800 m cell.
+- The extended study area is rebuilt from the cleaned fixes, so any change to
+  cleaning moves it slightly, which rebuilds the templates and every layer.
+  Once it is built, set `locations: study_area: extended: freeze: true` to keep
+  it and the templates as they are (they are then never rerun). The target
+  `study_area_check` warns when cleaned fixes come within the extended
+  `buffer_m` of its edge, and says to set `freeze: false` to rebuild. A saved
+  area can also be given as its `source:`, but one read back from a file may
+  differ slightly from the original and so rebuild the layers once.
 - The templates cover the extended study area (target `study_area_extended`),
   set by `locations: study_area: extended:`: the study area wrapped in a
   convex hull (`convex_hull: true`) and buffered by `buffer_m: 50000` (50 km),

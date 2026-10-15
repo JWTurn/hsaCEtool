@@ -54,6 +54,10 @@ locations:
     # hour: Hour          # optional: whole hour of the day, if datetime holds only the date
   keep_columns: []        # other input columns to keep (e.g. herd, jurisdiction); [] keeps all
   input_crs: "EPSG:3154"  # coordinate system of x and y in the input (EPSG:4326 for longitude/latitude)
+  # Spaces (incl. non-breaking spaces) are removed from text columns when the
+  # sources are combined, so IDs and codes match across files, except in
+  # free-text columns whose name contains one of these (ignoring case).
+  keep_spaces: [comment, note, remark, cause, description, measurement]
   # Fixes that two sources both have (e.g. the same collars on Movebank and in a
   # government export): the copy from the source listed later is flagged in
   # column dup_source; the cleaning step source_duplicates removes them.
@@ -118,7 +122,10 @@ locations:
     # One continuous area the landscape layers cover (target study_area_extended):
     # the study area wrapped in a convex hull, then buffered, or an existing
     # polygon (source: path or url).
-    extended: {source: null, buffer_m: 50000, convex_hull: true}
+    extended: {source: null, buffer_m: 50000, convex_hull: true,
+               freeze: false}  # true or false: true keeps the extended study area and the template
+                               # rasters as built, so changes to the locations do not rebuild every
+                               # layer (target study_area_check warns if fixes near its edge)
   crop_method: bbox       # keep locations inside the study area's bounding box ("bbox") or the polygon itself ("within")
 
   # After cleaning (target locations): sex is coded f, m or NA (filled from
