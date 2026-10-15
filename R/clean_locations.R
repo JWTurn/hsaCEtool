@@ -296,15 +296,17 @@ check_mortality <- function(raw, clean) {
 
 #' @title Combine the location sources
 #' @description Makes columns plain so that sources combine: columns with
-#'   units (e.g. Movebank's `gps_dop`) become plain numbers and factors (e.g.
-#'   Movebank's `sex`) become text. Then stacks the sources and flags fixes an
-#'   earlier-listed source also has ([flag_source_duplicates()]).
+#'   units (e.g. Movebank's `gps_dop`) become plain numbers, factors (e.g.
+#'   Movebank's `sex`) become text, and text is tidied ([tidy_text()]: spaces
+#'   removed except in free-text columns). Then stacks the sources and flags
+#'   fixes an earlier-listed source also has ([flag_source_duplicates()]).
 #' @param sources list of data.tables of standard locations, in the order the
 #'   sources are listed.
 #' @inheritParams flag_source_duplicates
+#' @inheritParams tidy_text
 #' @return data.table.
 #' @author Julie W. Turner
-combine_locations <- function(sources, params, crs) {
+combine_locations <- function(sources, params, crs, keep_spaces = NULL) {
   sources <- purrr::map(sources, function(DT) {
     DT <- data.table::copy(DT)
     for (col in names(DT)) {
@@ -314,9 +316,38 @@ combine_locations <- function(sources, params, crs) {
         data.table::set(DT, j = col, value = as.character(DT[[col]]))
       }
     }
-    DT
+    tidy_text(DT, keep_spaces)
   })
   flag_source_duplicates(data.table::rbindlist(sources, fill = TRUE), params, crs)
+}
+
+#' @title Tidy text columns
+#' @description Text that is not valid UTF-8 (e.g. a non-breaking space,
+#'   byte a0, in the B.C. exports) is read as Latin-1, then every space,
+#'   including non-breaking spaces, is removed from text columns, except
+#'   free-text columns whose name contains one of `keep_spaces` (ignoring
+#'   case), e.g. comments. Empty text becomes NA.
+#' @param DT data.table.
+#' @param keep_spaces character. Parts of column names whose spaces are kept
+#'   (the `locations: keep_spaces:` setting).
+#' @return `DT`, changed in place.
+#' @author Julie W. Turner
+tidy_text <- function(DT, keep_spaces = NULL) {
+  keep <- unlist(keep_spaces)
+  for (col in names(DT)) {
+    x <- DT[[col]]
+    if (!is.character(x)) next
+    bad <- !is.na(x) & !validUTF8(x)
+    if (any(bad)) x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+    if (!length(keep) || !any(grepl(paste(keep, collapse = '|'), col, ignore.case = TRUE))) {
+      x <- gsub('[[:space:]\u00a0]+', '', x)
+    } else {
+      x <- trimws(gsub('\u00a0', ' ', x))
+    }
+    x[!is.na(x) & !nzchar(x)] <- NA_character_
+    data.table::set(DT, j = col, value = x)
+  }
+  DT
 }
 
 #' @title Flag fixes that another source also has

@@ -148,8 +148,9 @@ targets_locations <- function(cfg) {
                                CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id'))
 
   clean_targets <- if (is.null(premade)) {
-    combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs),
-                          list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol)))))
+    combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs, KEEP),
+                          list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol))),
+                               KEEP = unlist(cfg$locations$keep_spaces)))
     c(rec_targets, list(
       tar_target_raw('locations_raw', combine),
       tar_target_raw('locations_clean',

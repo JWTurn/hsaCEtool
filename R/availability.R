@@ -34,7 +34,8 @@ make_step_groups <- function(steps, by = NULL) {
 #' @param name character. Layer name.
 #' @param groups data.table from [make_step_groups()].
 #' @param by character. The grouping columns, broad to fine.
-#' @return data.table: `layer`, `column`, `where` (start or end), `used`
+#' @return data.table: `layer` (`ts_<name>` for time since disturbance),
+#'   `column`, `where` (start or end), `used`
 #'   (TRUE for used steps), the `by` columns ("all" where not split by that
 #'   column), `n`, `min`, `mean`, `median`, `max`, `share_above_0` and
 #'   `share_missing`.
@@ -66,7 +67,9 @@ summarize_availability <- function(files, name, groups, by = NULL) {
         if (b %in% s) data.table::set(res, j = b, value = as.character(res[[b]]))
         else data.table::set(res, j = b, value = 'all')
       }
-      res[, `:=`(layer = name, column = col, where = sub('.*_', '', col))]
+      # time since disturbance is listed as its own layer, ts_<name>
+      res[, `:=`(layer = if (startsWith(col, 'ts_')) paste0('ts_', name) else name, column = col,
+                 where = sub('.*_', '', col))]
     }), use.names = TRUE)
   }))
   data.table::setnames(out, 'case_', 'used')

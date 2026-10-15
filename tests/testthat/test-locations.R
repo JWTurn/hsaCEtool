@@ -322,6 +322,18 @@ test_that('finish_locations codes sex, adds study and herd, and keeps only the l
                c('MooseLakePreviouslyTayRiver', 'BC', 'PrairieCreek', NA))
 })
 
+test_that('tidy_text removes spaces except in free-text columns, and fixes non-UTF-8 text', {
+  nb <- rawToChar(as.raw(0xa0))   # a non-breaking space, as in the B.C. exports
+  DT <- data.table(id = c(paste0('collar_', nb, '41241'), ' A 1 ', ''), herd = c('Pink Mountain', NA, 'x'),
+                   individual_comments = c('Coal River  subpopulation ', paste0('x', nb, 'y'), NA), n = 1:3)
+  out <- tidy_text(copy(DT), c('comment', 'note'))
+  expect_equal(out$id, c('collar_41241', 'A1', NA))
+  expect_equal(out$herd, c('PinkMountain', NA, 'x'))
+  expect_equal(out$individual_comments, c('Coal River  subpopulation', 'x y', NA))
+  expect_equal(out$n, 1:3)
+  expect_true(all(validUTF8(na.omit(out$id))))
+})
+
 test_that('check_extended_area warns about fixes near the edge and says how to rebuild', {
   area <- terra::vect('POLYGON ((0 0, 100000 0, 100000 100000, 0 100000, 0 0))', crs = 'EPSG:3154')
   DT <- data.table(source = 'a', id = c('x', 'y', 'z'), x_ = c(50000, 5000, 200000), y_ = 50000)

@@ -141,6 +141,8 @@ test_that('availability summarizes each layer for used and available steps, over
   expect_equal(out[column == 'elev_end' & juris == 'yt' & study == 'all', sort(n)], c(2L, 2L))
   expect_equal(nrow(out[column == 'elev_end' & study == 'A']), 3)   # used yt, available yt, available bc
   # time since fire is summarized too
-  expect_true(all(c('ts_fires_start', 'ts_fires_end') %in% summarize_availability(files, 'fires', groups, 'juris')$column))
+  fa <- summarize_availability(files, 'fires', groups, 'juris')
+  expect_true(all(c('ts_fires_start', 'ts_fires_end') %in% fa$column))
+  expect_equal(unique(fa[startsWith(column, 'ts_')]$layer), 'ts_fires')   # listed as its own layer
   expect_error(make_step_groups(steps, 'herd'), 'keep_after_cleaning')
 })

@@ -26,8 +26,8 @@
 read_capture_log <- function(file, cols, source, date_order = 'dmy') {
   x <- read_table_file(file)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
-  out <- data.table::data.table(source = source, id = get('id'), capture_id = get('capture_id'),
-                                capture_date = parse_record_dates(get('date'), date_order), collar = get('collar'),
+  out <- data.table::data.table(source = source, id = tidy_id(get('id')), capture_id = tidy_id(get('capture_id')),
+                                capture_date = parse_record_dates(get('date'), date_order), collar = tidy_id(get('collar')),
                                 sex_raw = get('sex'), recapture = get('recapture'), herd = get('herd'))
   out[, sex := data.table::fcase(toupper(sex_raw) %in% c('F', 'FALSE', 'FEMALE'), 'f',
                                  toupper(sex_raw) %in% c('M', 'MALE'), 'm', default = NA_character_)]
@@ -46,7 +46,7 @@ read_capture_log <- function(file, cols, source, date_order = 'dmy') {
 read_mortality_records <- function(file, cols, source, date_order = 'dmy') {
   x <- read_table_file(file)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
-  out <- data.table::data.table(source = source, id = get('id'), mortality_date = parse_record_dates(get('date'), date_order),
+  out <- data.table::data.table(source = source, id = tidy_id(get('id')), mortality_date = parse_record_dates(get('date'), date_order),
                                 mortality_cause = get('cause'))
   out[!is.na(id) & nzchar(id)]
 }
@@ -59,6 +59,22 @@ read_mortality_records <- function(file, cols, source, date_order = 'dmy') {
 #' @keywords internal
 #' @noRd
 trim_bytes <- function(x) gsub('^[[:space:]]+|[[:space:]]+$', '', as.character(x), useBytes = TRUE)
+
+#' @title IDs and collars as in the tidied location data
+#' @description As [tidy_text()] does for location columns: invalid text read
+#'   as Latin-1 and every space removed, so record tables match the locations.
+#' @param x vector.
+#' @return character.
+#' @keywords internal
+#' @noRd
+tidy_id <- function(x) {
+  x <- as.character(x)
+  bad <- !is.na(x) & !validUTF8(x)
+  if (any(bad)) x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+  x <- gsub('[[:space:]\u00a0]+', '', x)
+  x[!is.na(x) & !nzchar(x)] <- NA_character_
+  x
+}
 
 #' @title Read the first sheet of a spreadsheet, or a CSV
 #' @param file character. One or more files; the first xlsx, xls or csv is read.
@@ -278,19 +294,21 @@ clean_long_gaps <- function(DT, params, crs) {
 #' @author Julie W. Turner
 make_animal_lookup <- function(captures, locations, collar_column = 'collar_id') {
   loc <- data.table::as.data.table(locations)
-  base_id <- function(x) sub('_[0-9]+$', '', x)
+  base_id <- function(x) sub('_[0-9]+$', '', x, useBytes = TRUE)
+  # sort by bytes: some exports hold text that is not valid UTF-8
+  srt <- function(x) sort(unique(x), method = 'radix')
   parts <- list()
   if (!is.null(captures) && nrow(captures)) {
     src <- unique(captures$source)
     b <- loc[source %in% src]
     b[, .collar := if (collar_column %in% names(b)) trim_bytes(get(collar_column)) else NA_character_]
     b[, .base := base_id(id)]
-    fixes <- b[, .(fixes = .N, our_ids = paste(sort(unique(id)), collapse = '/')), by = .(.base, collar = .collar)]
+    fixes <- b[, .(fixes = .N, our_ids = paste(srt(id), collapse = '/')), by = .(.base, collar = .collar)]
     data.table::setnames(fixes, '.base', 'id')
     cl <- fixes[captures[, .(source, id, capture_id, capture_date, collar, recapture, herd, sex)], on = .(id, collar)]
     cl[, kind := 'capture log']
     multi <- b[!is.na(.collar), .(collars = data.table::uniqueN(.collar), fixes = .N,
-                                  our_ids = paste(sort(unique(id)), collapse = '/')), by = .base][collars > 1]
+                                  our_ids = paste(srt(id), collapse = '/')), by = .base][collars > 1]
     data.table::setnames(multi, '.base', 'id')
     extra <- multi[!id %in% captures[recapture %in% 'Y', id],
                    .(source = src[1], kind = 'several collars, no logged recapture', id, our_ids, fixes,
@@ -302,7 +320,7 @@ make_animal_lookup <- function(captures, locations, collar_column = 'collar_id')
     tag <- if ('tag_local_identifier' %in% names(mb)) mb$tag_local_identifier else NA_character_
     mb[, .tag := tag]
     mb[, `:=`(.animal = individual_local_identifier, .dep = as.character(deployment_id))]
-    dep <- mb[, .(fixes = .N, our_ids = paste(sort(unique(id)), collapse = '/'), collar = paste(sort(unique(.tag)), collapse = '/'),
+    dep <- mb[, .(fixes = .N, our_ids = paste(srt(id), collapse = '/'), collar = paste(srt(.tag), collapse = '/'),
                   capture_date = min(t_)), by = .(source, .animal, deployment = .dep)]
     data.table::setnames(dep, '.animal', 'id')
     dep[, deployments := .N, by = .(source, id)]
