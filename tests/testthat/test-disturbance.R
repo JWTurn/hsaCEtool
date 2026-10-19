@@ -87,7 +87,7 @@ test_that('disturbance features are sorted, dated and put on the grid with the m
   files <- d_source(dir)
   feats <- prep_disturbance_features(files, d_src, list(), g$margin, 'EPSG:3154',
                                      file.path(dir, 'out', 'features.gpkg'))
-  x <- sf::st_read(feats, quiet = TRUE)
+  x <- sf::st_read(feats, layer = "disturbance", quiet = TRUE)
   expect_equal(sort(x$category), c('lfother', 'paved', 'paved', 'paved'))   # harvest dropped
   expect_equal(sort(x$year, na.last = TRUE), c(2001L, 2015L, 2018L, NA))
 
@@ -99,6 +99,32 @@ test_that('disturbance features are sorted, dated and put on the grid with the m
   expect_equal(sum(h$year == 0), 10)
   expect_equal(nrow(disturbance_cells(feats, 'quartz', g$margin)), 0)
   expect_equal(disturbance_years(h, 2012, 2024), c(2012L, 2015L))
+})
+
+test_that('the summary counts the features of each type in each category, dropped ones too', {
+  dir <- withr::local_tempdir()
+  g <- d_grid(dir)
+  src_files <- d_source(dir)
+  feats <- prep_disturbance_features(src_files, d_src, list(), g$margin, 'EPSG:3154',
+                                     file.path(dir, 'out', 'features_made.gpkg'))
+  s <- summarize_disturbance(feats)
+  expect_equal(unique(s$source), 'made')
+  expect_equal(s$category, c('drop', 'lfother', 'paved'))
+  expect_equal(s$type, c('Type=Harvest', 'Type=Trail', 'Type=Highway'))
+  paved <- s[category == 'paved']
+  expect_equal(paved$features, 3L)
+  expect_equal(paved$length_km, 0.75)   # 230 + 230 + 290 m
+  expect_true(is.na(paved$area_km2))
+  expect_equal(paved$no_year, 1L)
+  expect_equal(c(paved$first_year, paved$last_year), c(2015L, 2018L))
+
+  # a file with one category for all its features has no type
+  one <- list(url = 'made-up', files = list(list(file = 'lines.gpkg', category = 'lfother')))
+  s1 <- summarize_disturbance(prep_disturbance_features(src_files, one, list(), g$margin, 'EPSG:3154',
+                                                        file.path(dir, 'out', 'features_one.gpkg')))
+  expect_equal(nrow(s1), 1)
+  expect_true(is.na(s1$type))
+  expect_equal(s1$features, 5L)
 })
 
 test_that('disturbance layers count every feature up to the year, and distances use the margin', {

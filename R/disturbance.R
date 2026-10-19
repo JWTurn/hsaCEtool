@@ -44,7 +44,10 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #'   from the first of its year fields that has one (none = there in every
 #'   year). Features in category "drop" are left out. All are written, in
 #'   `crs`, to one GeoPackage, so later steps only rerun when the features
-#'   change, not each time an identical copy is downloaded.
+#'   change, not each time an identical copy is downloaded. The GeoPackage
+#'   also holds a table (layer "summary") of how many features of each type
+#'   went into each category, dropped ones included (see
+#'   [summarize_feature_types()]).
 #' @param files character. From [download_disturbance()].
 #' @param src named list. The source's settings (`landscape: disturbance:
 #'   sources: <name>`): `url` and `files`, each with `file`, `category` or
@@ -53,7 +56,7 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #' @param template character. Raster whose extent sets the area kept.
 #' @param crs character. The project's coordinate system.
 #' @param out character. GeoPackage to write.
-#' @return `out`.
+#' @return `out`, with layers "disturbance" (the features) and "summary".
 #' @author Julie W. Turner
 prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
@@ -74,14 +77,82 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
     if (!is.null(fs$lookup)) d <- add_lookup(d, fs$lookup, lookups, fs$file)
     category <- disturbance_category(d, fs)
     year <- feature_year(d, unlist(fs$year), fs$file)
-    keep <- !is.na(category) & category != 'drop' & !sf::st_is_empty(x)
-    sf::st_sf(category = category[keep], year = year[keep], file = rep(fs$file, sum(keep)),
-              geometry = sf::st_transform(sf::st_geometry(x)[keep], crs))
+    geom <- sf::st_transform(sf::st_geometry(x), crs)
+    full <- !sf::st_is_empty(geom)
+    keep <- !is.na(category) & category != 'drop' & full
+    list(features = sf::st_sf(category = category[keep], year = year[keep], file = rep(fs$file, sum(keep)),
+                              geometry = geom[keep]),
+         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full]))
   })
-  feats <- purrr::reduce(parts, rbind)
+  feats <- purrr::reduce(purrr::map(parts, 'features'), rbind)
   unlink(out)
   sf::st_write(feats, out, layer = 'disturbance', quiet = TRUE)
+  sf::st_write(data.table::rbindlist(purrr::map(parts, 'summary')), out, layer = 'summary', quiet = TRUE)
   out
+}
+
+#' @title How many features of each type went into each category
+#' @description The type of a feature is the values of the fields its file's
+#'   rules look at (e.g. "feature_type=placer", or "Industry=Transportation"),
+#'   or blank for a file whose features all get one category. Features are
+#'   those overlapping the area kept (the template with its margin), measured
+#'   whole, not cut at its edge.
+#' @param d data.table. The features' attributes.
+#' @param fs named list. The file's settings.
+#' @param category character. Each feature's category (NA = matched no rule).
+#' @param year integer. Each feature's year built (NA = none).
+#' @param geom sfc. The features, in the project's coordinate system (metres).
+#' @return data.table, one row per file, type and category: `features`
+#'   (count), `length_km` (lines), `area_km2` (polygons), `no_year` (features
+#'   with no year, counted in every year), and the `first_year` and
+#'   `last_year` built.
+#' @keywords internal
+#' @noRd
+summarize_feature_types <- function(d, fs, category, year, geom) {
+  fields <- unique(unlist(purrr::map(fs$rules, function(r) names(r$where))))
+  type <- if (length(fields)) {
+    purrr::reduce(purrr::map(fields, function(f) paste0(f, '=', trimws(as.character(d[[f]])))),
+                  paste, sep = '; ')
+  } else rep(NA_character_, nrow(d))
+  dt <- data.table::data.table(
+    file = rep(fs$file, nrow(d)), type = type,
+    category = data.table::fifelse(is.na(category), 'none (left out)', category),
+    year = year, dim = sf::st_dimension(geom),
+    len = as.numeric(sf::st_length(geom)), area = as.numeric(sf::st_area(geom)))
+  dt[, .(features = .N,
+         length_km = if (any(dim == 1)) round(sum(len[dim == 1]) / 1000, 2) else NA_real_,
+         area_km2 = if (any(dim == 2)) round(sum(area[dim == 2]) / 1e6, 2) else NA_real_,
+         no_year = sum(is.na(year)),
+         first_year = if (all(is.na(year))) NA_integer_ else min(year, na.rm = TRUE),
+         last_year = if (all(is.na(year))) NA_integer_ else max(year, na.rm = TRUE)),
+     by = .(file, type, category)][order(file, category, type)]
+}
+
+#' @title Table of the features of each type that went into each category, all sources
+#' @description Combines the "summary" layers written by
+#'   [prep_disturbance_features()], for reports.
+#' @param features character. GeoPackages from [prep_disturbance_features()],
+#'   named features_<source>.gpkg.
+#' @return data.table as from [summarize_feature_types()], with `source` first.
+#' @author Julie W. Turner
+summarize_disturbance <- function(features) {
+  data.table::rbindlist(purrr::map(features, function(f) {
+    s <- data.table::as.data.table(suppressWarnings(sf::st_read(f, layer = 'summary', quiet = TRUE)))
+    s[, source := sub('^features_(.*)\\.gpkg$', '\\1', basename(f))]
+    data.table::setcolorder(s, 'source')
+  }))
+}
+
+#' @title Write the disturbance summary table
+#' @param summary data.table. From [summarize_disturbance()].
+#' @param out_dir character. Folder for disturbance_summary.csv.
+#' @return character. The CSV file.
+#' @author Julie W. Turner
+write_disturbance_summary <- function(summary, out_dir) {
+  reproducible::checkPath(out_dir, create = TRUE)
+  file <- file.path(out_dir, 'disturbance_summary.csv')
+  data.table::fwrite(summary, file)
+  file
 }
 
 #' @title Add columns from a lookup table, matching on some of the features' fields

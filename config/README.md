@@ -489,6 +489,14 @@ the `files` wanted from it. Each file has:
   Types missing from the table are listed in a warning and sorted by the
   remaining rules.
 
+`outputs/<project>/disturbance_summary.csv` (target `disturb_summary`) lists,
+for each source and file, how many features of each type went into each
+category (dropped ones included), with their total length (km, lines) or area
+(km², polygons), how many have no year, and the first and last year built. A
+feature's type is the values of the fields its rules look at (e.g.
+`feature_type=placer`). Features are those overlapping the template with its
+margin, measured whole.
+
 Each download is kept in `paths: input_cache` and is not downloaded again
 (`prepInputs()` does not check the web for a newer version). To pick up an
 update (e.g. a new GeoYukon release), add `refresh: true` to that source or

@@ -190,7 +190,9 @@ targets_landcover <- function(built, window_m, web_cue = tar_cue()) {
 #'   and, per source, its features sorted into categories. Then for each
 #'   category in the layer table: the disturbed 30 m cells and their years, the
 #'   years in which they change, and for each metric (dist, pa, dens) one target
-#'   per such year, building every resolution asked for. Each source's settings
+#'   per such year, building every resolution asked for. `disturb_summary`
+#'   counts the features of each type that went into each category, written
+#'   to outputs/<project>/disturbance_summary.csv. Each source's settings
 #'   are written into its own targets, so changing one source's rules reruns
 #'   only that source.
 #' @param built data.table. The layer-table rows with a `build`.
@@ -231,6 +233,12 @@ targets_disturbance <- function(built, dcfg) {
     features <- c(features, ft_nm)
   }
   all_features <- as.call(c(quote(c), purrr::map(features, as.symbol)))
+  out <- c(out, list(
+    tar_target_raw('disturb_summary', substitute(summarize_disturbance(FEATURES), list(FEATURES = all_features))),
+    tar_target_raw('disturb_summary_file',
+                   quote(write_disturbance_summary(disturb_summary, file.path(cfg_paths$outputs, cfg_project$name))),
+                   format = 'file')
+  ))
   for (cl in unique(rows$class)) {
     cr <- rows[class == cl]
     hist_nm <- paste0('disturb_history_', cl)
