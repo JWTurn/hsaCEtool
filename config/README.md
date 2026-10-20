@@ -286,8 +286,8 @@ keeps every column. Before that:
 Each landscape layer is one row of a table named in `landscape: layers:`. To add
 a layer, add a row. Each layer's values are extracted at the start and/or end of
 every step (`extract: where:`), as columns `<name>_start` and `<name>_end`.
-The table used to fit models will be made from these, with only the layers a
-model uses (still to come).
+The table each model is fitted to is made from these, with only the layers the
+model uses (see [iSSA models](#issa-models-model)).
 
 | Column | Meaning |
 |---|---|
@@ -563,6 +563,64 @@ and run `googledrive::drive_auth(email = "<it>")` once).
 
 Layers are only built for the first year and the years in which features were
 added; the other years reuse the layer of the year before.
+
+## iSSA models (`model:`)
+
+Integrated step selection models, fitted with glmmTMB (the Poisson form, with
+each step's intercept variance fixed). Set them in `model:` in
+`<project>.yaml`; `default.yaml` lists every setting.
+
+**Each model has a name you choose**: its key under `model: models:`, e.g.
+`full`, `full_winter` or `simple_yt`. The name is not the project name. It names
+the model's targets (`model_data_<name>`, `model_fit_<name>`,
+`model_coefs_<name>`) and files (`outputs/<project>/models/<name>_fixed.csv`,
+`_random.csv`, `_by_group.csv`, `_data_log.csv`). Use letters, numbers and `_`,
+starting with a letter.
+
+```yaml
+model:
+  groups:                       # combined covariates
+    prop_veg: {sum: [prop_herbaceous, prop_low_shrubs, prop_tall_shrubs]}
+    dist_otherpoly: {min: [dist_otherpoly, harv_dist]}
+  models:
+    full:
+      fit: true                 # false: build and check the table only
+      n_random: 10              # random steps per used step (of tracks: n_random)
+      seasons: all              # or e.g. [winter]
+      subset: juris == 'yt'     # optional
+      formula: |
+        case_ ~ -1 + I(log((sl_ + 1)/1000)) + prop_veg_240_end + ...
+          + (1 | indiv_step_id) + (0 + prop_veg_240_end | id)
+```
+
+- **Formula**: written out in full, as for glmmTMB. Covariates are extracted
+  columns (layer name with `_start` or `_end`, e.g. `dist_paved_240_end`; see
+  `outputs/<project>/availability.csv`) or groups with a resolution and start or
+  end (e.g. `prop_veg_240_end`). Steps also have `sl_`, `ta_`, `id`, `year`,
+  `juris`, `study`, `herd` and `sex`, and `season` and `yearseason` (e.g.
+  `2019_winter`) are added. It must include `(1 | indiv_step_id)`; its SD is
+  fixed at `step_sd` (1000) without writing `map` or `start`. Positions and
+  times (`x1_`, `t1_`, ...) cannot be used.
+- **Groups** (`model: groups:`): `name: {rule: [layers]}`, rule `sum`, `min`,
+  `max` or `mean`, layers without resolution. Made at every resolution, for
+  start and end. A group can reuse a layer's name to replace it.
+- **Distance cap** (`model: distance_cap:`): a step that starts more than
+  `beyond_km` from a disturbance gets `set_to_km` for the used step and all its
+  random steps, so it says nothing about that disturbance. It goes by the step's
+  start, which the used and random steps share, so it does not depend on where
+  the animal went.
+- **Seasons** (`model: seasons:`): by the date a step starts; a model keeps
+  only its `seasons:`.
+- **Missing values**: a step whose used step has a missing value is dropped
+  whole; a random step with one is dropped on its own. Counts are in
+  `<name>_data_log.csv`.
+- **Factors**: text columns and grouping columns (`id`, `yearseason`, ...)
+  become factors only just before fitting, with only the values left in the
+  table, so a value dropped earlier is not an empty level.
+- **Sharing**: a model's table holds only its formula's columns, with animal
+  IDs replaced by codes, so a fitted model can be shared. The table linking
+  codes to IDs, `outputs/<project>/models/animal_codes_CONFIDENTIAL.csv`,
+  cannot.
 
 ## Running steps in parallel
 

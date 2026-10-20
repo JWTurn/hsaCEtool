@@ -253,6 +253,8 @@ check_config <- function(cfg) {
   if (!cfg$extract$where %in% c('start', 'end', 'both')) {
     add('extract: where must be "start", "end" or "both"')
   }
+  # iSSA models (see R/models.R)
+  for (p in check_model_settings(cfg$model %||% list(), cfg$tracks$n_random)) add(p)
 
   if (length(problems)) {
     stop('Problems in the settings for project "', cfg$project$name, '":\n  - ',

@@ -169,6 +169,17 @@ tracks:
   min_steps: 20           # drop tracks with fewer used steps than this, after resampling and again
                           # once all step filters (bursts, long steps, years) are done
   max_step_quantile: 0.99 # drop steps longer than this quantile of each track's step lengths
+  zero_step_ta: random    # steps of zero length (same place at both fixes) get the animal's shortest
+                          # non-zero step length and a direction: random (uniform) or zero (the
+                          # previous step's direction, turning angle 0)
+  # Keep only steps inside an area (e.g. the provinces and territories the landscape
+  # layers cover): a used step starting or ending outside it is dropped with its
+  # random steps, and a random step ending outside it is dropped (target
+  # steps_outside_area counts them). null = keep all. Otherwise a polygon source
+  # (path, or url with target_file, as for other sources), with optionally `field`
+  # and `keep` (the polygons whose field is one of keep), e.g.
+  #   within: {url: ..., target_file: provinces.shp, field: name, keep: [Yukon, British Columbia]}
+  within: null
   n_random: 30            # random (available) steps per observed step
   sl_distr: gamma         # distribution fitted to step lengths: gamma, exp, lnorm, hnorm or unif
   ta_distr: vonmises      # distribution fitted to turning angles: vonmises or unif
@@ -370,3 +381,54 @@ extract:
   # is summarized overall, then by the first column, the first two, and so on.
   # Any columns kept after cleaning (locations: keep_after_cleaning), or [] for overall only.
   availability_by: [juris, study, herd]
+
+# iSSA models -------------------------------------------------------------------
+# Models are listed under `models:`, each under a name you choose (e.g. full,
+# full_winter, simple_yt). The name is NOT the project name: it names that
+# model's targets (model_data_<name>, model_fit_<name>, model_coefs_<name>) and
+# files (outputs/<project>/models/<name>_fixed.csv, _random.csv, _by_group.csv,
+# _data_log.csv). Use letters, numbers and _ only, starting with a letter.
+# Renaming a model fits it again under the new name.
+model:
+  # Seasons, by the date each step starts (month-day, UTC), each [first day, last day].
+  # A season may cross the new year (e.g. winter 11-01 to 04-15). Steps in no season
+  # are "other". Formulas can use `season` and `yearseason` (e.g. 2019_winter); to keep
+  # only some seasons, use a model's `seasons:`.
+  seasons:
+    winter: ['11-01', '04-15']
+    spring: ['04-16', '06-30']
+    summer: ['07-01', '09-30']
+    fall: ['10-01', '10-31']
+  # Combined covariates. Each: name: {rule: [layers]}, rule one of sum, min, max or mean,
+  # layers named without resolution or start/end (e.g. prop_herbaceous, harv_dist).
+  # A group is made at every resolution, for start and end, and used in formulas
+  # like a layer (e.g. prop_veg_240_end). Missing layer values are skipped (sum
+  # counts them as 0); the group is missing only where all its layers are. A
+  # group may reuse a layer's name to replace it, e.g. dist_otherpoly: {min:
+  # [dist_otherpoly, harv_dist]} folds harvest into other polygons.
+  groups: {}
+  # Distances far from a disturbance: a step that STARTS more than beyond_km from
+  # it (its _start value) gets set_to_km for the used step and all its random steps,
+  # so that step says nothing about that disturbance. The start is the same for the
+  # used and random steps, so this does not depend on where the animal went. Each
+  # covariate in a formula matching `columns` (a regular expression), separately.
+  # null = no adjustment.
+  distance_cap:
+    columns: '^dist_'
+    beyond_km: 20
+    set_to_km: 21
+  # Each model:
+  #   <name>:
+  #     formula: |         glmmTMB formula (Poisson iSSA). Must include (1 | indiv_step_id),
+  #                        whose SD is fixed at step_sd; covariates are extracted columns
+  #                        (see outputs/<project>/availability.csv) or groups, with
+  #                        resolution and _start or _end. Text columns (and grouping
+  #                        columns such as id) become factors just before fitting.
+  #     n_random: 10       random steps per used step, 1 to tracks: n_random (more needs more memory)
+  #     seasons: all       all, or a list of season names, e.g. [winter] or [summer, fall]
+  #     subset: null       optional condition on step columns, e.g. juris == 'yt',
+  #                        herd %in% c('Hess', 'Klaza') or year >= 2015; null = all steps
+  #     step_sd: 1000      fixed SD of the step intercepts (variance 1e6)
+  #     fit: true          true: fit it; false: build its table only (target model_data_<name>
+  #                        and its log), e.g. to check the table before a long fit
+  models: {}
