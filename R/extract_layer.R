@@ -12,8 +12,11 @@
 #' @param files list of character vectors, one per row of `layers`, in order.
 #' @param years integer or NULL. First and last year (target `layer_years`)
 #'   for yearly layers (column `yearly`) with blank years.
+#' @details `files_hash` is a fingerprint of the files' contents. A layer
+#'   rebuilt into the same files keeps the same paths, so without it the
+#'   index would look unchanged and extraction would not be redone.
 #' @return data.table: `name`, `first_year`, `last_year`, `time_since`,
-#'   `ts_nodata` and list column `files`.
+#'   `ts_nodata`, list column `files`, and `files_hash`.
 #' @author Julie W. Turner
 make_layer_index <- function(layers, files, years = NULL) {
   layers <- data.table::as.data.table(layers)
@@ -24,7 +27,20 @@ make_layer_index <- function(layers, files, years = NULL) {
   }
   idx <- layers[, .(name, first_year, last_year, time_since, ts_nodata)]
   idx[, files := unname(files)]
+  idx[, files_hash := purrr::map_chr(files, files_fingerprint)]
   idx[]
+}
+
+#' @title Fingerprint of a layer's files
+#' @description Hashes the contents of local files; web sources (URLs) count
+#'   by their address.
+#' @param f character. Files or URLs.
+#' @return character.
+#' @keywords internal
+#' @noRd
+files_fingerprint <- function(f) {
+  local <- file.exists(f)
+  rlang::hash(c(unname(rlang::hash_file(f[local])), f[!local]))
 }
 
 #' @title Step points, grouped by year

@@ -100,6 +100,21 @@ test_that('extract_year reads stacks on different grids and coordinate systems l
   expect_equal(out$val_start, rep(2019, 10))
 })
 
+test_that('the layer index changes when a layer is rebuilt into the same files', {
+  dir <- withr::local_tempdir()
+  toy_rasters(dir)
+  lay <- data.table(name = 'val', first_year = 2018L, last_year = 2020L, time_since = FALSE, ts_nodata = NA_real_)
+  files <- list(file.path(dir, paste0('val_', 2018:2020, '.tif')))
+  before <- make_layer_index(lay, files)
+  r <- terra::rast(files[[1]][2])
+  terra::writeRaster(r + 1, files[[1]][2], overwrite = TRUE)
+  after <- make_layer_index(lay, files)
+  expect_identical(before$files, after$files)
+  expect_false(identical(before$files_hash, after$files_hash))
+  expect_identical(make_layer_index(lay, list('https://example.org/a.tif'))$files_hash,
+                   make_layer_index(lay, list('https://example.org/a.tif'))$files_hash)
+})
+
 test_that('each year is saved as a Parquet file that can be read by column', {
   dir <- withr::local_tempdir()
   toy_rasters(dir)
