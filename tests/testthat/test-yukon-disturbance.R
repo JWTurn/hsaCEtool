@@ -73,6 +73,17 @@ test_that('new parts of work-package lines count from the image year, only in ol
   expect_equal(yukon_new_parts(x, old, mapped(2022L), 'lines', 20, 30)$n, 0L)
 })
 
+test_that('the new part and the rest of a split line do not overlap', {
+  old <- yk_feats(list(ln(c(1000, 1000), c(3000, 1000))), 'L1', 'GeoYukon', 2011L)
+  # a diagonal line leaving the old one: the cut point is not exactly on it
+  x <- yk_feats(list(ln(c(1000, 1003.7), c(2000, 1011.3), c(3170.3, 2213.9))), 'GL1')
+  x$image_year_first <- x$image_year
+  r <- yukon_new_parts(x, old, mapped(2012L), 'lines', 20, 30)
+  len <- as.numeric(sf::st_length(r$x))
+  expect_equal(sort(r$x$part), c('new', 'rest'))
+  expect_equal(sum(len), as.numeric(sf::st_length(x)), tolerance = 0.1)
+})
+
 test_that('new polygon parts narrower than min_m are ignored', {
   old <- yk_feats(list(sq(1000, 1000, 100)), 'P1', 'GeoYukon', 2011L)
   # the same clearing drawn 10 m wider (a sliver) and a large new extension

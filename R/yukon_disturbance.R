@@ -529,7 +529,10 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
     if (sf::st_is_empty(inside)) return(NULL)
     new <- yukon_away_from(inside, og[near_old[[k]]], kind, buffer_m, min_m)
     if (sf::st_is_empty(new)) return(NULL)
-    list(i = i, new = new, rest = yukon_op(sf::st_difference, gi, new, kind),
+    # lines: take away a 1 cm corridor around the new part, not the line itself,
+    # whose cut ends are not exactly on gi (the rest would keep the new part too)
+    cut <- if (kind == 'lines') sf::st_buffer(new, 0.01) else new
+    list(i = i, new = new, rest = yukon_op(sf::st_difference, gi, cut, kind),
          source = sprintf('Seen by %d on imagery (not the year built); not on the earlier GeoYukon map (%s)', yr[i],
                           paste(sprintf('%s, imagery %s', extent$project[e], extent$img_years[e]), collapse = '; ')))
   })
