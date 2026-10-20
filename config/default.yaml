@@ -327,11 +327,25 @@ landscape:
   # and config/README.md).
   disturbance:
     lookups: {}           # tables the rules can use, e.g. a reclassification spreadsheet
-    sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup}]}
+    sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup,
+                          # unpaved_type or unpaved_type_field}]}; a rule has where (exact values)
+                          # and/or match (regular expression), category, and optionally unpaved_type
                           # Categories are your own names (e.g. paved, unpaved); category drop
                           # leaves features out
                           # Downloads are kept in paths: input_cache and not repeated; add
                           # refresh: true to a source or lookup to download it again every run
+                          # A source with from: yukon_merge reads the merged Yukon files instead
+                          # of its url (when yukon_merge: build: true)
+    yukon_merge: null     # merge GeoYukon with Yukon work packages, with years (see config/NMC.yaml
+                          # and R/yukon_disturbance.R): build (true/false), inputs (geoyukon_lines,
+                          # geoyukon_polys, extent, work_packages, mines, reclass: each url and file),
+                          # patches and fixes (CSV files in config/), qa (layer, applies_to, field,
+                          # drop), extent_fields, mine_fields, mine_year_source, mine_types,
+                          # mine_max_m, new_feature_buffer_m, min_new_size_m, max_image_year,
+                          # upload_folder (Drive folder ID for upload_yukon_disturbance())
+    border_check: null    # compare merged Yukon lines with neighbours' at the borders: borders
+                          # (url, file), sources (source: border-file code), near_m, match_m
+                          # (two gaps: lines up, possible match), yukon_types
 
 # Running steps in parallel ---------------------------------------------------
 # Usually set in local.yaml, as it depends on the computer.

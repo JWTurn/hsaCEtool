@@ -59,8 +59,8 @@ test_that('disturbance_category uses the first matching rule', {
     list(where = list(Industry = list('Transportation', 'Urban/Rural')), category = 'paved'),
     list(where = list(Industry = 'Mining'), category = 'drop'),
     list(category = 'unpaved')))
-  expect_equal(disturbance_category(d, fs), c('paved', 'unpaved', 'paved', 'drop'))
-  expect_equal(disturbance_category(d, list(category = 'lfother')), rep('lfother', 4))
+  expect_equal(as.vector(disturbance_category(d, fs)), c('paved', 'unpaved', 'paved', 'drop'))
+  expect_equal(as.vector(disturbance_category(d, list(category = 'lfother'))), rep('lfother', 4))
   fs$rules[[3]] <- NULL
   expect_warning(out <- disturbance_category(d, fs), '1 features match no rule')
   expect_true(is.na(out[2]))
@@ -170,3 +170,21 @@ test_that('check_config catches disturbance classes no rule gives', {
   expect_error(check_config(cfg), 'class not given to any feature.*dist_paved_240')
 })
 
+
+test_that('rules can match patterns and give unpaved roads a type', {
+  d <- data.table(Surface = c('Paved 2 Lane', 'Paved 2  Lane', 'Loose 1 Lane', 'Winter Ice Road', 'Rough 2 Lane', 'Ferry'),
+                  Use = c('Public', 'Public', 'Forestry', 'Oil', 'Public', 'Public'))
+  fs <- list(file = 'roads.gpkg', rules = list(
+    list(match = list(Surface = '^Ferry'), category = 'drop'),
+    list(match = list(Surface = '^Paved'), category = 'paved'),
+    list(match = list(Surface = '^Winter'), category = 'unpaved', unpaved_type = 'winter'),
+    list(where = list(Use = c('Forestry', 'Oil')), category = 'unpaved', unpaved_type = 'resource'),
+    list(category = 'unpaved', unpaved_type = 'all-season')))
+  cat <- disturbance_category(d, fs)
+  expect_equal(as.vector(cat), c('paved', 'paved', 'unpaved', 'unpaved', 'unpaved', 'drop'))
+  expect_equal(disturbance_unpaved_type(d, fs, attr(cat, 'rule')), c(NA, NA, 'resource', 'winter', 'all-season', NA))
+  # a whole file, or a field
+  expect_equal(disturbance_unpaved_type(d, list(file = 'x', category = 'unpaved', unpaved_type = 'resource'), rep(NA_integer_, 6)),
+               rep('resource', 6))
+  expect_equal(disturbance_unpaved_type(d, list(file = 'x', category = 'unpaved', unpaved_type_field = 'Use'), rep(NA_integer_, 6)), d$Use)
+})

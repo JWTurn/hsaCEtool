@@ -51,12 +51,14 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #' @param files character. From [download_disturbance()].
 #' @param src named list. The source's settings (`landscape: disturbance:
 #'   sources: <name>`): `url` and `files`, each with `file`, `category` or
-#'   `rules`, and optionally `year`, `lookup` and `crs`.
+#'   `rules`, and optionally `year`, `lookup`, `crs`, and `unpaved_type` or
+#'   `unpaved_type_field` (see [disturbance_unpaved_type()]).
 #' @param lookups named list. Lookup table files by name, from [download_disturbance()].
 #' @param template character. Raster whose extent sets the area kept.
 #' @param crs character. The project's coordinate system.
 #' @param out character. GeoPackage to write.
-#' @return `out`, with layers "disturbance" (the features) and "summary".
+#' @return `out`, with layers "disturbance" (the features: category,
+#'   unpaved_type, year and file) and "summary".
 #' @author Julie W. Turner
 prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
@@ -76,13 +78,14 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
     d <- data.table::as.data.table(sf::st_drop_geometry(x))
     if (!is.null(fs$lookup)) d <- add_lookup(d, fs$lookup, lookups, fs$file)
     category <- disturbance_category(d, fs)
+    unpaved_type <- disturbance_unpaved_type(d, fs, attr(category, 'rule'))
     year <- feature_year(d, unlist(fs$year), fs$file)
     geom <- sf::st_transform(sf::st_geometry(x), crs)
     full <- !sf::st_is_empty(geom)
     keep <- !is.na(category) & category != 'drop' & full
-    list(features = sf::st_sf(category = category[keep], year = year[keep], file = rep(fs$file, sum(keep)),
-                              geometry = geom[keep]),
-         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full]))
+    list(features = sf::st_sf(category = category[keep], unpaved_type = unpaved_type[keep], year = year[keep],
+                              file = rep(fs$file, sum(keep)), geometry = geom[keep]),
+         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full], unpaved_type[full]))
   })
   feats <- purrr::reduce(purrr::map(parts, 'features'), rbind)
   unlink(out)
@@ -102,21 +105,23 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
 #' @param category character. Each feature's category (NA = matched no rule).
 #' @param year integer. Each feature's year built (NA = none).
 #' @param geom sfc. The features, in the project's coordinate system (metres).
-#' @return data.table, one row per file, type and category: `features`
+#' @param unpaved_type character. Each feature's unpaved type (NA = none), from
+#'   [disturbance_unpaved_type()].
+#' @return data.table, one row per file, type, category and unpaved type: `features`
 #'   (count), `length_km` (lines), `area_km2` (polygons), `no_year` (features
 #'   with no year, counted in every year), and the `first_year` and
 #'   `last_year` built.
 #' @keywords internal
 #' @noRd
-summarize_feature_types <- function(d, fs, category, year, geom) {
-  fields <- unique(unlist(purrr::map(fs$rules, function(r) names(r$where))))
+summarize_feature_types <- function(d, fs, category, year, geom, unpaved_type = rep(NA_character_, nrow(d))) {
+  fields <- unique(unlist(purrr::map(fs$rules, function(r) c(names(r$where), names(r$match)))))
   type <- if (length(fields)) {
     purrr::reduce(purrr::map(fields, function(f) paste0(f, '=', trimws(as.character(d[[f]])))),
                   paste, sep = '; ')
   } else rep(NA_character_, nrow(d))
   dt <- data.table::data.table(
     file = rep(fs$file, nrow(d)), type = type,
-    category = data.table::fifelse(is.na(category), 'none (left out)', category),
+    category = data.table::fifelse(is.na(category), 'none (left out)', category), unpaved_type = unpaved_type,
     year = year, dim = sf::st_dimension(geom),
     len = as.numeric(sf::st_length(geom)), area = as.numeric(sf::st_area(geom)))
   dt[, .(features = .N,
@@ -125,7 +130,7 @@ summarize_feature_types <- function(d, fs, category, year, geom) {
          no_year = sum(is.na(year)),
          first_year = if (all(is.na(year))) NA_integer_ else min(year, na.rm = TRUE),
          last_year = if (all(is.na(year))) NA_integer_ else max(year, na.rm = TRUE)),
-     by = .(file, type, category)][order(file, category, type)]
+     by = .(file, type, category, unpaved_type)][order(file, category, unpaved_type, type)]
 }
 
 #' @title Table of the features of each type that went into each category, all sources
@@ -201,25 +206,63 @@ add_lookup <- function(d, lookup, lookups, file) {
 
 #' @title Category of each feature, from the first rule it matches
 #' @description A file's settings give either one `category` for all its
-#'   features, or `rules`: each rule has `where` (field: value or values) and a
-#'   `category`; a rule without `where` matches every feature left.
+#'   features, or `rules`: each rule has `where` (field: value or values),
+#'   `match` (field: pattern, a regular expression), or both (all must hold),
+#'   and a `category`; a rule without either matches every feature left.
 #' @param d data.table. The features' attributes.
 #' @param fs named list. The file's settings.
-#' @return character, one per feature (NA = no rule matched).
+#' @return character, one per feature (NA = no rule matched), with attribute
+#'   `rule`: the number of the rule each feature matched.
 #' @keywords internal
 #' @noRd
 disturbance_category <- function(d, fs) {
-  if (!is.null(fs$category)) return(rep(fs$category, nrow(d)))
+  if (!is.null(fs$category)) return(structure(rep(fs$category, nrow(d)), rule = rep(NA_integer_, nrow(d))))
   out <- rep(NA_character_, nrow(d))
-  for (rule in fs$rules) {
+  which_rule <- rep(NA_integer_, nrow(d))
+  for (k in seq_along(fs$rules)) {
+    rule <- fs$rules[[k]]
     hit <- is.na(out)
-    for (f in names(rule$where)) {
+    for (f in c(names(rule$where), names(rule$match))) {
       if (!f %in% names(d)) stop(fs$file, ': no field "', f, '" for the rule giving ', rule$category, call. = FALSE)
+    }
+    for (f in names(rule$where)) {
       hit <- hit & trimws(as.character(d[[f]])) %in% as.character(unlist(rule$where[[f]]))
     }
+    for (f in names(rule$match)) {
+      hit <- hit & grepl(rule$match[[f]], as.character(d[[f]]))
+    }
     out[hit] <- rule$category
+    which_rule[hit] <- k
   }
   if (anyNA(out)) warning(fs$file, ': ', sum(is.na(out)), ' features match no rule and are left out', call. = FALSE)
+  structure(out, rule = which_rule)
+}
+
+#' @title Unpaved type of each feature (e.g. winter, all-season, resource)
+#' @description From the `unpaved_type` of the rule each feature matched, else
+#'   the file's `unpaved_type`, else the value of the file's `unpaved_type_field`.
+#'   Recorded on each feature and in the summary; the layers are by category.
+#' @param d data.table. The features' attributes.
+#' @param fs named list. The file's settings.
+#' @param rule integer. The rule each feature matched (attribute `rule` of
+#'   [disturbance_category()]).
+#' @return character, one per feature (NA = none).
+#' @keywords internal
+#' @noRd
+disturbance_unpaved_type <- function(d, fs, rule) {
+  out <- rep(NA_character_, nrow(d))
+  # [[ ]], not $: $ would also match unpaved_type_field when looking for unpaved_type
+  field <- fs[['unpaved_type_field']]
+  if (!is.null(field)) {
+    if (!field %in% names(d)) stop(fs$file, ': no unpaved_type_field "', field, '"', call. = FALSE)
+    out <- as.character(d[[field]])
+  }
+  if (!is.null(fs[['unpaved_type']])) out[] <- fs[['unpaved_type']]
+  if (length(fs$rules) && length(rule)) {
+    rt <- purrr::map_chr(fs$rules, function(r) r[['unpaved_type']] %||% NA_character_)
+    from_rule <- !is.na(rule) & !is.na(rt[rule])
+    out[from_rule] <- rt[rule[from_rule]]
+  }
   out
 }
 
