@@ -273,6 +273,13 @@ targets_disturbance <- function(built, dcfg, config_dir = 'config') {
                    quote(write_disturbance_summary(disturb_summary, file.path(cfg_paths$outputs, cfg_project$name))),
                    format = 'file')
   ))
+  if (!is.null(dcfg$combined)) {
+    named <- as.call(c(quote(c), stats::setNames(purrr::map(features, as.symbol), sub('^disturb_features_', '', features))))
+    out <- c(out, list(tar_target_raw('disturb_combined', substitute(
+      combine_disturbance_features(FEATURES, CB, file.path(cfg_paths$outputs, cfg_project$name, 'derived', 'combined')),
+      list(FEATURES = named, CB = dcfg$combined[setdiff(names(dcfg$combined), 'upload_folder')])),
+      format = 'file')))
+  }
   bc <- dcfg$border_check
   if (merged && is.null(bc)) {
     out <- c(out, list(tar_target_raw('yukon_final', quote(

@@ -343,6 +343,8 @@ landscape:
                           # drop), extent_fields, mine_fields, mine_year_source, mine_types,
                           # mine_max_m, new_feature_buffer_m, min_new_size_m, max_image_year,
                           # upload_folder (Drive folder ID for upload_yukon_disturbance())
+    combined: null        # all sources' features in one lines and one polygons file, for maps:
+                          # regions (source: region code), files (lines, areal), upload_folder
     border_check: null    # compare merged Yukon lines with neighbours' at the borders: borders
                           # (url, file), sources (source: border-file code), near_m, match_m
                           # (two gaps: lines up, possible match), yukon_types

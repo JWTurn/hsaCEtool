@@ -51,8 +51,9 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #' @param files character. From [download_disturbance()].
 #' @param src named list. The source's settings (`landscape: disturbance:
 #'   sources: <name>`): `url` and `files`, each with `file`, `category` or
-#'   `rules`, and optionally `year`, `lookup`, `crs`, and `unpaved_type` or
-#'   `unpaved_type_field` (see [disturbance_unpaved_type()]).
+#'   `rules`, and optionally `year`, `lookup`, `crs`, `unpaved_type` or
+#'   `unpaved_type_field` (see [disturbance_unpaved_type()]), and `keep`
+#'   (fields copied into the features, e.g. for maps).
 #' @param lookups named list. Lookup table files by name, from [download_disturbance()].
 #' @param template character. Raster whose extent sets the area kept.
 #' @param crs character. The project's coordinate system.
@@ -64,6 +65,8 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
   e <- unname(as.vector(terra::ext(terra::rast(template))))
   box <- sf::st_as_sfc(sf::st_bbox(c(xmin = e[1], ymin = e[3], xmax = e[2], ymax = e[4]), crs = sf::st_crs(crs)))
+  # extra columns kept from the source (files' keep:), blank for files without them
+  extra <- unique(unlist(purrr::map(src$files, function(f) f$keep)))
   parts <- purrr::map(src$files, function(fs) {
     path <- files[basename(files) == fs$file]
     if (length(path) != 1) stop(fs$file, ' was not downloaded', call. = FALSE)
@@ -83,8 +86,10 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
     geom <- sf::st_transform(sf::st_geometry(x), crs)
     full <- !sf::st_is_empty(geom)
     keep <- !is.na(category) & category != 'drop' & full
-    list(features = sf::st_sf(category = category[keep], unpaved_type = unpaved_type[keep], year = year[keep],
-                              file = rep(fs$file, sum(keep)), geometry = geom[keep]),
+    feats <- sf::st_sf(category = category[keep], unpaved_type = unpaved_type[keep], year = year[keep],
+                       file = rep(fs$file, sum(keep)), geometry = geom[keep])
+    for (k in extra) feats[[k]] <- if (k %in% names(d)) as.character(d[[k]])[keep] else rep(NA_character_, sum(keep))
+    list(features = feats,
          summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full], unpaved_type[full]))
   })
   feats <- purrr::reduce(purrr::map(parts, 'features'), rbind)
@@ -146,6 +151,72 @@ summarize_disturbance <- function(features) {
     s[, source := sub('^features_(.*)\\.gpkg$', '\\1', basename(f))]
     data.table::setcolorder(s, 'source')
   }))
+}
+
+#' @title Combine every source's features into one lines and one polygons file
+#' @description For maps: the features of all sources (as used by the
+#'   layers: the template and its margin), with `region` (from `regions`),
+#'   `source`, `file`, `category`, `unpaved_type`, `year` (NA = every year) and
+#'   any columns the sources keep (e.g. Yukon feature_id, REF_ID, year_rule,
+#'   year_source; blank for the others).
+#' @param features named character. GeoPackages from [prep_disturbance_features()],
+#'   named by source.
+#' @param cb named list. `landscape: disturbance: combined:` settings:
+#'   `regions` (source: region code) and `files` (`lines` and `areal` file names).
+#' @param out_dir character. Folder to write to.
+#' @return character. The lines and polygons GeoPackages.
+#' @author Julie W. Turner
+combine_disturbance_features <- function(features, cb, out_dir) {
+  reproducible::checkPath(out_dir, create = TRUE)
+  x <- purrr::imap(features, function(f, nm) {
+    s <- sf::st_read(f, layer = 'disturbance', quiet = TRUE)
+    s$source <- nm
+    s$region <- unlist(cb$regions)[nm] %||% NA_character_
+    s
+  })
+  cols <- unique(unlist(purrr::map(x, function(s) setdiff(names(s), attr(s, 'sf_column')))))
+  x <- purrr::map(x, function(s) {
+    for (k in setdiff(cols, names(s))) s[[k]] <- NA_character_
+    s[, cols]
+  })
+  x <- purrr::reduce(x, rbind)
+  first <- c('region', 'source', 'file', 'category', 'unpaved_type', 'year')
+  x <- x[, c(first, setdiff(cols, first))]
+  dim <- sf::st_dimension(x)
+  files <- file.path(out_dir, c(cb$files$lines %||% 'combined_linear.gpkg', cb$files$areal %||% 'combined_areal.gpkg'))
+  unlink(files)
+  sf::st_write(x[dim %in% 1, ], files[1], layer = 'linear', quiet = TRUE)
+  sf::st_write(x[dim %in% 2, ], files[2], layer = 'areal', quiet = TRUE)
+  files
+}
+
+#' @title Upload the combined disturbance files to the restricted Drive folder
+#' @description Zips each of the two files from [combine_disturbance_features()]
+#'   (target `disturb_combined`; e.g. NMC_linear_combined.gpkg as
+#'   NMC_linear_combined.zip) and puts the zips in `landscape: disturbance:
+#'   combined: upload_folder:`, replacing files of the same name in place, so
+#'   their links stay the same.
+#'   The folder must not be shared with anyone with the link (the Yukon work
+#'   packages are not public). Run by hand, not by the pipeline.
+#' @param project character. Project name, e.g. "NMC".
+#' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
+#' @author Julie W. Turner
+upload_combined_disturbance <- function(project = Sys.getenv('TAR_PROJECT')) {
+  cfg <- read_config(project)
+  cb <- cfg$landscape$disturbance$combined
+  if (is.null(cb$upload_folder)) stop('Set landscape: disturbance: combined: upload_folder: in config/', project, '.yaml', call. = FALSE)
+  if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
+  files <- file.path(cfg$paths$outputs, project, 'derived', 'combined', c(cb$files$lines, cb$files$areal))
+  if (!all(file.exists(files))) stop('Not found (run the pipeline first): ', paste(files[!file.exists(files)], collapse = ', '),
+                                     call. = FALSE)
+  up <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'derived', 'combined', 'upload'), create = TRUE)
+  zips <- file.path(up, sub('[.]gpkg$', '.zip', basename(files)))
+  for (i in seq_along(files)) {
+    if (file.exists(zips[i])) file.remove(zips[i])
+    utils::zip(zips[i], files[i], flags = '-jq')
+  }
+  upload_to_drive(zips, cb$upload_folder,
+                  'The combined disturbance folder is shared with anyone with the link; the Yukon work packages are not public. Restrict it first.')
 }
 
 #' @title Write the disturbance summary table
@@ -303,7 +374,8 @@ feature_year <- function(d, fields, file = '') {
 disturbance_cells <- function(features, category, template) {
   empty <- data.table::data.table(cell = numeric(), year = integer())
   q <- sprintf("SELECT * FROM disturbance WHERE category = '%s'", gsub("'", "''", category))
-  x <- purrr::reduce(purrr::map(features, function(f) sf::st_read(f, query = q, quiet = TRUE)), rbind)
+  # only the year is needed (sources can keep different extra columns)
+  x <- purrr::reduce(purrr::map(features, function(f) sf::st_read(f, query = q, quiet = TRUE)[, 'year']), rbind)
   if (nrow(x) == 0) return(empty)
   # burn the year (1 = no year), earliest last so that it is the one kept
   x$burn <- ifelse(is.na(x$year), 1L, x$year)

@@ -483,6 +483,8 @@ the `files` wanted from it. Each file has:
   regular expression instead (e.g. `{match: {ReportClass: '^Paved'}}`); a rule
   can have both. A rule without `where` or `match` catches the rest.
   Category `drop` leaves features out (e.g. harvest, which comes from CanLaD).
+- `keep`: fields copied into the features (e.g. Yukon `feature_id`,
+  `REF_ID`, `year_rule`, `year_source`), for the combined files below.
 - `unpaved_type` (on a rule or the whole file) or `unpaved_type_field` (a
   field holding it): the kind of unpaved road, recorded on each feature and in
   the summary (for NMC: winter, resource or all-season). The layers are by
@@ -541,7 +543,15 @@ Government of Yukon's newer work packages (`R/yukon_disturbance.R`, after NMC_CE
 `border_check:` compares the merged Yukon lines with the B.C. and N.W.T.
 features where they meet the border: the gap to the nearest neighbour line and
 both sides' categories and years (`YT_border_pairs.csv`, `YT_border_summary.csv`).
-It is a table for reviewing Yukon years; it changes nothing.
+Yukon roads that line up with a B.C. road whose year built is known take that
+year (`years_from`).
+
+`combined:` writes every source's features (the area the layers use) to one
+lines and one polygons GeoPackage, for maps of results (target
+`disturb_combined`, in `outputs/<project>/derived/combined/`), with `region`,
+`source`, `file`, `category`, `unpaved_type`, `year` and the sources' `keep`
+columns. `upload_combined_disturbance()` (run by hand) replaces the files of
+the same name in `upload_folder`.
 
 Each download is kept in `paths: input_cache` and is not downloaded again
 (`prepInputs()` does not check the web for a newer version). To pick up an

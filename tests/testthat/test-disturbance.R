@@ -188,3 +188,25 @@ test_that('rules can match patterns and give unpaved roads a type', {
                rep('resource', 6))
   expect_equal(disturbance_unpaved_type(d, list(file = 'x', category = 'unpaved', unpaved_type_field = 'Use'), rep(NA_integer_, 6)), d$Use)
 })
+
+test_that('kept columns and the combined lines and polygons files', {
+  dir <- withr::local_tempdir()
+  g <- d_grid(dir)
+  src_files <- d_source(dir)
+  ka <- d_src; ka$files[[1]]$keep <- list('Type')
+  a <- prep_disturbance_features(src_files, ka, list(), g$margin, 'EPSG:3154', file.path(dir, 'out', 'features_a.gpkg'))
+  expect_true('Type' %in% names(sf::st_read(a, layer = 'disturbance', quiet = TRUE)))
+  p <- sf::st_sf(id = 1, geometry = sf::st_sfc(sf::st_polygon(list(rbind(c(10, 10), c(50, 10), c(50, 50), c(10, 10)))), crs = 'EPSG:3154'))
+  pf <- file.path(dir, 'polys.gpkg'); sf::st_write(p, pf, quiet = TRUE)
+  b <- prep_disturbance_features(pf, list(url = 'x', files = list(list(file = 'polys.gpkg', category = 'otherpoly'))), list(),
+                                 g$margin, 'EPSG:3154', file.path(dir, 'out', 'features_b.gpkg'))
+  f <- combine_disturbance_features(c(a = a, b = b), list(regions = list(a = 'YT', b = 'BC'),
+                                    files = list(lines = 'lines.gpkg', areal = 'areal.gpkg')), file.path(dir, 'combined'))
+  l <- sf::st_read(f[1], quiet = TRUE); r <- sf::st_read(f[2], quiet = TRUE)
+  expect_equal(nrow(l), 4); expect_equal(nrow(r), 1)
+  expect_equal(unique(l$region), 'YT'); expect_equal(r$region, 'BC')
+  expect_true(is.na(r$Type))
+  expect_equal(names(l)[1:6], c('region', 'source', 'file', 'category', 'unpaved_type', 'year'))
+  # sources with different kept columns stack fine for the cells
+  expect_equal(nrow(disturbance_cells(c(a, b), 'paved', g$margin)), 18)
+})
