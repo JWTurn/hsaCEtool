@@ -57,14 +57,26 @@ upload_premade <- function(project = Sys.getenv('TAR_PROJECT'), zips = NULL) {
   if (is.null(cfg$locations$premade_folder)) stop('Set locations: premade_folder: in config/', project, '.yaml', call. = FALSE)
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
   zips <- zips %||% list.files(file.path(cfg$paths$outputs, project, 'premade'), pattern = '[.]zip$', full.names = TRUE)
-  folder <- googledrive::drive_get(googledrive::as_id(cfg$locations$premade_folder))
+  upload_to_drive(zips, cfg$locations$premade_folder,
+                  'The premade folder is shared with anyone with the link; caribou locations must not be. Restrict it first.')
+}
+
+#' @title Upload files to a restricted Drive folder, replacing files of the same name
+#' @description A file of the same name already in the folder is replaced in
+#'   place, so its link stays the same; a new name is uploaded as a new file.
+#'   Stops first if the folder is shared with anyone with the link.
+#' @param files character. Files to upload.
+#' @param folder character. Drive folder ID.
+#' @param public_msg character. Error message if the folder is shared with anyone with the link.
+#' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
+#' @keywords internal
+#' @noRd
+upload_to_drive <- function(files, folder, public_msg) {
+  folder <- googledrive::drive_get(googledrive::as_id(folder))
   perms <- googledrive::drive_reveal(folder, 'permissions')$permissions_resource[[1]]$permissions
-  if (any(purrr::map_lgl(perms, function(p) identical(p$type, 'anyone')))) {
-    stop('The premade folder is shared with anyone with the link; caribou locations must not be. Restrict it first.',
-         call. = FALSE)
-  }
+  if (any(purrr::map_lgl(perms, function(p) identical(p$type, 'anyone')))) stop(public_msg, call. = FALSE)
   have <- googledrive::drive_ls(folder)
-  out <- data.table::rbindlist(purrr::map(zips, function(z) {
+  out <- data.table::rbindlist(purrr::map(files, function(z) {
     hit <- have[have$name == basename(z), ]
     f <- if (nrow(hit) == 1) googledrive::drive_update(hit, media = z) else googledrive::drive_upload(z, path = folder)
     data.table::data.table(name = basename(z), action = if (nrow(hit) == 1) 'updated' else 'uploaded',

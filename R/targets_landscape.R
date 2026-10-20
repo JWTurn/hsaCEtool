@@ -44,7 +44,7 @@ targets_landscape <- function(cfg) {
     out <- c(out, targets_templates(isTRUE(cfg$locations$study_area$extended$freeze)),
              targets_harvest(built, web_cue, need_history = reset),
              targets_landcover(built, cfg$landscape$landcover$window_m, web_cue),
-             targets_disturbance(built, cfg$landscape$disturbance),
+             targets_disturbance(built, cfg$landscape$disturbance, cfg$config_dir),
              targets_terrain(built, cfg$landscape$terrain, web_cue),
              targets_fire(built, cfg$landscape$fire, need_history = reset, age_first = age_first),
              targets_forest_age(built, cfg$landscape$forest_age, web_cue))
@@ -196,11 +196,21 @@ targets_landcover <- function(built, window_m, web_cue = tar_cue()) {
 #'   are written into its own targets, so changing one source's rules reruns
 #'   only that source.
 #' @param built data.table. The layer-table rows with a `build`.
+#'
+#'   With `yukon_merge: build: true`, one download target per Yukon input,
+#'   file targets for its patch and fix tables, and `yukon_merged`
+#'   ([merge_yukon_disturbance()]), whose files the sources with `from:
+#'   yukon_merge` read (through `yukon_final`) instead of their download. With
+#'   `border_check:`, `yukon_border_check` compares the merged Yukon lines with
+#'   the neighbours' at the borders ([check_yukon_borders()]), written by
+#'   `yukon_border_check_files`, and `yukon_final` gives Yukon roads meeting a
+#'   neighbour road its year ([apply_border_years()]).
 #' @param dcfg named list. `landscape: disturbance:`.
+#' @param config_dir character. Folder of the settings files (for the Yukon tables).
 #' @return list of targets.
 #' @keywords internal
 #' @noRd
-targets_disturbance <- function(built, dcfg) {
+targets_disturbance <- function(built, dcfg, config_dir = 'config') {
   rows <- built[startsWith(build, 'disturb_')]
   if (nrow(rows) == 0) return(list())
   download <- function(nm, url, files, folder, refresh) {
@@ -215,6 +225,28 @@ targets_disturbance <- function(built, dcfg) {
     lk <- dcfg$lookups[[nm]]
     out <- c(out, list(download(paste0('disturb_lookup_', nm), lk$url, lk$target_file, nm, lk$refresh)))
   }
+  # merged Yukon disturbance, built from its inputs (R/yukon_disturbance.R)
+  ym <- dcfg$yukon_merge
+  merged <- isTRUE(ym$build)
+  if (merged) {
+    for (nm in names(ym$inputs)) {
+      inp <- ym$inputs[[nm]]
+      out <- c(out, list(download(paste0('yukon_input_', nm), inp$url, inp$file, file.path('yukon_merge', nm), inp$refresh)))
+    }
+    tables <- list(yukon_patches_file = ym$patches, yukon_fixes_file = ym$fixes)
+    for (nm in names(tables)) {
+      if (!is.null(tables[[nm]])) out <- c(out, list(tar_target_raw(nm, file.path(config_dir, tables[[nm]]), format = 'file')))
+    }
+    inputs <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('yukon_input_', names(ym$inputs)), as.symbol),
+                                                     names(ym$inputs))))
+    out <- c(out, list(tar_target_raw('yukon_merged', substitute(
+      merge_yukon_disturbance(INPUTS, YM, PATCHES, FIXES, cfg_project$crs,
+                              file.path(cfg_paths$outputs, cfg_project$name, 'derived', 'merge')),
+      list(INPUTS = inputs, YM = ym[setdiff(names(ym), c('inputs', 'build', 'upload_folder', 'patches', 'fixes'))],
+           PATCHES = if (!is.null(ym$patches)) quote(yukon_patches_file),
+           FIXES = if (!is.null(ym$fixes)) quote(yukon_fixes_file))),
+      format = 'file')))
+  }
   features <- character()
   for (nm in names(dcfg$sources)) {
     src <- dcfg$sources[[nm]]
@@ -222,12 +254,14 @@ targets_disturbance <- function(built, dcfg) {
     ft_nm <- paste0('disturb_features_', nm)
     used <- unique(unlist(purrr::map(src$files, function(f) f$lookup$table)))
     lookups <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('disturb_lookup_', used), as.symbol), used)))
+    from_merge <- merged && identical(src$from, 'yukon_merge')
+    if (!from_merge) out <- c(out, list(download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm, src$refresh)))
     out <- c(out, list(
-      download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm, src$refresh),
       tar_target_raw(ft_nm, substitute(
         prep_disturbance_features(DL, SRC, LOOKUPS, template_margin, cfg_project$crs,
                                   file.path(landscape_dir, 'disturbance', FILE)),
-        list(DL = as.symbol(dl_nm), SRC = src, LOOKUPS = lookups, FILE = paste0('features_', nm, '.gpkg'))),
+        list(DL = if (from_merge) quote(yukon_final) else as.symbol(dl_nm), SRC = if (from_merge) src[setdiff(names(src), 'url')] else src,
+             LOOKUPS = lookups, FILE = paste0('features_', nm, '.gpkg'))),
         format = 'file')
     ))
     features <- c(features, ft_nm)
@@ -239,6 +273,30 @@ targets_disturbance <- function(built, dcfg) {
                    quote(write_disturbance_summary(disturb_summary, file.path(cfg_paths$outputs, cfg_project$name))),
                    format = 'file')
   ))
+  bc <- dcfg$border_check
+  if (merged && is.null(bc)) {
+    out <- c(out, list(tar_target_raw('yukon_final', quote(
+      apply_border_years(yukon_merged, NULL, list(), file.path(cfg_paths$outputs, cfg_project$name, 'derived'))),
+      format = 'file')))
+  }
+  if (merged && !is.null(bc)) {
+    nb <- names(bc$sources)
+    feats <- as.call(c(quote(c), stats::setNames(purrr::map(paste0('disturb_features_', nb), as.symbol), nb)))
+    out <- c(out, list(
+      download('yukon_input_borders', bc$borders$url, bc$borders$file, file.path('yukon_merge', 'borders'), bc$borders$refresh),
+      tar_target_raw('yukon_border_check', substitute(
+        check_yukon_borders(yukon_merged[1], FEATS, yukon_input_borders[1], BC, cfg_project$crs),
+        list(FEATS = feats, BC = bc[setdiff(names(bc), 'borders')]))),
+      tar_target_raw('yukon_border_check_files',
+                     quote(write_border_check(yukon_border_check, file.path(cfg_paths$outputs, cfg_project$name, 'derived'))),
+                     format = 'file'),
+      # Yukon roads meeting a neighbour's road with a known year take that year
+      tar_target_raw('yukon_final', substitute(
+        apply_border_years(yukon_merged, yukon_border_check, BC, file.path(cfg_paths$outputs, cfg_project$name, 'derived')),
+        list(BC = bc[setdiff(names(bc), 'borders')])),
+        format = 'file')
+    ))
+  }
   for (cl in unique(rows$class)) {
     cr <- rows[class == cl]
     hist_nm <- paste0('disturb_history_', cl)

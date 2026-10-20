@@ -479,8 +479,14 @@ the `files` wanted from it. Each file has:
 
 - `category`: one category for all its features, or `rules`: a list of
   `{where: {field: value(s)}, category: ...}`, checked in order; the first
-  that matches gives the category. A rule without `where` catches the rest.
+  that matches gives the category. `match: {field: pattern}` matches a
+  regular expression instead (e.g. `{match: {ReportClass: '^Paved'}}`); a rule
+  can have both. A rule without `where` or `match` catches the rest.
   Category `drop` leaves features out (e.g. harvest, which comes from CanLaD).
+- `unpaved_type` (on a rule or the whole file) or `unpaved_type_field` (a
+  field holding it): the kind of unpaved road, recorded on each feature and in
+  the summary (for NMC: winter, resource or all-season). The layers are by
+  category only.
 - `year`: fields giving the year built, in order of preference (a year or a
   date). None, or all empty: the feature counts in every year.
 - `lookup`: optionally, columns added from a table in `landscape: disturbance:
@@ -496,6 +502,46 @@ category (dropped ones included), with their total length (km, lines) or area
 feature's type is the values of the fields its rules look at (e.g.
 `feature_type=placer`). Features are those overlapping the template with its
 margin, measured whole.
+
+#### Merged Yukon disturbance (`yukon_merge:`)
+
+With `yukon_merge: build: true`, the Yukon sources (`from: yukon_merge`) read
+files the pipeline builds by merging GeoYukon surface disturbance with the
+Government of Yukon's newer work packages (`R/yukon_disturbance.R`, after NMC_CEtool
+`scripts/prep-disturb-cleaned.R`):
+
+- Types are grouped with the reclassification sheet (v4 and v5 types), plus
+  `config/yukon_reclass_patches.csv` for types missing from it or fixes to it.
+- Inside each work package's area, a GeoYukon feature is replaced only where a
+  work-package feature lies within `new_feature_buffer_m` (20 m) of it; features
+  the work package did not map again are kept. Of a feature found in
+  overlapping work packages (same REF_ID, same place), one copy is kept: the
+  latest, with the earliest image year. Features Yukon's QA marked for deletion
+  are left out.
+- Years built (`year_start`, `year_end`, with `year_rule` and `year_source` on
+  every feature): reported years first (quartz mine production, matched to
+  the mine polygon holding the point or the nearest within `mine_max_m`; and
+  `config/yukon_year_fixes.csv`, by REF_ID). Image years are used only for
+  features that are new in a work package (more than 20 m from anything on the
+  earlier GeoYukon map) in an area GeoYukon had already mapped from older
+  imagery: they count from the image year. That is the year they had been
+  built by (seen on the image), not the year they were built. Pieces smaller
+  than `min_new_size_m` are ignored. Every other feature (on both maps, or
+  outside GeoYukon's mapped areas) has no year: it is assumed to have been
+  there the whole time and counts in every year. Features keep counting after
+  `year_end`.
+- Outputs, in `outputs/<project>/derived/`: `YT_linear.gpkg`, `YT_areal.gpkg`,
+  `YT_merge_log.csv` (features by source, type and year rule) and
+  `YT_cleaning_log.csv` (every feature changed or left out, and why, to report
+  back to the data owners).
+- `upload_yukon_disturbance()` (run by hand) zips the two GeoPackages with the
+  cleaning log and replaces the files of the same name in `upload_folder`, so
+  the sources' `url` links keep working for runs with `build: false`.
+
+`border_check:` compares the merged Yukon lines with the B.C. and N.W.T.
+features where they meet the border: the gap to the nearest neighbour line and
+both sides' categories and years (`YT_border_pairs.csv`, `YT_border_summary.csv`).
+It is a table for reviewing Yukon years; it changes nothing.
 
 Each download is kept in `paths: input_cache` and is not downloaded again
 (`prepInputs()` does not check the web for a newer version). To pick up an
