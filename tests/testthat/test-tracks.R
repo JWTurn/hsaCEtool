@@ -50,3 +50,45 @@ test_that('prep_steps drops tracks with fewer than min_steps used steps left', {
   expect_equal(unique(out$id), 'a')
   expect_equal(nrow(out[case_ == TRUE]), 25)
 })
+
+test_that('zero-length steps get the shortest step length and a direction, so no angle is missing', {
+  t0 <- as.POSIXct('2020-03-01', tz = 'UTC')
+  # fixes 3 and 4 are at the same place (a zero-length step), made-up positions
+  xs <- c(0, 100, 250, 250, 400, 600, 650, 900)
+  ys <- c(0, 50, 0, 0, 100, 50, 200, 100)
+  trk <- amt::make_track(data.frame(x = 5e5 + xs, y = 6.7e6 + ys, t = t0 + (0:7) * 3600), x, y, t, crs = 3154)
+  s <- amt::steps(trk)
+  s$burst_ <- 1L
+  expect_true(any(s$sl_ == 0))
+  expect_gt(sum(is.na(s$ta_)), 1)   # amt leaves the zero step's angle and the next one's missing
+  set.seed(1)
+  out <- fix_zero_steps(s, 'random')
+  expect_equal(out$sl_[s$sl_ == 0], min(s$sl_[s$sl_ > 0]))
+  expect_equal(sum(is.na(out$ta_)), 1L)   # only the first step (no step before it)
+  expect_true(all(abs(out$ta_[-1]) <= pi))
+  expect_identical(out$x2_, s$x2_)        # positions unchanged
+  z <- which(s$sl_ == 0)
+  expect_equal(fix_zero_steps(s, 'zero')$ta_[z], 0)
+  # the next step's angle follows from the direction given
+  w <- function(a) (a + pi) %% (2 * pi) - pi
+  expect_equal(out$ta_[z + 1], w(out$direction_p[z + 1] - out$direction_p[z]))
+})
+
+test_that('steps are kept only inside an area: whole steps by the used step, random steps by their end', {
+  sq <- function(x0, y0, w) sf::st_polygon(list(rbind(c(x0, y0), c(x0 + w, y0), c(x0 + w, y0 + w), c(x0, y0 + w), c(x0, y0))))
+  area <- sf::st_sfc(sq(0, 0, 1000), crs = 3154)   # made-up area; outside it is x > 1000
+  DT <- data.table(id = 'a', step_id_ = rep(1:3, each = 3), case_ = rep(c(TRUE, FALSE, FALSE), 3),
+                   x1_ = c(100, 100, 100, 500, 500, 500, 1500, 1500, 1500), y1_ = 500,
+                   x2_ = c(200, 300, 1200,  1100, 600, 700,  900, 800, 700), y2_ = 500)
+  # step 1: one random step ends outside; step 2: the used step ends outside; step 3: starts outside
+  out <- keep_steps_within(DT, area)
+  expect_equal(out$step_id_, c(1L, 1L))
+  expect_equal(attr(out, 'outside_area')$n, c(2L, 1L))
+  expect_equal(nrow(keep_steps_within(DT, NULL)), 9L)
+  # the area from a polygon file, keeping some polygons by a field
+  f <- file.path(withr::local_tempdir(), 'juris.gpkg')
+  sf::st_write(sf::st_sf(name = c('In', 'Out'), geometry = sf::st_sfc(sq(0, 0, 1000), sq(1000, 0, 1000), crs = 3154)), f, quiet = TRUE)
+  a <- make_steps_area(f, list(field = 'name', keep = list('In')), 'EPSG:3154')
+  expect_equal(as.numeric(sf::st_area(a)), 1e6)
+  expect_error(make_steps_area(f, list(field = 'name', keep = list('Elsewhere')), 'EPSG:3154'), 'not in name')
+})

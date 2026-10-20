@@ -7,7 +7,19 @@
 #' @return list of targets.
 #' @author Julie W. Turner
 targets_tracks <- function(cfg) {
-  list(
+  # steps kept only inside an area (tracks: within:), e.g. the jurisdictions the layers cover
+  within <- cfg$tracks$within
+  area_targets <- if (length(within)) list(
+    tar_target_raw('steps_area_file', substitute(get_source(SRC, cfg_paths), list(SRC = within[setdiff(names(within), c('field', 'keep'))])),
+                   format = 'file'),
+    tar_target(steps_area, make_steps_area(steps_area_file, cfg_tracks$within, cfg_project$crs))
+  )
+  steps_target <- if (length(within)) {
+    tar_target(steps, prep_steps(randsteps, cfg_tracks, steps_area))
+  } else {
+    tar_target(steps, prep_steps(randsteps, cfg_tracks))
+  }
+  out <- list(
     # only the years being analysed (and, for test runs, part of the data)
     tar_target(locations_years,
                filter_years(locations, cfg_tracks$min_year, cfg_tracks$max_year) |>
@@ -27,7 +39,8 @@ targets_tracks <- function(cfg) {
                                tolerance = lubridate::minutes(cfg_tracks$tolerance_minutes),
                                probsfilter = cfg_tracks$max_step_quantile,
                                min_burst_n = cfg_tracks$min_burst_n,
-                               min_steps = cfg_tracks$min_steps),
+                               min_steps = cfg_tracks$min_steps,
+                               zero_ta = cfg_tracks$zero_step_ta %||% 'random'),
                pattern = map(tracks)),
 
     # distributions fitted to all animals' steps together
@@ -40,9 +53,11 @@ targets_tracks <- function(cfg) {
 
     tar_target(distparams, calc_distribution_parameters(randsteps), pattern = map(randsteps)),
 
-    tar_target(steps, prep_steps(randsteps, cfg_tracks)),
+    steps_target,
+    tar_target(steps_outside_area, attr(steps, 'outside_area')),
     tar_target(step_years, sort(unique(steps$year))),
 
     tar_target(step_buffer, calc_step_buffer(steps, cfg_tracks$buffer_round_m))
   )
+  c(out, area_targets)
 }
