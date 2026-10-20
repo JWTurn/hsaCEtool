@@ -160,14 +160,15 @@ write_animal_codes <- function(codes, out_dir) {
 }
 
 #' @title Steps used by one model
-#' @description Keeps the steps in `subset` and the model's seasons, and each
-#'   used step with its first `n_random` random steps. Adds `season` and
-#'   `yearseason` (e.g. 2019_winter).
+#' @description Keeps the steps in `subset` and the model's seasons, each used
+#'   step with all its random steps ([build_model_data()] picks the first
+#'   `n_random` with no missing values). Adds `season` and `yearseason` (e.g.
+#'   2019_winter).
 #' @param steps data.table from [prep_steps()].
 #' @param model named list. One model's settings.
 #' @param seasons named list. `model: seasons:`.
 #' @param cols character. Step columns to keep.
-#' @return data.table with `row` (row number in `steps`).
+#' @return data.table with `row` (row number in `steps`), in the order of `steps`.
 #' @author Julie W. Turner
 select_model_steps <- function(steps, model, seasons, cols) {
   rows <- seq_len(nrow(steps))
@@ -184,9 +185,6 @@ select_model_steps <- function(steps, model, seasons, cols) {
   s[, yearseason := paste(year, season, sep = '_')]
   wanted <- unlist(model$seasons %||% 'all')
   if (!identical(wanted, 'all')) s <- s[season %in% wanted]
-  s[, .k := cumsum(!case_), by = indiv_step_id]
-  s <- s[case_ | .k <= model$n_random]
-  s[, .k := NULL]
   s <- s[indiv_step_id %in% s[case_ == TRUE, indiv_step_id]]
   s[, t1_ := NULL]
   s[]
@@ -249,8 +247,8 @@ read_extracted <- function(files, cols, rows) {
 #' @title Make one model's table
 #' @description Builds the table a model is fitted to, with only what its
 #'   formula uses:
-#'   1. steps in the model's `subset` and `seasons`, each used step with its
-#'      first `n_random` random steps ([select_model_steps()]);
+#'   1. steps in the model's `subset` and `seasons`, each used step with all
+#'      its random steps ([select_model_steps()]);
 #'   2. the covariates in the formula, read from the extracted values; groups
 #'      from `model: groups:` are made here (e.g. `prop_forest_240_end`);
 #'   3. distances far from a disturbance (`model: distance_cap:`): for each
@@ -258,19 +256,24 @@ read_extracted <- function(files, cols, rows) {
 #'      `beyond_km` from that disturbance (its `_start` value) gets `set_to_km`
 #'      for the used step and all its random steps. The start is the same for
 #'      all of them, so this does not depend on where the animal went;
-#'   4. rows with missing values are dropped, with a warning naming the columns:
-#'      the whole step where the used step has one, otherwise only the random step;
-#'   5. animal IDs are replaced by codes, and the table is checked for
+#'   4. missing values, with a warning naming the columns: a step whose used
+#'      step has one is dropped; a random step with one is skipped, and the
+#'      next random step is used instead;
+#'   5. each used step keeps its first `n_random` random steps with no missing
+#'      values (fewer only if not enough are left; counted in the log);
+#'   6. animal IDs are replaced by codes, and the table is checked for
 #'      positions and times.
-#'   Text columns stay text here; [fit_issa()] makes them factors just before
-#'   fitting.
+#'   Steps 2 to 5 are done one year (extracted file) at a time, to limit
+#'   memory; a used step and its random steps share a year (of the step's
+#'   end), so they are always in the same file. Text columns stay text here;
+#'   [fit_issa()] makes them factors just before fitting.
 #' @param steps data.table from [prep_steps()].
 #' @param files character. Parquet files from [write_extracted_year()].
 #' @param codes data.table from [make_animal_codes()].
 #' @param common named list. `model:` settings `seasons`, `groups` and `distance_cap`.
 #' @param model named list. This model's settings (formula, n_random, seasons, subset).
-#' @return list: `data` (data.table) and `log` (data.table: what was kept,
-#'   adjusted and dropped).
+#' @return list: `data` (data.table, in the order of `steps`) and `log`
+#'   (data.table: what was kept, adjusted and dropped).
 #' @author Julie W. Turner
 build_model_data <- function(steps, files, codes, common, model) {
   f <- model_formula(model$formula)
@@ -280,7 +283,7 @@ build_model_data <- function(steps, files, codes, common, model) {
   cov <- setdiff(vars, c(step_vars, derived))
   s <- select_model_steps(steps, model, common$seasons %||% list(), unique(c('id', step_vars)))
   log <- list(data.table::data.table(what = 'steps kept (used)', n = s[case_ == TRUE, .N]),
-              data.table::data.table(what = 'rows kept (used + random)', n = nrow(s)))
+              data.table::data.table(what = 'rows available (used + all random)', n = nrow(s)))
 
   # covariates: extracted columns, groups made from them, and the start values the cap uses
   cap <- common$distance_cap
@@ -296,39 +299,66 @@ build_model_data <- function(steps, files, codes, common, model) {
          '. Use layer names with resolution and _start or _end (see outputs/<project>/availability.csv),',
          ' or groups from model: groups:', call. = FALSE)
   }
-  s <- read_extracted(files, need, s$row)[s, on = 'row']
   grouped <- purrr::keep(src, function(x) !is.null(x$rule))
-  values <- purrr::map(grouped, function(x) combine_columns(s, x$cols, x$rule))
-  for (v in names(values)) data.table::set(s, j = v, value = values[[v]])
-  rm(values)
-
-  # distance cap, by where each step starts
-  for (i in seq_along(capped)) {
-    v <- capped[i]
-    st <- s[[starts[i]]]
-    far <- unique(s$indiv_step_id[s$case_ & !is.na(st) & st > cap$beyond_km * 1000])
-    data.table::set(s, j = v, value = as.numeric(s[[v]]))
-    data.table::set(s, i = which(s$indiv_step_id %in% far), j = v, value = cap$set_to_km * 1000)
-    log[[length(log) + 1]] <- data.table::data.table(
-      what = paste0(v, ': steps starting > ', cap$beyond_km, ' km away, set to ', cap$set_to_km, ' km'), n = length(far))
-  }
-
-  # missing values
   keep_cols <- unique(c('case_', 'indiv_step_id', 'id', setdiff(vars, 'id')))
-  na_row <- !stats::complete.cases(s[, intersect(setdiff(keep_cols, 'id'), names(s)), with = FALSE])
-  if (any(na_row)) {
-    cols <- intersect(setdiff(keep_cols, 'id'), names(s))
-    nas <- purrr::map(cols, function(cl) c(used = sum(is.na(s[[cl]]) & s$case_), random = sum(is.na(s[[cl]]) & !s$case_)))
-    nas <- stats::setNames(nas, cols)[purrr::map_lgl(nas, function(n) sum(n) > 0)]
-    warning('model table has missing values (dropped; see the data log): ',
+  check_cols <- setdiff(keep_cols, 'id')
+  n_random <- model$n_random
+
+  # one year at a time
+  parts <- purrr::map(files, function(fl) {
+    x <- read_extracted(fl, need, s$row)
+    if (!nrow(x)) return(NULL)
+    x <- x[s, on = 'row', nomatch = NULL]
+    data.table::setorder(x, row)
+    for (v in names(grouped)) data.table::set(x, j = v, value = combine_columns(x, grouped[[v]]$cols, grouped[[v]]$rule))
+
+    # distance cap, by where each step starts
+    n_far <- purrr::map_int(seq_along(capped), function(i) {
+      v <- capped[i]
+      st <- x[[starts[i]]]
+      far <- unique(x$indiv_step_id[x$case_ & !is.na(st) & st > cap$beyond_km * 1000])
+      data.table::set(x, j = v, value = as.numeric(x[[v]]))
+      data.table::set(x, i = which(x$indiv_step_id %in% far), j = v, value = cap$set_to_km * 1000)
+      length(far)
+    })
+
+    # missing values: drop the step at a used step, skip the row at a random step
+    na_row <- !stats::complete.cases(x[, check_cols, with = FALSE])
+    nas <- purrr::map(check_cols, function(cl) c(used = sum(is.na(x[[cl]]) & x$case_), random = sum(is.na(x[[cl]]) & !x$case_)))
+    bad <- unique(x$indiv_step_id[x$case_ & na_row])
+    skipped <- sum(na_row & !x$case_ & !x$indiv_step_id %in% bad)
+    x <- x[!na_row & !indiv_step_id %in% bad, c('row', keep_cols), with = FALSE]
+
+    # first n_random complete random steps of each step
+    x[, .k := cumsum(!case_), by = indiv_step_id]
+    x <- x[case_ | .k <= n_random]
+    x[, .k := NULL]
+    list(data = x, n_far = n_far, nas = nas, bad = length(bad), skipped = skipped)
+  })
+  parts <- purrr::compact(parts)
+  s <- data.table::rbindlist(purrr::map(parts, 'data'))
+  data.table::setorder(s, row)
+  s[, row := NULL]
+
+  for (i in seq_along(capped)) {
+    log[[length(log) + 1]] <- data.table::data.table(
+      what = paste0(capped[i], ': steps starting > ', cap$beyond_km, ' km away, set to ', cap$set_to_km, ' km'),
+      n = sum(purrr::map_int(parts, function(p) p$n_far[i])))
+  }
+  nas <- purrr::map(seq_along(check_cols), function(j) Reduce(`+`, purrr::map(parts, function(p) p$nas[[j]])))
+  nas <- stats::setNames(nas, check_cols)[purrr::map_lgl(nas, function(n) sum(n) > 0)]
+  if (length(nas)) {
+    warning('model table has missing values (steps dropped or random steps replaced; see the data log): ',
             paste(sprintf('%s (%d used, %d random)', names(nas), purrr::map_int(nas, 1), purrr::map_int(nas, 2)), collapse = '; '),
             call. = FALSE)
   }
-  bad <- unique(s$indiv_step_id[s$case_ & na_row])
+  n_rand <- s[, .(n = sum(!case_)), by = indiv_step_id]
   log[[length(log) + 1]] <- data.table::data.table(
-    what = c('steps dropped: missing value at the used step', 'random steps dropped: missing value'),
-    n = c(length(bad), sum(na_row & !s$case_ & !s$indiv_step_id %in% bad)))
-  s <- s[!na_row & !indiv_step_id %in% bad, intersect(keep_cols, names(s)), with = FALSE]
+    what = c('steps dropped: missing value at the used step',
+             'random steps skipped: missing value (later random steps used instead)',
+             paste0('steps with fewer than ', n_random, ' complete random steps')),
+    n = c(sum(purrr::map_int(parts, 'bad')), sum(purrr::map_int(parts, 'skipped')), n_rand[n < n_random, .N]))
+  rm(parts, n_rand)
 
   # animal codes in place of IDs
   s[codes, on = 'id', id := i.code]

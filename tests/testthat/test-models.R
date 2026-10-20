@@ -100,7 +100,7 @@ test_that('subsets, seasons and missing values in the model table', {
   r <- build_model_data(steps, files, codes, common, m)
   expect_setequal(unique(r$data$id), codes[id %in% c('a', 'b'), code])
   expect_true(all(grepl('_winter$', r$data$yearseason)))
-  # a missing value at a used step drops the whole step; at a random step, only that row
+  # a missing value at a used step drops the whole step; a random step with one is skipped
   v <- nanoparquet::read_parquet(files[1])
   v$prop_a_240_end[c(1, 8)] <- NA        # row 1 = used step of a_1; row 8 = random step of a_2
   v$prop_b_240_end[c(1, 8)] <- NA        # (a group is missing only where all its layers are)
@@ -108,9 +108,16 @@ test_that('subsets, seasons and missing values in the model table', {
   expect_warning(r <- build_model_data(steps, files, codes, common, list(formula = form, n_random = 5)),
                  'prop_ab_240_end \\(1 used, 1 random\\)')
   expect_equal(r$log[grepl('used step', what), n], 1L)
-  expect_equal(r$log[grepl('^random steps dropped', what), n], 1L)
+  expect_equal(r$log[grepl('^random steps skipped', what), n], 1L)
   expect_false('a_1' %in% r$data$indiv_step_id)
-  expect_equal(r$data[indiv_step_id == 'a_2', .N], 5L)
+  expect_equal(r$data[indiv_step_id == 'a_2', .N], 5L)   # only 4 complete random steps left
+  expect_equal(r$log[grepl('fewer than 5', what), n], 1L)
+  # with fewer random steps wanted than made, the skipped one is replaced by the next
+  r <- suppressWarnings(build_model_data(steps, files, codes, common, list(formula = form, n_random = 3)))
+  expect_equal(r$data[indiv_step_id == 'a_2', .N], 4L)
+  expect_equal(r$data[indiv_step_id == 'a_2' & !case_, prop_ab_240_end],
+               v$prop_a_240_end[9:11] + v$prop_b_240_end[9:11])
+  expect_equal(r$log[grepl('fewer than 3', what), n], 0L)
 })
 
 test_that('text and grouping columns become factors only at the end, with the levels present', {
