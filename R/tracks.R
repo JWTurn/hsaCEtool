@@ -7,6 +7,7 @@
 #' @param crs character. Project coordinate system.
 #' @return `track_xyt` with all columns kept.
 #' @author Julie W. Turner
+#' @export
 make_tracks <- function(DT, crs) {
   amt::make_track(DT, x_, y_, t_, crs = crs, all_cols = TRUE)
 }
@@ -14,7 +15,7 @@ make_tracks <- function(DT, crs) {
 #' @title Resample a track to a regular rate and make steps
 #' @description Resamples to one fix per `rate` (within `tolerance`), drops
 #'   bursts (runs of regular fixes) with fewer than `min_burst_n` fixes, turns
-#'   bursts into steps, fixes steps of zero length ([fix_zero_steps()]), and
+#'   bursts into steps, fixes steps of zero length (`fix_zero_steps()`), and
 #'   drops steps longer than the `probsfilter` quantile (unnaturally long steps).
 #' @param tracks `track_xyt` for one animal.
 #' @param rate,tolerance lubridate periods, e.g. `hours(11)`, `minutes(120)`.
@@ -24,9 +25,10 @@ make_tracks <- function(DT, crs) {
 #' @param min_steps integer. Tracks with fewer steps than this after resampling
 #'   return NULL. 20 is semi-arbitrary but should give robust estimates
 #'   (Street et al. MEE 2021).
-#' @param zero_ta character. Direction given to zero-length steps: see [fix_zero_steps()].
+#' @param zero_ta character. Direction given to zero-length steps: see `fix_zero_steps()`.
 #' @return `steps_xyt`, or NULL.
 #' @author Julie W. Turner
+#' @export
 resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 3, min_steps = 20, zero_ta = 'random') {
   t <- amt::track_resample(tracks, rate = rate, tolerance = tolerance) |>
     amt::filter_min_n_burst(min_n = min_burst_n)
@@ -50,6 +52,8 @@ resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 
 #' @param ta character. "random" or "zero".
 #' @return `s`, with `sl_`, `direction_p` and `ta_` filled in for zero-length steps.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 fix_zero_steps <- function(s, ta = 'random') {
   z <- which(s$sl_ == 0)
   pos <- s$sl_[!is.na(s$sl_) & s$sl_ > 0]
@@ -81,6 +85,7 @@ fix_zero_steps <- function(s, ta = 'random') {
 #'   NULL, fitted to this animal's own steps.
 #' @return `random_steps`, or NULL.
 #' @author Julie W. Turner
+#' @export
 make_random_steps <- function(DT, n_rand = 10, sl.distr = NULL, ta.distr = NULL) {
   if (is.null(DT) || nrow(DT) == 0) return()
   n <- table(DT$burst_)
@@ -95,6 +100,7 @@ make_random_steps <- function(DT, n_rand = 10, sl.distr = NULL, ta.distr = NULL)
 #' @param steps `random_steps` for one animal, or NULL.
 #' @return data.table with one row: the distribution parameters and `id`.
 #' @author Julie W. Turner
+#' @export
 calc_distribution_parameters <- function(steps) {
   if (is.null(steps)) return()
   tas <- amt::ta_distr_params(steps)
@@ -112,9 +118,10 @@ calc_distribution_parameters <- function(steps) {
 #' @param randsteps `random_steps` for all animals.
 #' @param trk_cfg named list. The `tracks:` settings.
 #' @param area sfc or NULL. If given, only steps inside it are kept
-#'   ([keep_steps_within()]); the counts dropped are in attribute `outside_area`.
+#'   (`keep_steps_within()`); the counts dropped are in attribute `outside_area`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 prep_steps <- function(randsteps, trk_cfg, area = NULL) {
   DT <- data.table::as.data.table(randsteps)
   DT[, `:=`(year = as.integer(format(t2_, '%Y', tz = 'UTC')))]
@@ -144,6 +151,8 @@ prep_steps <- function(randsteps, trk_cfg, area = NULL) {
 #' @return `DT` without those rows, with attribute `outside_area`: a data.table
 #'   of counts (used steps dropped, random steps dropped).
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 keep_steps_within <- function(DT, area) {
   none <- data.table::data.table(what = c('used steps dropped: start or end outside the area',
                                           'random steps dropped: end outside the area'), n = 0L)
@@ -187,6 +196,7 @@ keep_steps_within <- function(DT, area) {
 #' @param crs character. The project's coordinate system.
 #' @return sfc.
 #' @author Julie W. Turner
+#' @export
 make_steps_area <- function(file, within, crs) {
   a <- sf::st_read(file[tolower(tools::file_ext(file)) %in% c('shp', 'gpkg', 'geojson')][1], quiet = TRUE)
   if (!is.null(within$field)) {
@@ -210,6 +220,7 @@ make_steps_area <- function(file, within, crs) {
 #' @param round_m numeric.
 #' @return numeric.
 #' @author Julie W. Turner
+#' @export
 calc_step_buffer <- function(steps, round_m = 50) {
   floor(stats::median(steps$sl_, na.rm = TRUE) / round_m) * round_m
 }
@@ -221,6 +232,7 @@ calc_step_buffer <- function(steps, round_m = 50) {
 #' @param min_year,max_year integer, or NULL for no limit.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 filter_years <- function(DT, min_year, max_year) {
   yr <- as.integer(format(DT$t_, '%Y', tz = 'UTC'))
   DT[yr >= (min_year %||% -Inf) & yr <= (max_year %||% Inf)]
@@ -234,6 +246,7 @@ filter_years <- function(DT, min_year, max_year) {
 #' @param step_years integer. Years of the steps, or NULL when both are set.
 #' @return integer: first and last year.
 #' @author Julie W. Turner
+#' @export
 layer_year_range <- function(min_year, max_year, step_years = NULL) {
   as.integer(c(min_year %||% min(step_years), max_year %||% max(step_years)))
 }
@@ -243,7 +256,7 @@ layer_year_range <- function(min_year, max_year, step_years = NULL) {
 #' @param default integer. The year to use where blank.
 #' @return integer.
 #' @keywords internal
-#' @noRd
+#' @export
 fill_years <- function(x, default) {
   as.integer(ifelse(is.na(x), default, x))
 }
@@ -254,6 +267,7 @@ fill_years <- function(x, default) {
 #' @param distr character. Distribution name for `amt::fit_distr()`.
 #' @return fitted distribution.
 #' @author Julie W. Turner
+#' @export
 fit_step_distr <- function(resamples, column, distr) {
   if (NROW(resamples) == 0) {
     stop('No tracks are left after resampling: none had min_steps steps at rate_hours',

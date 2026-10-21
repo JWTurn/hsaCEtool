@@ -25,8 +25,11 @@ keeps each result, and reruns only steps whose code or inputs changed.
 - `R/` — package functions. `targets_*()` functions return lists of targets that a
   project's `_targets.R` combines; the other functions do the work.
 - `inst/config/` — `default.yaml` (every setting and its default) and its README.
-- `inst/extdata/` — settings tables bundled with the package (e.g. Yukon fixes).
-- `tests/testthat/` — unit tests with small, made-up inputs.
+- No restricted inputs: settings tables that may not be public (e.g. the Yukon
+  reclass patches and year fixes) stay in each project's `config/`, not here.
+- `tests/testthat/` — unit tests with small, made-up inputs; `fixtures/config/` is a
+  made-up project's settings (`test_config()` in `helper-source.R`).
+- Projects call `ce_session_setup()` near the top of `_targets.R`.
 
 ### Package rules
 

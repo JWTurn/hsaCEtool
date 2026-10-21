@@ -28,6 +28,8 @@
 #' @return data.table, one row per layer, with an added column `yearly`
 #'   (TRUE for a layer that changes by year).
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 read_layers <- function(file) {
   if (!file.exists(file)) stop('Layer table not found: ', file, call. = FALSE)
   text_cols <- intersect(c('path', 'url', 'target_file', 'archive', 'build', 'class'), names(data.table::fread(file, nrows = 0)))
@@ -83,6 +85,7 @@ read_layers <- function(file) {
 #' @param paths named list. The `paths:` settings.
 #' @return character. One file per year, in year order.
 #' @author Julie W. Turner
+#' @export
 get_layer_files <- function(path, url, target_file, archive, first_year, last_year, paths) {
   fill <- function(x, y) if (is.na(x)) NULL else gsub('{year}', y, x, fixed = TRUE)
   years <- if (is.na(first_year)) NA else first_year:last_year

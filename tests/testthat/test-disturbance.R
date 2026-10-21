@@ -165,7 +165,7 @@ test_that('pick_layer_files can fill years from the latest earlier layer', {
 })
 
 test_that('check_config catches disturbance classes no rule gives', {
-  cfg <- read_config('NMC', config_dir = testthat::test_path('..', '..', 'config'))
+  cfg <- test_config()
   cfg$layers[name == 'dist_paved_240', class := 'pavement']
   expect_error(check_config(cfg), 'class not given to any feature.*dist_paved_240')
 })

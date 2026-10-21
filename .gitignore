@@ -11,7 +11,8 @@
 hsaCEtool.Rcheck/
 
 # data files: caribou locations must never be committed (see AGENTS.md).
-# Settings tables bundled with the package (inst/extdata/*.csv) are allowed.
+# Settings tables bundled with the package (inst/extdata/*.csv) and made-up test
+# settings (tests/testthat/fixtures/config/*.csv) are allowed.
 _targets/
 inputs/
 outputs/
@@ -27,6 +28,7 @@ data/
 *.feather
 *.csv
 !inst/extdata/*.csv
+!tests/testthat/fixtures/config/*.csv
 *.txt.gz
 *.xlsx
 *.xls

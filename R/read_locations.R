@@ -1,7 +1,7 @@
 #' @title Read caribou locations from a file
 #' @description Reads a `.rds`, `.csv`, `.shp`, `.gpkg` or `.geojson` of GPS
 #'   fixes and puts it in the pipeline's standard form with
-#'   [standardize_locations()].
+#'   `standardize_locations()`.
 #' @param file character. Path from [get_source()] (only the first is read).
 #' @param src named list. This source's settings; its `columns`, `input_crs` and
 #'   `name` override the `locations:` defaults.
@@ -9,6 +9,7 @@
 #' @param crs character. Project coordinate system.
 #' @return data.table of locations.
 #' @author Julie W. Turner
+#' @export
 read_locations_file <- function(file, src, loc_cfg, crs) {
   file <- file[1]
   obj <- switch(tolower(tools::file_ext(file)),
@@ -24,7 +25,7 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #'   [reproducible::prepInputs()], e.g. from a Google Drive link. The file is
 #'   kept in `paths$inputs`, so it is only downloaded again if that copy is
 #'   missing or incomplete, or if the source has `refresh: true` (see
-#'   [prep_inputs_fresh()]). The function that reads it is the source's `fun`
+#'   `prep_inputs_fresh()`). The function that reads it is the source's `fun`
 #'   setting or, if not set, chosen from `target_file`'s type: `readRDS` for
 #'   .rds, `data.table::fread` for .csv, `sf::st_read` for .shp/.gpkg/.geojson.
 #' @inheritParams read_locations_file
@@ -32,6 +33,7 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #' @param paths named list. The `paths:` settings.
 #' @return data.table of locations.
 #' @author Julie W. Turner
+#' @export
 download_locations <- function(src, loc_cfg, crs, paths) {
   fun <- as_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
                              rds = 'readRDS',
@@ -80,6 +82,7 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
 #' @return character. Path to the saved file.
 #' @details Adapted from NMC_CEtool `scripts/1-DL-data.R` and caribouLocPrep `dataPrep_YT()`.
 #' @author Julie W. Turner
+#' @export
 download_movebank <- function(src, paths) {
   options(move2_movebank_key_name = 'movebank')
   for (wait in c(0, 60, 300)) {
@@ -111,6 +114,7 @@ download_movebank <- function(src, paths) {
 #'   Southern Lakes and Clear Creek studies).
 #' @return data.table of locations.
 #' @author Julie W. Turner
+#' @export
 read_movebank <- function(file, src, loc_cfg, crs) {
   dat <- readRDS(file)
   dat <- dat[!sf::st_is_empty(dat), ]   # records without a position
@@ -155,6 +159,7 @@ read_movebank <- function(file, src, loc_cfg, crs) {
 #' @param crs character. Project coordinate system.
 #' @return data.table of cleaned locations.
 #' @author Julie W. Turner
+#' @export
 read_premade_locations <- function(file, src, crs) {
   file <- file[1]
   if (tolower(tools::file_ext(file)) != 'rds') {
@@ -187,7 +192,7 @@ read_premade_locations <- function(file, src, crs) {
 #'   `datetime` is taken as the date and `hour` as the whole hour of the day,
 #'   in time zone `tz` (e.g. `America/Whitehorse` for Yukon local time,
 #'   which follows daylight saving until November 2020), and converted to UTC
-#'   with [local_to_utc()].
+#'   with `local_to_utc()`.
 #'
 #'   A source with `date_only: true` has dates but no times of day (e.g. the
 #'   Chisana and Redstone files). Its fixes are given noon UTC on their date
@@ -198,6 +203,8 @@ read_premade_locations <- function(file, src, crs) {
 #' @param DT data.frame of locations.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 standardize_locations <- function(DT, src, loc_cfg, crs) {
   DT <- data.table::as.data.table(DT)
   cols <- src$columns %||% loc_cfg$columns

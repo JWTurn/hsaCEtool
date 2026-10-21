@@ -19,6 +19,7 @@
 #' @inheritParams targets_config
 #' @return list of targets (empty if no models are set).
 #' @author Julie W. Turner
+#' @export
 targets_models <- function(cfg) {
   models <- cfg$model$models
   if (!length(models)) return(list())

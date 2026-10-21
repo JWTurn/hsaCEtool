@@ -11,6 +11,7 @@
 #'   study, herd).
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 make_step_groups <- function(steps, by = NULL) {
   by <- unlist(by)
   missing <- setdiff(by, names(steps))
@@ -40,6 +41,7 @@ make_step_groups <- function(steps, by = NULL) {
 #'   column), `n`, `min`, `mean`, `median`, `max`, `share_above_0` and
 #'   `share_missing`.
 #' @author Julie W. Turner
+#' @export
 summarize_availability <- function(files, name, groups, by = NULL) {
   by <- unlist(by)
   have <- nanoparquet::read_parquet_schema(files[1])$name
@@ -83,6 +85,7 @@ summarize_availability <- function(files, name, groups, by = NULL) {
 #' @param out_dir character. Folder to write to.
 #' @return character. The file written.
 #' @author Julie W. Turner
+#' @export
 write_availability <- function(availability, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, 'availability.csv')

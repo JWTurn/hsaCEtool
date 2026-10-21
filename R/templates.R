@@ -25,6 +25,7 @@
 #' @return character. Template files: the finest first, then one per factor in
 #'   the order of `tmpl$factors`.
 #' @author Julie W. Turner
+#' @export
 make_templates <- function(study_area, tmpl, crs, paths, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   fine_file <- file.path(out_dir, paste0('template_', tmpl$base_res, 'm.tif'))
@@ -79,6 +80,7 @@ make_templates <- function(study_area, tmpl, crs, paths, out_dir) {
 #' @param out character. File to write.
 #' @return `out`.
 #' @author Julie W. Turner
+#' @export
 make_margin_template <- function(template, margin_m, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
   r <- terra::rast(template)

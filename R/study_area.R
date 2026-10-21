@@ -10,6 +10,7 @@
 #' @details Adapted from NMC_CEtool `scripts/2-clean-data.R` (20 km buffer) and
 #'   caribouLocPrep `studyareaFullextent()`.
 #' @author Julie W. Turner
+#' @export
 make_study_area <- function(DT, sa_cfg, file = NULL, crs) {
   if (length(file)) {
     sa <- terra::vect(file[1])
@@ -37,6 +38,7 @@ make_study_area <- function(DT, sa_cfg, file = NULL, crs) {
 #' @details Adapted from NMC_CEtool `scripts/3-prep-land-UPDATED.R` (there a
 #'   100 km buffer, then a convex hull).
 #' @author Julie W. Turner
+#' @export
 make_study_area_extended <- function(study_area, ext_cfg, file = NULL) {
   if (length(file)) {
     return(terra::aggregate(terra::project(terra::vect(file[1]), terra::crs(study_area))))
@@ -56,6 +58,7 @@ make_study_area_extended <- function(study_area, ext_cfg, file = NULL) {
 #' @return data.table.
 #' @details Adapted from NMC_CEtool `crop_pts()`.
 #' @author Julie W. Turner
+#' @export
 crop_locations <- function(DT, study_area, method = 'bbox') {
   if (method == 'bbox') {
     e <- as.vector(terra::ext(study_area))
@@ -71,6 +74,7 @@ crop_locations <- function(DT, study_area, method = 'bbox') {
 #'   `n_ids` (first n animals, sorted by id) and `years`. NULL settings use everything.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 subset_locations <- function(DT, subset) {
   if (!is.null(subset$years)) {
     DT <- DT[as.integer(format(t_, '%Y', tz = 'UTC')) %in% unlist(subset$years)]
@@ -101,6 +105,7 @@ subset_locations <- function(DT, subset) {
 #' @return data.table: by source, fixes and animals within `buffer_m` of the
 #'   edge or outside it (counts only).
 #' @author Julie W. Turner
+#' @export
 check_extended_area <- function(locations, area, buffer_m, project, crs) {
   DT <- data.table::as.data.table(locations)[, .(source, id, x_, y_)]
   inner <- terra::buffer(terra::aggregate(area), -buffer_m)

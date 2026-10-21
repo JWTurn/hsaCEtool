@@ -2,15 +2,18 @@
 # Reading, combining and checking the settings in config/
 
 #' @title Read a project's settings
-#' @description Combines `config/default.yaml`, `config/<project>.yaml`,
+#' @description Combines the package's default settings (`inst/config/default.yaml`),
+#'   `config/<project>.yaml`,
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
 #'   the optional `config/<project>.R`, in that order, later ones winning. The
 #'   result is checked with [check_config()].
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
-#' @param config_dir character. Folder holding the settings files.
+#' @param config_dir character. Folder holding the project's settings files.
+#' @param defaults character. The default settings file; normally the one in this package.
 #' @return Named list of settings.
 #' @author Julie W. Turner
-read_config <- function(project, config_dir = 'config') {
+#' @export
+read_config <- function(project, config_dir = 'config', defaults = system.file('config', 'default.yaml', package = 'hsaCEtool')) {
   if (!nzchar(project)) {
     stop('No project chosen. Set one first, e.g. Sys.setenv(TAR_PROJECT = "NMC")')
   }
@@ -21,7 +24,11 @@ read_config <- function(project, config_dir = 'config') {
     stop('No settings file for project "', project, '": expected ', project_file)
   }
 
-  cfg <- read_settings_file(file.path(config_dir, 'default.yaml'))
+  if (file.exists(file.path(config_dir, 'default.yaml'))) {
+    warning(file.path(config_dir, 'default.yaml'), ' is not read: the defaults come from the hsaCEtool package. ',
+            'Put settings that differ in ', project_file, call. = FALSE)
+  }
+  cfg <- read_settings_file(defaults)
   cfg <- merge_config(cfg, read_settings_file(project_file))
   if (file.exists(local_file)) {
     cfg <- merge_config(cfg, read_settings_file(local_file))
@@ -89,6 +96,7 @@ merge_config <- function(x, y) {
 #' @param cfg named list of settings from [read_config()].
 #' @return `cfg`, invisibly.
 #' @author Julie W. Turner
+#' @export
 check_config <- function(cfg) {
   problems <- character()
   add <- function(...) problems <<- c(problems, paste0(...))

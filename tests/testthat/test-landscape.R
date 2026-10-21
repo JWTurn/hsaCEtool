@@ -26,7 +26,7 @@ test_that('make_templates builds nested, snapped templates', {
   expect_true(e[1] <= a[1] && e[3] <= a[3] && e[2] >= a[2] && e[4] >= a[4])   # covers area + buffer
   c120 <- terra::rast(tf[3])
   expect_equal(terra::res(c120), c(120, 120))
-  expect_equal(terra::ext(c120), terra::ext(fine))
+  expect_equal(as.vector(terra::ext(c120)), as.vector(terra::ext(fine)))
   # a coarse cell holds the number of fine cells inside the area
   expect_equal(max(terra::values(c120), na.rm = TRUE), 16)
   expect_equal(sum(terra::values(c120), na.rm = TRUE), sum(terra::values(fine), na.rm = TRUE))

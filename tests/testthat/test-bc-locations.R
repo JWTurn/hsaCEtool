@@ -94,7 +94,7 @@ test_that('match_fixes finds pairs across grid cell edges', {
 })
 
 test_that('check_config accepts a bc source and asks for its new file', {
-  cfg <- read_config('NMC', config_dir = testthat::test_path('..', '..', 'config'))
+  cfg <- test_config()
   cfg$locations$sources <- list(list(type = 'bc', old = list(path = 'old.csv')))
   expect_error(check_config(cfg), 'needs `new:`')
 })

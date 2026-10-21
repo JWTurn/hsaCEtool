@@ -13,13 +13,14 @@
 #'   file (e.g. a spreadsheet) is downloaded as it is. Files already in `dir`
 #'   are not downloaded again (prepInputs does not check the web for a newer
 #'   version). With `refresh = TRUE`, the source is downloaded afresh and
-#'   replaces the copies in `dir` (see [prep_inputs_fresh()]).
+#'   replaces the copies in `dir` (see `prep_inputs_fresh()`).
 #' @param url character. Web address of a file or zip, or a Google Drive folder.
 #' @param files character. The files wanted from the download.
 #' @param dir character. Folder to download into.
 #' @param refresh logical. Download again even if the files are in `dir`?
 #' @return character. The files, with their shapefile companions.
 #' @author Julie W. Turner
+#' @export
 download_disturbance <- function(url, files, dir, refresh = FALSE) {
   reproducible::checkPath(dir, create = TRUE)
   folder <- grepl('drive.google.com/drive/folders', url, fixed = TRUE)
@@ -47,12 +48,12 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #'   change, not each time an identical copy is downloaded. The GeoPackage
 #'   also holds a table (layer "summary") of how many features of each type
 #'   went into each category, dropped ones included (see
-#'   [summarize_feature_types()]).
+#'   `summarize_feature_types()`).
 #' @param files character. From [download_disturbance()].
 #' @param src named list. The source's settings (`landscape: disturbance:
 #'   sources: <name>`): `url` and `files`, each with `file`, `category` or
 #'   `rules`, and optionally `year`, `lookup`, `crs`, `unpaved_type` or
-#'   `unpaved_type_field` (see [disturbance_unpaved_type()]), and `keep`
+#'   `unpaved_type_field` (see `disturbance_unpaved_type()`), and `keep`
 #'   (fields copied into the features, e.g. for maps).
 #' @param lookups named list. Lookup table files by name, from [download_disturbance()].
 #' @param template character. Raster whose extent sets the area kept.
@@ -61,6 +62,7 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #' @return `out`, with layers "disturbance" (the features: category,
 #'   unpaved_type, year and file) and "summary".
 #' @author Julie W. Turner
+#' @export
 prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
   e <- unname(as.vector(terra::ext(terra::rast(template))))
@@ -111,7 +113,7 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
 #' @param year integer. Each feature's year built (NA = none).
 #' @param geom sfc. The features, in the project's coordinate system (metres).
 #' @param unpaved_type character. Each feature's unpaved type (NA = none), from
-#'   [disturbance_unpaved_type()].
+#'   `disturbance_unpaved_type()`.
 #' @return data.table, one row per file, type, category and unpaved type: `features`
 #'   (count), `length_km` (lines), `area_km2` (polygons), `no_year` (features
 #'   with no year, counted in every year), and the `first_year` and
@@ -143,8 +145,9 @@ summarize_feature_types <- function(d, fs, category, year, geom, unpaved_type = 
 #'   [prep_disturbance_features()], for reports.
 #' @param features character. GeoPackages from [prep_disturbance_features()],
 #'   named features_<source>.gpkg.
-#' @return data.table as from [summarize_feature_types()], with `source` first.
+#' @return data.table as from `summarize_feature_types()`, with `source` first.
 #' @author Julie W. Turner
+#' @export
 summarize_disturbance <- function(features) {
   data.table::rbindlist(purrr::map(features, function(f) {
     s <- data.table::as.data.table(suppressWarnings(sf::st_read(f, layer = 'summary', quiet = TRUE)))
@@ -166,6 +169,7 @@ summarize_disturbance <- function(features) {
 #' @param out_dir character. Folder to write to.
 #' @return character. The lines and polygons GeoPackages.
 #' @author Julie W. Turner
+#' @export
 combine_disturbance_features <- function(features, cb, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   x <- purrr::imap(features, function(f, nm) {
@@ -201,6 +205,7 @@ combine_disturbance_features <- function(features, cb, out_dir) {
 #' @param project character. Project name, e.g. "NMC".
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
+#' @export
 upload_combined_disturbance <- function(project = Sys.getenv('TAR_PROJECT')) {
   cfg <- read_config(project)
   cb <- cfg$landscape$disturbance$combined
@@ -224,6 +229,7 @@ upload_combined_disturbance <- function(project = Sys.getenv('TAR_PROJECT')) {
 #' @param out_dir character. Folder for disturbance_summary.csv.
 #' @return character. The CSV file.
 #' @author Julie W. Turner
+#' @export
 write_disturbance_summary <- function(summary, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, 'disturbance_summary.csv')
@@ -316,7 +322,7 @@ disturbance_category <- function(d, fs) {
 #' @param d data.table. The features' attributes.
 #' @param fs named list. The file's settings.
 #' @param rule integer. The rule each feature matched (attribute `rule` of
-#'   [disturbance_category()]).
+#'   `disturbance_category()`).
 #' @return character, one per feature (NA = none).
 #' @keywords internal
 #' @noRd
@@ -371,6 +377,7 @@ feature_year <- function(d, fields, file = '') {
 #' @return data.table with columns `cell` (cell number in `template`) and
 #'   `year` (0 = no year known: there in every year).
 #' @author Julie W. Turner
+#' @export
 disturbance_cells <- function(features, category, template) {
   empty <- data.table::data.table(cell = numeric(), year = integer())
   q <- sprintf("SELECT * FROM disturbance WHERE category = '%s'", gsub("'", "''", category))
@@ -405,7 +412,7 @@ disturbance_cells <- function(features, category, template) {
 #' @param first_year,last_year integer. Years wanted.
 #' @return integer.
 #' @keywords internal
-#' @noRd
+#' @export
 disturbance_years <- function(history, first_year, last_year) {
   y <- history$year
   as.integer(sort(unique(c(first_year, y[y > first_year & y <= last_year]))))
@@ -429,6 +436,7 @@ disturbance_years <- function(history, first_year, last_year) {
 #' @inheritParams build_harvest_layers
 #' @return character. The files written, named `<prefix>_<metric>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
+#' @export
 build_disturbance_layers <- function(history, metric, resolutions, years, templates, out_dir, prefix, margin) {
   metric <- match.arg(metric, c('pa', 'dens', 'dist'))
   build_harvest_layers(history, metric, resolutions, years, Inf, templates, out_dir, prefix, margin)

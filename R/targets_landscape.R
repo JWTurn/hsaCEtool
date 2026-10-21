@@ -13,6 +13,7 @@
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
+#' @export
 targets_landscape <- function(cfg) {
   if (is.null(cfg$layers) || nrow(cfg$layers) == 0) return(list())
   existing <- cfg$layers[is.na(build)]

@@ -9,6 +9,7 @@
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
+#' @export
 targets_extract <- function(cfg) {
   if (is.null(cfg$layers) || nrow(cfg$layers) == 0) return(list())
   files <- as.call(c(quote(list), rlang::syms(paste0('layer_files_', cfg$layers$name))))

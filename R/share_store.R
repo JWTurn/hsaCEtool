@@ -17,6 +17,7 @@
 #' @param ... passed to `targets::tar_make()`, e.g. `names = steps`.
 #' @return NULL, invisibly.
 #' @author Julie W. Turner
+#' @export
 run_pipeline <- function(project = Sys.getenv('TAR_PROJECT'), share = TRUE, ...) {
   Sys.setenv(TAR_PROJECT = project)
   result <- tryCatch(targets::tar_make(...), error = function(e) e)
@@ -39,6 +40,7 @@ run_pipeline <- function(project = Sys.getenv('TAR_PROJECT'), share = TRUE, ...)
 #' @param dry_run logical. Only list what would be copied or deleted.
 #' @return data.table of files copied (and deleted), invisibly.
 #' @author Julie W. Turner
+#' @export
 push_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, force = FALSE,
                        dry_run = FALSE) {
   loc <- store_locations(project)
@@ -76,6 +78,7 @@ push_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, force
 #' @inheritParams push_store
 #' @return data.table of files copied (and deleted), invisibly.
 #' @author Julie W. Turner
+#' @export
 pull_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, dry_run = FALSE) {
   loc <- store_locations(project)
   if (!dir.exists(file.path(loc$remote, '_targets'))) {
@@ -133,6 +136,8 @@ write_sync_info <- function(file, synced_at) {
 #' @param dry_run logical. Only list what would be done.
 #' @return data.table with columns `file` and `action` ("copy" or "delete").
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 sync_folder <- function(from, to, prune = FALSE, dry_run = FALSE) {
   out <- data.table::data.table(file = character(), action = character())
   if (!dir.exists(from)) return(out)

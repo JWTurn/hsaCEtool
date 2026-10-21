@@ -11,13 +11,14 @@
 #' @title Download and unzip a fire database
 #' @description The fire databases are large zip files (NBAC is 1.3 GB) on a
 #'   server that sometimes drops long downloads, so the zip is fetched in
-#'   pieces that resume when they stall (see [raster_source()]), then unzipped.
+#'   pieces that resume when they stall (see `raster_source()`), then unzipped.
 #'   Nothing is downloaded when the files are already there.
 #' @param url character. Web address of the zip.
 #' @param files character. The shapefile(s) wanted from the zip.
 #' @param dir character. Folder to keep the download in (e.g. in `paths: input_cache`).
 #' @return character. Paths of `files` and their sidecar files (.shx, .dbf, .prj, .cpg).
 #' @author Julie W. Turner
+#' @export
 download_fire <- function(url, files, dir) {
   reproducible::checkPath(dir, create = TRUE)
   paths <- file.path(dir, files)
@@ -51,6 +52,7 @@ download_fire <- function(url, files, dir) {
 #' @param pre_year integer. NFDB fires before this year are added (NBAC starts in 1972).
 #' @return `out`.
 #' @author Julie W. Turner
+#' @export
 prep_fire_polygons <- function(nbac, nfdb = NULL, template, crs, out, pre_year = 1972) {
   reproducible::checkPath(dirname(out), create = TRUE)
   read_fires <- function(file) {
@@ -91,6 +93,7 @@ prep_fire_polygons <- function(nbac, nfdb = NULL, template, crs, out, pre_year =
 #' @param cutoff integer. First year kept on its own.
 #' @return list of integer vectors (years).
 #' @author Julie W. Turner
+#' @export
 fire_year_groups <- function(fires, cutoff) {
   yrs <- sort(unique(sf::st_read(fires, query = 'SELECT DISTINCT year FROM fire', quiet = TRUE)$year))
   older <- yrs[yrs < cutoff]
@@ -106,6 +109,7 @@ fire_year_groups <- function(fires, cutoff) {
 #' @param template character. Template raster file (the one with a margin).
 #' @return data.table with columns `cell` (cell number in `template`) and `year`.
 #' @author Julie W. Turner
+#' @export
 fire_cells <- function(fires, years, template) {
   empty <- data.table::data.table(cell = numeric(), year = integer())
   q <- sprintf('SELECT * FROM fire WHERE year IN (%s)', paste(years, collapse = ', '))

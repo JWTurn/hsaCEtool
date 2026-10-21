@@ -17,6 +17,7 @@
 #'   fetched at once (some servers limit the speed of each connection).
 #' @return character. Something GDAL can open.
 #' @author Julie W. Turner
+#' @keywords internal
 raster_source <- function(sourceFile, access = 'stream', cache = 'inputs', connections = 4) {
   if (file.exists(sourceFile)) return(sourceFile)
   if (identical(access, 'stream')) return(paste0('/vsicurl/', sourceFile))
@@ -116,7 +117,7 @@ download_parallel <- function(url, dest, connections = 4, attempts = 5) {
 #'   neighbour, so codes and years are kept as they are). A raster read from the
 #'   web is first cut to the template's area in its own projection, which reads
 #'   it in larger, faster pieces.
-#' @param src character. Raster to read (see [raster_source()]).
+#' @param src character. Raster to read (see `raster_source()`).
 #' @param template character. Template raster file.
 #' @param dst character. File to write.
 #' @return `dst`.
@@ -156,7 +157,7 @@ clip_remote <- function(src, tr) {
 }
 
 #' @title A raster inside a zip file, for GDAL
-#' @param src character. From [raster_source()].
+#' @param src character. From `raster_source()`.
 #' @param archiveFile character. The raster inside the zip, or NULL.
 #' @keywords internal
 #' @noRd
@@ -169,7 +170,7 @@ in_archive <- function(src, archiveFile) {
 #' @param years integer.
 #' @return character, one per year.
 #' @keywords internal
-#' @noRd
+#' @export
 fill_year <- function(pattern, years) {
   purrr::map_chr(years, function(y) gsub('{year}', y, pattern, fixed = TRUE))
 }

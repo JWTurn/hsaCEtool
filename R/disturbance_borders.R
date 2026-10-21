@@ -52,6 +52,7 @@ border_points <- function(x, border, near_m) {
 #'   and latitude) and `summary` (by border, side and match class: points, and
 #'   how many have a neighbour year, a Yukon year, or both).
 #' @author Julie W. Turner
+#' @export
 check_yukon_borders <- function(yukon, features, borders, bc, crs) {
   near_m <- bc$near_m %||% 500
   match_m <- sort(unlist(bc$match_m %||% list(50, 500)))
@@ -111,6 +112,7 @@ check_yukon_borders <- function(yukon, features, borders, bc, crs) {
 #' @param out_dir character. Folder for the CSV files.
 #' @return character. The CSV files.
 #' @author Julie W. Turner
+#' @export
 write_border_check <- function(check, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   files <- file.path(out_dir, paste0('YT_border_', names(check), '.csv'))

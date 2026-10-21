@@ -14,6 +14,7 @@
 #' @inheritParams raster_source
 #' @return `out`.
 #' @author Julie W. Turner
+#' @export
 prep_forest_age_map <- function(sourceFile, templates, out, archiveFile = NULL, zero_is_na = FALSE,
                                 access = 'stream', cache = 'inputs') {
   reproducible::checkPath(dirname(out), create = TRUE)
@@ -50,6 +51,7 @@ prep_forest_age_map <- function(sourceFile, templates, out, archiveFile = NULL, 
 #'   numbers refer to (NULL if they refer to the finest template).
 #' @return character. Files written, named `forest_age_<res>m_<year>.tif`.
 #' @author Julie W. Turner
+#' @export
 build_forest_age_year <- function(maps, map_years, year, resets = NULL, resolutions, templates, out_dir,
                                   margin = NULL) {
   reproducible::checkPath(out_dir, create = TRUE)
@@ -145,6 +147,7 @@ to_fine_cells <- function(history, fine, margin = NULL) {
 #' @return integer. The maps used: the latest at or before each year (or the
 #'   first map, for years before it).
 #' @author Julie W. Turner
+#' @export
 age_maps_used <- function(map_years, first_year, last_year) {
   map_years <- sort(unique(as.integer(map_years)))
   used <- purrr::map_int(first_year:last_year, function(y) {

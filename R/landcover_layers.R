@@ -32,6 +32,7 @@
 #' @inheritParams raster_source
 #' @return character. Files written, named `<prefix>_<class>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
+#' @export
 build_landcover_year <- function(sourceFile, year, classes, resolutions, window_m, templates, out_dir,
                                  access = 'stream', cache = 'inputs', archiveFile = NULL) {
   reproducible::checkPath(out_dir, create = TRUE)
@@ -116,7 +117,7 @@ count_classes <- function(file, templates, res, codes) {
 }
 
 #' @title Proportions at a coarser, nested resolution
-#' @param props SpatRaster from [count_classes()] (last layer `n`).
+#' @param props SpatRaster from `count_classes()` (last layer `n`).
 #' @param fact integer. How many cells along each side make one coarser cell.
 #' @return SpatRaster like `props`, at the coarser resolution.
 #' @keywords internal

@@ -18,6 +18,7 @@
 #' @param project character. Project name, e.g. "NMC".
 #' @return character. The zip files written.
 #' @author Julie W. Turner
+#' @export
 write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
   Sys.setenv(TAR_PROJECT = project)
   cfg <- read_config(project)
@@ -52,6 +53,7 @@ write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
 #' @param zips character. Files to upload (default: those [write_premade()] writes).
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
+#' @export
 upload_premade <- function(project = Sys.getenv('TAR_PROJECT'), zips = NULL) {
   cfg <- read_config(project)
   if (is.null(cfg$locations$premade_folder)) stop('Set locations: premade_folder: in config/', project, '.yaml', call. = FALSE)

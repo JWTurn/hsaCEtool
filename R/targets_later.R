@@ -5,6 +5,7 @@
 #' @inheritParams targets_config
 #' @return list of targets (empty until round 2).
 #' @author Julie W. Turner
+#' @export
 targets_maps <- function(cfg) {
   list()
 }

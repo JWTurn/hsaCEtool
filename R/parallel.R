@@ -11,6 +11,7 @@
 #' @param run named list. The `run:` settings: `workers`, `memfrac`, `google_email`.
 #' @return A crew controller, or NULL to run one step at a time.
 #' @author Julie W. Turner
+#' @export
 parallel_controller <- function(run) {
   workers <- as.integer(run$workers %||% 1)
   if (workers <= 1) return(NULL)

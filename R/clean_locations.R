@@ -15,11 +15,11 @@
 #'   each is kept, with a warning, so that every animal has one fix per time.
 #'
 #'   Fixes with dates but no times (`date_only` TRUE, see
-#'   [standardize_locations()]) are cleaned separately, with the steps in
+#'   `standardize_locations()`) are cleaned separately, with the steps in
 #'   `date_only_steps` only (e.g. `bounds`, `exclude_points`); their log rows
 #'   end in "(date only)". They are kept for the study area and removed
 #'   before tracks are made (see [drop_date_only()]).
-#' @param DT data.table of standard locations from [standardize_locations()].
+#' @param DT data.table of standard locations from `standardize_locations()`.
 #' @param cleaning named list. The `locations: cleaning:` settings (`steps`,
 #'   `params`, optional `date_only_steps` and `custom`).
 #' @param crs character. Project coordinate system.
@@ -27,6 +27,7 @@
 #'   (fixes removed by each step) and `removed` (a data.table: `row`, the row
 #'   number in `DT` of each removed fix, and `step`, the step that removed it).
 #' @author Julie W. Turner
+#' @export
 clean_locations <- function(DT, cleaning, crs) {
   DT <- data.table::copy(DT)
   DT[, .row := seq_len(.N)]
@@ -111,6 +112,7 @@ clean_locations <- function(DT, cleaning, crs) {
 #' @param DT data.table of cleaned locations from [clean_locations()].
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 drop_date_only <- function(DT) {
   if (!'date_only' %in% names(DT)) return(DT)
   DT <- DT[!(date_only %in% TRUE)]
@@ -123,7 +125,7 @@ drop_date_only <- function(DT) {
 #'   keeps every column. `sex` is filled from `Gender` where `sex` is missing,
 #'   then coded `f`, `m` or NA (e.g. "Female", "F" and "f" all become `f`;
 #'   "Unknown" and "NA" become NA). `study`, `herd` and `juris` are made by
-#'   [make_study()], [make_herd()] and [make_juris()]. Then only
+#'   `make_study()`, `make_herd()` and [make_juris()]. Then only
 #'   `id`, `source`, `t_`, `x_`, `y_` and the `keep` columns are kept; `keep`
 #'   columns not in the data are skipped.
 #' @param DT data.table of cleaned locations.
@@ -132,6 +134,7 @@ drop_date_only <- function(DT) {
 #'   `juris:` settings).
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 finish_locations <- function(DT, fin_cfg) {
   DT <- data.table::copy(DT)
   if ('Gender' %in% names(DT)) {
@@ -164,12 +167,14 @@ standardize_sex <- function(x) {
 #'   (e.g. the herd column for B.C. fixes, whose export has no study), otherwise
 #'   the name given to the source in `study_cfg$by_source` (e.g. to put two
 #'   sources of one study together), otherwise the source's name. Then put in
-#'   CamelCase ([to_camel()]) and renamed with `study_cfg$rename` (old: new).
+#'   CamelCase (`to_camel()`) and renamed with `study_cfg$rename` (old: new).
 #' @param DT data.table of locations with `source`.
 #' @param study_cfg named list. The `locations: study:` settings: `columns`
-#'   (as in [make_herd()]), `by_source` and `rename`.
+#'   (as in `make_herd()`), `by_source` and `rename`.
 #' @return character, one value per row of `DT`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 make_study <- function(DT, study_cfg) {
   study <- name_from_columns(DT, study_cfg$columns)
   by_source <- unlist(study_cfg$by_source)
@@ -185,7 +190,7 @@ make_study <- function(DT, study_cfg) {
 #'   otherwise from `herd_cfg$by_source`, which names the herd of each source.
 #'   A column can be limited to some sources, e.g. `{column:
 #'   individual_comments, sources: [TayRiver]}` where only those studies use it
-#'   for herd. Names are then put in CamelCase ([to_camel()]) and renamed with
+#'   for herd. Names are then put in CamelCase (`to_camel()`) and renamed with
 #'   `herd_cfg$rename` (old: new, both in CamelCase), so a herd has one name in
 #'   every source. Fixes with no herd get NA.
 #' @param DT data.table of locations with `source`.
@@ -193,6 +198,8 @@ make_study <- function(DT, study_cfg) {
 #'   `by_source` and `rename`.
 #' @return character, one value per row of `DT`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 make_herd <- function(DT, herd_cfg) {
   herd <- name_from_columns(DT, herd_cfg$columns)
   by_source <- unlist(herd_cfg$by_source)
@@ -203,13 +210,14 @@ make_herd <- function(DT, herd_cfg) {
 
 #' @title Jurisdiction each fix's data come from
 #' @description Taken from the first of `juris_cfg$columns` that has a value
-#'   (as in [make_herd()]), otherwise from `juris_cfg$by_source` (source name:
+#'   (as in `make_herd()`), otherwise from `juris_cfg$by_source` (source name:
 #'   jurisdiction, e.g. bc, yt, nt), in lower case. Fixes with neither get NA.
 #' @param DT data.table of locations with `source`.
 #' @param juris_cfg named list. The `locations: juris:` settings: `columns` and
 #'   `by_source`.
 #' @return character, one value per row of `DT`.
 #' @author Julie W. Turner
+#' @export
 make_juris <- function(DT, juris_cfg) {
   juris <- name_from_columns(DT, juris_cfg$columns)
   by_source <- unlist(juris_cfg$by_source)
@@ -279,6 +287,7 @@ to_camel <- function(x) {
 #' @return data.table with columns `source`, `id`, `step` and `n` (counts only,
 #'   no positions or times). Empty if `raw` has no `mortality` column.
 #' @author Julie W. Turner
+#' @export
 check_mortality <- function(raw, clean) {
   out <- data.table::data.table(source = character(), id = character(), step = character(), n = integer())
   if (!'mortality' %in% names(raw)) return(out)
@@ -297,15 +306,16 @@ check_mortality <- function(raw, clean) {
 #' @title Combine the location sources
 #' @description Makes columns plain so that sources combine: columns with
 #'   units (e.g. Movebank's `gps_dop`) become plain numbers, factors (e.g.
-#'   Movebank's `sex`) become text, and text is tidied ([tidy_text()]: spaces
+#'   Movebank's `sex`) become text, and text is tidied (`tidy_text()`: spaces
 #'   removed except in free-text columns). Then stacks the sources and flags
-#'   fixes an earlier-listed source also has ([flag_source_duplicates()]).
+#'   fixes an earlier-listed source also has (`flag_source_duplicates()`).
 #' @param sources list of data.tables of standard locations, in the order the
 #'   sources are listed.
 #' @inheritParams flag_source_duplicates
 #' @inheritParams tidy_text
 #' @return data.table.
 #' @author Julie W. Turner
+#' @export
 combine_locations <- function(sources, params, crs, keep_spaces = NULL) {
   sources <- purrr::map(sources, function(DT) {
     DT <- data.table::copy(DT)
@@ -332,6 +342,7 @@ combine_locations <- function(sources, params, crs, keep_spaces = NULL) {
 #'   (the `locations: keep_spaces:` setting).
 #' @return `DT`, changed in place.
 #' @author Julie W. Turner
+#' @keywords internal
 tidy_text <- function(DT, keep_spaces = NULL) {
   keep <- unlist(keep_spaces)
   for (col in names(DT)) {
@@ -363,6 +374,7 @@ tidy_text <- function(DT, keep_spaces = NULL) {
 #' @param crs character. Project coordinate system.
 #' @return `DT` with column `dup_source` (NA if no earlier source has the fix).
 #' @author Julie W. Turner
+#' @keywords internal
 flag_source_duplicates <- function(DT, params, crs) {
   DT <- data.table::as.data.table(DT)
   DT[, dup_source := NA_character_]
@@ -379,11 +391,13 @@ flag_source_duplicates <- function(DT, params, crs) {
 }
 
 #' @title Cleaning step: drop fixes another source also has
-#' @description Removes the fixes [flag_source_duplicates()] flagged.
+#' @description Removes the fixes `flag_source_duplicates()` flagged.
 #' @inheritParams clean_bounds
 #' @param params not used.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_source_duplicates <- function(DT, params, crs) {
   if (!'dup_source' %in% names(DT)) return(DT)
   DT[is.na(dup_source)]
@@ -410,6 +424,8 @@ drop_amt_flagged <- function(DT, flag_fun, flag_col) {
 #' @param crs character. Project coordinate system.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_bounds <- function(DT, params, crs) {
   xy <- as.matrix(DT[, .(x_, y_)])
   box_crs <- params$crs %||% 'EPSG:4326'
@@ -427,6 +443,8 @@ clean_bounds <- function(DT, params, crs) {
 #' @param params list of points, each with `lon`, `lat`, `radius_m` (and an optional `name`).
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_exclude_points <- function(DT, params, crs) {
   for (pt in params) {
     xy <- sf::sf_project(sf::st_crs('EPSG:4326'), sf::st_crs(crs), matrix(c(pt$lon, pt$lat), ncol = 2))
@@ -442,6 +460,8 @@ clean_exclude_points <- function(DT, params, crs) {
 #' @param params not used.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_deployment <- function(DT, params, crs) {
   if ('deploy_on_timestamp' %in% names(DT)) {
     DT <- DT[is.na(deploy_on_timestamp) | t_ >= deploy_on_timestamp]
@@ -461,6 +481,8 @@ clean_deployment <- function(DT, params, crs) {
 #' @param params named list: `days`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_capture_effect <- function(DT, params, crs) {
   by <- c('id', intersect('deployment_start', names(DT)))
   DT[DT[, .I[t_ >= min(t_) + params$days * 86400], by = by]$V1]
@@ -474,6 +496,8 @@ clean_capture_effect <- function(DT, params, crs) {
 #' @param params named list: `column`, `max_dop`, `keep_missing`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_dop <- function(DT, params, crs) {
   if (!params$column %in% names(DT)) {
     warning('[clean dop] no column "', params$column, '"; step skipped')
@@ -486,11 +510,13 @@ clean_dop <- function(DT, params, crs) {
 #' @title Cleaning step: drop near-duplicate fixes
 #' @description Among fixes closer in time than `gamma_minutes`, keeps the one
 #'   with the best DOP, by the same rules as `amt::flag_duplicates()` (see
-#'   [flag_duplicates_fast()]). Fixes with no DOP are ranked last.
+#'   `flag_duplicates_fast()`). Fixes with no DOP are ranked last.
 #' @inheritParams clean_bounds
 #' @param params named list: `gamma_minutes`, `dop_column`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_duplicates <- function(DT, params, crs) {
   dop <- if (params$dop_column %in% names(DT)) as.numeric(DT[[params$dop_column]]) else rep(1, nrow(DT))
   DT[, .dop := data.table::fifelse(is.na(dop), 99, dop)]
@@ -560,6 +586,8 @@ flag_duplicates_fast <- function(t, x, y, dop, gamma_s) {
 #' @param params named list: `delta`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_fast_steps <- function(DT, params, crs) {
   drop_amt_flagged(DT, function(trk) amt::flag_fast_steps(trk, delta = params$delta), 'fast_step_')
 }
@@ -571,6 +599,8 @@ clean_fast_steps <- function(DT, params, crs) {
 #' @param params named list: `delta`, `epsilon`.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_roundtrips <- function(DT, params, crs) {
   drop_amt_flagged(DT, function(trk) {
     amt::flag_roundtrips(trk, delta = params$delta, epsilon = params$epsilon)
@@ -583,11 +613,13 @@ clean_roundtrips <- function(DT, params, crs) {
 #'   least `eta` steps no longer than `zeta` metres that lasts more than
 #'   `theta_hours`, and flags everything after its start, even if the animal
 #'   moves on later (with frequent fixes, a slow-moving animal can take short
-#'   steps for days). Compare with `end_clusters` ([clean_end_clusters()]).
+#'   steps for days). Compare with `end_clusters` (`clean_end_clusters()`).
 #' @inheritParams clean_bounds
 #' @param params named list: `zeta`, `eta`, `theta_hours`.
 #' @return data.table with column `defunct_cluster_`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_clusters <- function(DT, params, crs) {
   DT[, defunct_cluster_ := amt::flag_defunct_clusters(
     amt::make_track(.SD, x_, y_, t_, all_cols = TRUE), zeta = params$zeta, eta = params$eta,
@@ -608,7 +640,7 @@ clean_clusters <- function(DT, params, crs) {
 #'   switched off soon after), which are flagged too. An animal that moves on
 #'   after staying put is never flagged. Column `end_of_track_` is TRUE for
 #'   the first flagged fix, where the animal stopped: the step
-#'   `drop_end_clusters` ([clean_drop_end_clusters()]) keeps it as the
+#'   `drop_end_clusters` (`clean_drop_end_clusters()`) keeps it as the
 #'   track's last fix and removes the flagged fixes after it.
 #'
 #'   Also adds, comparing these flags with a `mortality` column from the data
@@ -629,6 +661,8 @@ clean_clusters <- function(DT, params, crs) {
 #' @return data.table with columns `end_cluster_`, `end_of_track_`,
 #'   `cluster_status`, `mortality_status` and `mortality_basis`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_end_clusters <- function(DT, params, crs) {
   DT[, end_cluster_ := flag_end_clusters(t_, x_, y_, params$zeta, params$theta_hours * 3600,
                                          params$max_moves %||% 2, params$transit_fixes %||% 5), by = id]
@@ -655,7 +689,7 @@ clean_end_clusters <- function(DT, params, crs) {
 }
 
 #' @title How `mortality_status` is decided
-#' @description The rules [clean_end_clusters()] uses to give each animal a
+#' @description The rules `clean_end_clusters()` uses to give each animal a
 #'   `mortality_status`, in order of priority: the first that applies wins.
 #'   Rules 1 to 4 use outcomes recorded in the data; rules 5 and 6 are
 #'   inferred from cluster analysis (whether the track ends in a stationary
@@ -668,6 +702,7 @@ clean_end_clusters <- function(DT, params, crs) {
 #'   `kind` (`recorded` or `inferred`) and `mortality_basis` (the text put in
 #'   that column).
 #' @author Julie W. Turner
+#' @export
 mortality_status_rules <- function() {
   data.table::data.table(
     rule = 1:6,
@@ -689,7 +724,7 @@ mortality_status_rules <- function() {
 
 #' @title Cleaning step: drop the stationary end of each track
 #' @description Removes the fixes flagged by `end_clusters`
-#'   ([clean_end_clusters()]) except the first (`end_of_track_`), where the
+#'   (`clean_end_clusters()`) except the first (`end_of_track_`), where the
 #'   animal stopped, which becomes the track's last fix. This drops the
 #'   fixes from a dead animal or a dropped or moved collar, so that tracks
 #'   only hold fixes from when the animal was likely alive. List it after
@@ -698,6 +733,8 @@ mortality_status_rules <- function() {
 #' @param params not used.
 #' @return data.table.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_drop_end_clusters <- function(DT, params, crs) {
   if (!all(c('end_cluster_', 'end_of_track_') %in% names(DT))) {
     stop('[clean drop_end_clusters] list the end_clusters step before drop_end_clusters')
@@ -773,6 +810,7 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
 #' @param raw data.table given to [clean_locations()], or NULL.
 #' @return data.table with one row per source and flag.
 #' @author Julie W. Turner
+#' @export
 summarize_flags <- function(clean, raw = NULL) {
   get_flag <- function(DT, col) if (col %in% names(DT)) DT[[col]] %in% TRUE else rep(FALSE, nrow(DT))
   src_of <- function(DT) if ('source' %in% names(DT)) DT$source else rep(NA_character_, nrow(DT))
@@ -814,6 +852,8 @@ summarize_flags <- function(clean, raw = NULL) {
 #' @return data.table.
 #' @details Adapted from caribouLocPrep `filter_fast_steps()`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_speed <- function(DT, params, crs) {
   DT[, .speed := sqrt((x_ - data.table::shift(x_))^2 + (y_ - data.table::shift(y_))^2) /
        as.numeric(difftime(t_, data.table::shift(t_), units = 'hours')), by = id]
@@ -828,6 +868,8 @@ clean_speed <- function(DT, params, crs) {
 #' @return data.table.
 #' @details Adapted from NMC_CEtool `make_unique_complete()`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_min_points <- function(DT, params, crs) {
   DT[, .n := .N, by = id]
   DT <- DT[.n >= params$n]

@@ -23,6 +23,7 @@
 #' @return data.table with `source`, `id`, `capture_id`, `capture_date`
 #'   (POSIXct, UTC midnight), `collar`, `sex`, `sex_raw`, `recapture`, `herd`.
 #' @author Julie W. Turner
+#' @export
 read_capture_log <- function(file, cols, source, date_order = 'dmy') {
   x <- read_table_file(file)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
@@ -43,6 +44,7 @@ read_capture_log <- function(file, cols, source, date_order = 'dmy') {
 #' @return data.table with `source`, `id`, `mortality_date` (POSIXct, UTC
 #'   midnight) and `mortality_cause`.
 #' @author Julie W. Turner
+#' @export
 read_mortality_records <- function(file, cols, source, date_order = 'dmy') {
   x <- read_table_file(file)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
@@ -61,7 +63,7 @@ read_mortality_records <- function(file, cols, source, date_order = 'dmy') {
 trim_bytes <- function(x) gsub('^[[:space:]]+|[[:space:]]+$', '', as.character(x), useBytes = TRUE)
 
 #' @title IDs and collars as in the tidied location data
-#' @description As [tidy_text()] does for location columns: invalid text read
+#' @description As `tidy_text()` does for location columns: invalid text read
 #'   as Latin-1 and every space removed, so record tables match the locations.
 #' @param x vector.
 #' @return character.
@@ -130,6 +132,8 @@ parse_record_dates <- function(x, date_order = 'dmy') {
 #'   `collar_column` (default `collar_id`).
 #' @return data.table, with attribute `decisions`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_captures <- function(DT, params, crs) {
   cap <- params$table
   if (is.null(cap) || nrow(cap) == 0) return(DT)
@@ -216,6 +220,8 @@ clean_captures <- function(DT, params, crs) {
 #' @param params named list: `table` (all sources' records), `after_days` (default 1).
 #' @return data.table, with attribute `decisions`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_mortality_records <- function(DT, params, crs) {
   rec <- params$table
   if (is.null(rec) || nrow(rec) == 0) return(DT)
@@ -248,6 +254,8 @@ clean_mortality_records <- function(DT, params, crs) {
 #' @param params named list: `max_gap_days` (default 365), `min_fixes` (default 3).
 #' @return data.table, with attribute `decisions`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 clean_long_gaps <- function(DT, params, crs) {
   gap <- (params$max_gap_days %||% 365) * 86400
   keep_min <- params$min_fixes %||% 3
@@ -292,6 +300,7 @@ clean_long_gaps <- function(DT, params, crs) {
 #'   `capture_id`, `capture_date`, `collar`, `recapture`, `herd`, `sex`,
 #'   `fixes`, `note`.
 #' @author Julie W. Turner
+#' @export
 make_animal_lookup <- function(captures, locations, collar_column = 'collar_id') {
   loc <- data.table::as.data.table(locations)
   base_id <- function(x) sub('_[0-9]+$', '', x, useBytes = TRUE)
@@ -339,6 +348,7 @@ make_animal_lookup <- function(captures, locations, collar_column = 'collar_id')
 #'   only to the restricted drive).
 #' @return `file`.
 #' @author Julie W. Turner
+#' @export
 write_decisions <- function(x, file) {
   reproducible::checkPath(dirname(file), create = TRUE)
   data.table::fwrite(x, file)
@@ -355,6 +365,7 @@ write_decisions <- function(x, file) {
 #' @param collar_column character. Collar column for the captures step.
 #' @return `cleaning`, with `params$captures` and `params$mortality_records` filled in.
 #' @author Julie W. Turner
+#' @export
 add_record_tables <- function(cleaning, captures = NULL, mortality = NULL, capture_source = NULL,
                               collar_column = 'collar_id') {
   if (!is.null(captures)) {

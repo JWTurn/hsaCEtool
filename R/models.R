@@ -19,6 +19,8 @@ model_private_columns <- c('x1_', 'y1_', 'x2_', 'y2_', 't1_', 't2_', 'x_', 'y_',
 #' @param text character. A glmmTMB formula, e.g. "case_ ~ -1 + x + (1 | indiv_step_id)".
 #' @return formula.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 model_formula <- function(text) {
   e <- tryCatch(str2lang(text), error = function(err) {
     stop('model formula could not be read: ', conditionMessage(err), call. = FALSE)
@@ -59,6 +61,8 @@ model_bars <- function(f) {
 #' @param n_made integer. Random steps made per used step (`tracks: n_random`).
 #' @return character. Problems found (empty if none).
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 check_model_settings <- function(mcfg, n_made) {
   out <- character()
   add <- function(...) out <<- c(out, paste0('model: ', ...))
@@ -124,6 +128,8 @@ check_model_settings <- function(mcfg, n_made) {
 #' @param seasons named list. Each a pair of month-day dates (start, end), inclusive.
 #' @return character.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 season_of <- function(t, seasons) {
   md <- format(t, '%m-%d', tz = 'UTC')
   out <- rep(NA_character_, length(md))
@@ -142,6 +148,7 @@ season_of <- function(t, seasons) {
 #' @param ids character. Animal IDs (e.g. `steps$id`).
 #' @return data.table: `id` and `code`.
 #' @author Julie W. Turner
+#' @export
 make_animal_codes <- function(ids) {
   u <- sort(unique(as.character(ids)))
   data.table::data.table(id = u, code = sprintf(paste0('A%0', max(4, nchar(length(u))), 'd'), seq_along(u)))
@@ -152,6 +159,7 @@ make_animal_codes <- function(ids) {
 #' @param out_dir character. Folder to write to (in outputs/, never shared publicly).
 #' @return character. The file written.
 #' @author Julie W. Turner
+#' @export
 write_animal_codes <- function(codes, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, 'animal_codes_CONFIDENTIAL.csv')
@@ -170,6 +178,8 @@ write_animal_codes <- function(codes, out_dir) {
 #' @param cols character. Step columns to keep.
 #' @return data.table with `row` (row number in `steps`), in the order of `steps`.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 select_model_steps <- function(steps, model, seasons, cols) {
   rows <- seq_len(nrow(steps))
   if (nzchar(model$subset %||% '')) {
@@ -248,7 +258,7 @@ read_extracted <- function(files, cols, rows) {
 #' @description Builds the table a model is fitted to, with only what its
 #'   formula uses:
 #'   1. steps in the model's `subset` and `seasons`, each used step with all
-#'      its random steps ([select_model_steps()]);
+#'      its random steps (`select_model_steps()`);
 #'   2. the covariates in the formula, read from the extracted values; groups
 #'      from `model: groups:` are made here (e.g. `prop_forest_240_end`);
 #'   3. distances far from a disturbance (`model: distance_cap:`): for each
@@ -275,6 +285,7 @@ read_extracted <- function(files, cols, rows) {
 #' @return list: `data` (data.table, in the order of `steps`) and `log`
 #'   (data.table: what was kept, adjusted and dropped).
 #' @author Julie W. Turner
+#' @export
 build_model_data <- function(steps, files, codes, common, model) {
   f <- model_formula(model$formula)
   vars <- all.vars(f)
@@ -374,6 +385,8 @@ build_model_data <- function(steps, files, codes, common, model) {
 #' @param codes data.table from [make_animal_codes()].
 #' @return DT, invisibly; stops if a check fails.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 check_model_data <- function(DT, codes) {
   bad <- intersect(names(DT), model_private_columns)
   timed <- names(DT)[purrr::map_lgl(DT, function(x) inherits(x, c('POSIXt', 'Date')))]
@@ -396,6 +409,8 @@ check_model_data <- function(DT, codes) {
 #' @param f formula.
 #' @return data.table (a copy).
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 as_model_factors <- function(DT, f) {
   d <- data.table::copy(DT)
   groups <- unlist(strsplit(model_bars(f)$group, ':', fixed = TRUE))
@@ -411,7 +426,7 @@ as_model_factors <- function(DT, f) {
 #'   variance fixed at `step_sd`^2 (1e6 by default); every other random term
 #'   is estimated. The terms are found from the formula, so `map` and `start`
 #'   need not be written by hand. Text columns become factors first
-#'   ([as_model_factors()]).
+#'   (`as_model_factors()`).
 #' @param data data.table. `data` from [build_model_data()].
 #' @param formula character. The model formula.
 #' @param step_sd numeric. Fixed SD of the step intercepts.
@@ -419,6 +434,7 @@ as_model_factors <- function(DT, f) {
 #'   default `rank_check = 'adjust'`, as in NMC_CEtool.
 #' @return glmmTMB model.
 #' @author Julie W. Turner
+#' @export
 fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 'adjust')) {
   f <- model_formula(formula)
   d <- as_model_factors(data, f)
@@ -450,6 +466,7 @@ fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 
 #'   `by_group` (each animal code's, or year-season's, coefficient: the
 #'   population estimate plus its deviation).
 #' @author Julie W. Turner
+#' @export
 model_coefficients <- function(fit, step_group = 'indiv_step_id') {
   cf <- summary(fit)$coefficients$cond
   fixed <- data.table::data.table(term = rownames(cf), estimate = cf[, 1], se = cf[, 2], z = cf[, 3], p = cf[, 4])
@@ -479,6 +496,7 @@ model_coefficients <- function(fit, step_group = 'indiv_step_id') {
 #' @return character. The files written: <name>_fixed.csv, <name>_random.csv,
 #'   <name>_by_group.csv and <name>_data_log.csv.
 #' @author Julie W. Turner
+#' @export
 write_model_coefficients <- function(coefs, log, name, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   tabs <- c(coefs, list(data_log = log))

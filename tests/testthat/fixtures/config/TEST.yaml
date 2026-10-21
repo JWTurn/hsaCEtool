@@ -1,0 +1,19 @@
+# A made-up project for the tests: a complete, valid set of settings.
+# No real data, files or links (example.org is a reserved test domain).
+locations:
+  sources:
+    - type: file
+      path: toy_locations.csv
+      columns: {id: id, datetime: t, x: x, y: y}
+
+landscape:
+  layers: layers_TEST.csv
+  disturbance:
+    sources:
+      roads:
+        url: "https://example.org/roads.zip"
+        files:
+          - file: roads.shp
+            rules:
+              - {match: {Surface: '^Paved'}, category: paved}
+              - {category: unpaved}

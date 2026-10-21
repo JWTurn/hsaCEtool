@@ -6,6 +6,7 @@
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
+#' @export
 targets_tracks <- function(cfg) {
   # steps kept only inside an area (tracks: within:), e.g. the jurisdictions the layers cover
   within <- cfg$tracks$within

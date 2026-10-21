@@ -20,7 +20,7 @@
 #' @keywords internal
 #' @noRd
 yukon_norm <- function(x) {
-  x <- gsub('[–—]', '-', x)
+  x <- gsub('[\u2013\u2014]', '-', x)
   tolower(gsub('\\s+', ' ', trimws(x)))
 }
 
@@ -67,6 +67,7 @@ yukon_size <- function(g, kind) {
 #' @return data.table: kind, schema, industry, disturbance, industry_rc,
 #'   disturbance_rc, lf_type, and the matching keys k_ind and k_dist.
 #' @author Julie W. Turner
+#' @export
 read_yukon_reclass <- function(xlsx, patches = NULL) {
   sheets <- c(lines = 'Linear', polys = 'Areal')
   lut <- data.table::rbindlist(purrr::imap(sheets, function(sheet, kind) {
@@ -119,7 +120,7 @@ read_yukon_reclass <- function(xlsx, patches = NULL) {
 #'   TYPE_DISTURBANCE, industry_rc, disturbance_rc, lf_type, image_year,
 #'   schema and source.
 #' @keywords internal
-#' @noRd
+#' @export
 standardise_yukon <- function(x, kind, source, lut, crs, max_year) {
   ren <- c(TYPE_LANDUSE = 'TYPE_INDUSTRY', TYPE_INDUS = 'TYPE_INDUSTRY', INDUSTRY = 'TYPE_INDUSTRY',
            TYPE_DISTU = 'TYPE_DISTURBANCE', DISTURB = 'TYPE_DISTURBANCE',
@@ -202,7 +203,7 @@ yukon_op <- function(op, a, b, kind) {
 #' @return list: `lines` and `polys` (sf, from [standardise_yukon()]), `aoi`
 #'   (sf: wp, kind, geometry; one row per WP and kind it covers) and `qa_dropped` (integer).
 #' @keywords internal
-#' @noRd
+#' @export
 read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
   layers <- setdiff(sf::st_layers(gdb)$name, qa$layer)
   tab <- data.table::data.table(layer = layers, type = sub('.*_', '', layers),
@@ -268,7 +269,7 @@ yukon_nearby <- function(g, others, buffer_m) {
 #'   pieces smaller than one grid cell: lines shorter than `min_m`, and polygon
 #'   pieces nowhere `min_m` wide (nothing left after shrinking by `min_m / 2`).
 #' @param gi sfc of length 1.
-#' @param others sfc. Nearby features (from [yukon_nearby()]).
+#' @param others sfc. Nearby features (from `yukon_nearby()`).
 #' @inheritParams yukon_cast
 #' @param buffer_m,min_m numeric.
 #' @return sfc of length 1 (empty if nothing is left).
@@ -391,11 +392,11 @@ yukon_dedupe <- function(x, kind, buffer_m) {
 #' @description Features with no REF_ID cannot be matched by ID, so a feature
 #'   with no REF_ID that lies entirely within `buffer_m` of features of another
 #'   (overlapping) WP is a copy and is left out (pieces smaller than `min_m`
-#'   outside them are ignored, see [yukon_away_from()]). Older copies are
+#'   outside them are ignored, see `yukon_away_from()`). Older copies are
 #'   checked first, and features already left out do not count, so of two
 #'   copies of each other the one with the later image year is kept. The kept
 #'   features it lies along get its image year as `image_year_first` if earlier.
-#' @param x sf. WP features of one kind, from [yukon_dedupe()].
+#' @param x sf. WP features of one kind, from `yukon_dedupe()`.
 #' @inheritParams yukon_away_from
 #' @return list: `x`, `n` (copies left out) and `log`.
 #' @keywords internal
@@ -487,7 +488,7 @@ yukon_reported_years <- function(x, kind, mines, fixes, mine_source, mine_types 
 #'   older than the feature's earliest image year (`image_year_first`), may
 #'   have been built since. Its parts inside such areas and more than
 #'   `buffer_m` from every earlier GeoYukon feature of the same kind (see
-#'   [yukon_away_from()]) get `year_start` = that image year: the year it had
+#'   `yukon_away_from()`) get `year_start` = that image year: the year it had
 #'   been built by (seen on the image), not the year it was built, which may be
 #'   any time after the earlier imagery.
 #'   The rest of the feature keeps no year. The data cannot tell a feature
@@ -500,6 +501,8 @@ yukon_reported_years <- function(x, kind, mines, fixes, mine_source, mine_types 
 #' @return list: `x` with new parts as separate rows (`part` = "new", the rest
 #'   "rest"), and `n` (features split).
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
   if (is.null(x$part)) x$part <- 'whole'
   yr <- x$image_year_first
@@ -564,7 +567,7 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
 #' @param kind character. "lines" or "polys".
 #' @return character.
 #' @keywords internal
-#' @noRd
+#' @export
 yukon_feature_type <- function(x, kind) {
   drc <- yukon_norm(x$disturbance_rc)
   if (kind == 'lines') {
@@ -622,6 +625,7 @@ yukon_unpaved_type <- function(x) {
 #'   the work package, REF_ID, type, what was done and the km or km2 affected,
 #'   for reporting back to the Government of Yukon).
 #' @author Julie W. Turner
+#' @export
 merge_yukon_disturbance <- function(inputs, ym, patches, fixes, crs, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   max_year <- as.integer(ym$max_image_year %||% format(Sys.Date(), '%Y'))
@@ -745,6 +749,7 @@ merge_yukon_disturbance <- function(inputs, ym, patches, fixes, crs, out_dir) {
 #' @param out_dir character. Folder to write to.
 #' @return character. The four files.
 #' @author Julie W. Turner
+#' @export
 apply_border_years <- function(merged, check, bc, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   pick <- function(n) merged[basename(merged) == n]
@@ -789,6 +794,7 @@ apply_border_years <- function(merged, check, bc, out_dir) {
 #' @param names character. Which files to upload.
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
+#' @export
 upload_yukon_disturbance <- function(project = Sys.getenv('TAR_PROJECT'), names = c('YT_linear', 'YT_areal')) {
   cfg <- read_config(project)
   folder <- cfg$landscape$disturbance$yukon_merge$upload_folder

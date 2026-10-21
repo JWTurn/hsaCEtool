@@ -7,8 +7,8 @@
 
 #' @title Layer table with each layer's files
 #' @description Adds the files found for each layer ([get_layer_files()]) to
-#'   the layer table, for [extract_year()].
-#' @param layers data.table from [read_layers()].
+#'   the layer table, for `extract_year()`.
+#' @param layers data.table from `read_layers()`.
 #' @param files list of character vectors, one per row of `layers`, in order.
 #' @param years integer or NULL. First and last year (target `layer_years`)
 #'   for yearly layers (column `yearly`) with blank years.
@@ -18,6 +18,7 @@
 #' @return data.table: `name`, `first_year`, `last_year`, `time_since`,
 #'   `ts_nodata`, list column `files`, and `files_hash`.
 #' @author Julie W. Turner
+#' @export
 make_layer_index <- function(layers, files, years = NULL) {
   layers <- data.table::as.data.table(layers)
   if (length(files) != nrow(layers)) stop('Need one set of files per layer')
@@ -50,6 +51,7 @@ files_fingerprint <- function(f) {
 #' @return data.table: `row` (row number in `steps`), `year`, `x1_`, `y1_`,
 #'   `x2_`, `y2_` and `tar_group`, sorted by year.
 #' @author Julie W. Turner
+#' @export
 make_step_points <- function(steps) {
   pts <- steps[, .(row = .I, year, x1_, y1_, x2_, y2_)]
   data.table::setorder(pts, year, row)
@@ -78,6 +80,7 @@ make_step_points <- function(steps) {
 #' @return data.table, one row per row of `pts`: `row`, then for each layer
 #'   `<name>_start` (with `ts_<name>_start`) and `<name>_end` (with `ts_<name>_end`).
 #' @author Julie W. Turner
+#' @keywords internal
 extract_year <- function(pts, index, where = 'both', crs = NULL) {
   yr <- unique(pts$year)
   if (length(yr) != 1) stop('extract_year() needs the steps of one year, not ', length(yr))
@@ -131,7 +134,7 @@ extract_year <- function(pts, index, where = 'both', crs = NULL) {
 }
 
 #' @title Extract one year and save it as a Parquet file
-#' @description Runs [extract_year()] and writes the table to
+#' @description Runs `extract_year()` and writes the table to
 #'   `extracted_<year>.parquet` in `out_dir`. Parquet stores data by column, so
 #'   later steps read only the columns they need (`nanoparquet::read_parquet(
 #'   col_select = )`). The files hold step row numbers with layer values, so
@@ -140,6 +143,7 @@ extract_year <- function(pts, index, where = 'both', crs = NULL) {
 #' @param out_dir character. Folder to write to.
 #' @return character. The file written.
 #' @author Julie W. Turner
+#' @export
 write_extracted_year <- function(pts, index, where = 'both', crs = NULL, out_dir) {
   out <- extract_year(pts, index, where = where, crs = crs)
   reproducible::checkPath(out_dir, create = TRUE)

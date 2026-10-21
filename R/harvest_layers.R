@@ -37,6 +37,7 @@
 #'   [make_margin_template()]), which `history`'s cell numbers refer to.
 #' @return character. The files written, named `<prefix>_<metric>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
+#' @export
 build_harvest_layers <- function(history, metric, resolutions, years, recent_years, templates, out_dir,
                                  prefix = 'harvest', margin = NULL) {
   metric <- match.arg(metric, c('year', 'pa', 'dens', 'dist'))
@@ -144,6 +145,7 @@ harvest_distance <- function(cells, fine, grid = fine) {
 #'   earlier one (layers built only in years they change, e.g. disturbance).
 #' @return character. One file per year, in year order.
 #' @author Julie W. Turner
+#' @export
 pick_layer_files <- function(files, prefix, res, first_year, last_year, fill = FALSE) {
   if (is.na(first_year)) {
     want <- sprintf('%s_%sm.tif', prefix, res)

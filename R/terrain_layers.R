@@ -10,7 +10,7 @@
 #'   \describe{
 #'     \item{elevation}{mean elevation (m) of the cell's 30 m cells}
 #'     \item{northness}{cos(aspect): 1 facing north, -1 facing south, 0 facing
-#'       east or west, and 0 on flat ground (see [northness_raster()]). With
+#'       east or west, and 0 on flat ground (see `northness_raster()`). With
 #'       `northness = "fine"`, worked out for every 30 m cell and then averaged;
 #'       with `"coarse"`, worked out from the cells' mean elevation, as in
 #'       NMC_CEtool.}
@@ -27,6 +27,7 @@
 #' @return character. Files `terrain_elevation_<res>m.tif` and
 #'   `terrain_northness_<res>m.tif`.
 #' @author Julie W. Turner
+#' @export
 build_terrain_layers <- function(sourceFile, templates, margin, resolutions, northness = 'fine', out_dir,
                                  access = 'stream', cache = 'inputs') {
   northness <- match.arg(northness, c('fine', 'coarse'))
@@ -72,11 +73,13 @@ build_terrain_layers <- function(sourceFile, templates, margin, resolutions, nor
 #'   east or west. terra measures aspect from the grid's north, which away from
 #'   the projection's central meridian differs from true north (by up to about
 #'   20 degrees across the NMC study area in UTM zone 7), so aspect is first
-#'   turned by that angle ([grid_convergence()]). Flat cells (slope under about
+#'   turned by that angle (`grid_convergence()`). Flat cells (slope under about
 #'   0.0001 degrees, whose aspect is arbitrary) get 0.
 #' @param dem SpatRaster. Elevation in a projected coordinate system.
 #' @return SpatRaster.
 #' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
 northness_raster <- function(dem) {
   slope <- terra::terrain(dem, 'slope', unit = 'radians')
   aspect <- terra::terrain(dem, 'aspect', unit = 'radians')
@@ -118,14 +121,14 @@ mean_to_template <- function(r, templates, res) {
 }
 
 #' @title Put an elevation model onto a template grid
-#' @description Like [warp_resample()] with bilinear resampling, for a large
+#' @description Like `warp_resample()` with bilinear resampling, for a large
 #'   elevation model read from the web (e.g. MRDEM): the template's area is cut
 #'   from the model in its own projection in `tiles` x `tiles` pieces, each
 #'   retried up to `attempts` times if a web read fails (one dropped request
 #'   would otherwise fail the whole step), then joined and put onto the grid.
 #'   Every file is written as BigTIFF: elevation is stored as decimals, which
 #'   compress poorly, so the area can pass the 4 GB limit of a plain TIFF.
-#' @param src character. Raster to read (see [raster_source()]).
+#' @param src character. Raster to read (see `raster_source()`).
 #' @param template character. Template raster file.
 #' @param dst character. File to write.
 #' @param tiles integer. Pieces along each side.
@@ -180,7 +183,7 @@ warp_dem <- function(src, template, dst = tempfile(fileext = '.tif'), tiles = 4,
 #' @description As `warp_to_template()`, but for continuous values (e.g.
 #'   elevation) that are better interpolated ("bilinear") than copied from the
 #'   nearest cell.
-#' @param src character. Raster to read (see [raster_source()]).
+#' @param src character. Raster to read (see `raster_source()`).
 #' @param template character. Template raster file.
 #' @param method character. gdalwarp resampling method, e.g. "bilinear" or "near".
 #' @param dst character. File to write.

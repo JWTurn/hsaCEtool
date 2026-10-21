@@ -1,8 +1,8 @@
-# Load the pipeline's functions (this project is not a package)
+# Made-up data and helpers for the tests (testthat loads the package's functions)
 library(data.table)
-for (f in list.files(testthat::test_path('..', '..', 'R'), pattern = '[.]R$', full.names = TRUE)) {
-  source(f)
-}
+
+# Settings of a made-up project (tests/testthat/fixtures/config/TEST.yaml), checked
+test_config <- function() read_config('TEST', config_dir = testthat::test_path('fixtures', 'config'))
 
 # Small set of standard locations: 2 animals, fixes every 2 hours, in EPSG:3154
 toy_locations <- function(n = 50) {

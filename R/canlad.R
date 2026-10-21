@@ -16,6 +16,7 @@
 #' @inheritParams raster_source
 #' @return data.table with columns `cell` (cell number in the template) and `year`.
 #' @author Julie W. Turner
+#' @export
 canlad_annual_harvest <- function(sourceFile, year, template, code = 2, access = 'stream', cache = 'inputs') {
   warped <- warp_to_template(raster_source(sourceFile, access, cache), template)
   on.exit(unlink(warped), add = TRUE)
@@ -30,6 +31,7 @@ canlad_annual_harvest <- function(sourceFile, year, template, code = 2, access =
 #' @inheritParams canlad_annual_harvest
 #' @return data.table with columns `cell` and `year`.
 #' @author Julie W. Turner
+#' @export
 canlad_old_harvest <- function(typeFile, yearFile, template, code = 3, access = 'stream', cache = 'inputs') {
   type_file <- warp_to_template(raster_source(typeFile, access, cache), template)
   year_file <- warp_to_template(raster_source(yearFile, access, cache), template)

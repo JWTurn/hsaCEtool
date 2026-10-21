@@ -7,6 +7,7 @@
 #' @param cfg named list of settings from [read_config()].
 #' @return list of targets.
 #' @author Julie W. Turner
+#' @export
 targets_config <- function(cfg) {
   list(
     tar_target(cfg_project, cfg$project),
@@ -46,7 +47,7 @@ targets_config <- function(cfg) {
 #'   file, a URL, a Movebank study, or the B.C. telemetry exports combined by
 #'   [read_bc_locations()], with a `_log` target counting each step), then:
 #'   combine (flagging fixes an earlier-listed source also has, see
-#'   [flag_source_duplicates()]), clean (logging the fixes each step removed,
+#'   `flag_source_duplicates()`), clean (logging the fixes each step removed,
 #'   what happened to fixes flagged as mortalities, see [check_mortality()],
 #'   counts of possible mortalities or dropped collars, see [summarize_flags()],
 #'   and how each animal's `mortality_status` was decided (`mortality_rules`, see [mortality_status_rules()])),
@@ -63,6 +64,7 @@ targets_config <- function(cfg) {
 #' @inheritParams targets_config
 #' @return list of targets.
 #' @author Julie W. Turner
+#' @export
 targets_locations <- function(cfg) {
   src_targets <- list()
   src_names <- character()

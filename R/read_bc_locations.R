@@ -44,9 +44,10 @@
 #'   America/Vancouver), `match_m` (default 2), `max_shift_h`
 #'   (default 48) and `species` (old file species kept, default Caribou).
 #' @return data.table of locations in standard form (see
-#'   [standardize_locations()]), with attribute `merge_log`: a table counting
+#'   `standardize_locations()`), with attribute `merge_log`: a table counting
 #'   each step.
 #' @author Julie W. Turner
+#' @export
 read_bc_locations <- function(new_file, old_file, ref_file, src, loc_cfg, crs) {
   p <- utils::modifyList(list(local_tz = 'America/Vancouver', match_m = 2, max_shift_h = 48,
                               species = 'Caribou'), src$params %||% list())
