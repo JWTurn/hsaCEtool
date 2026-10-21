@@ -1,0 +1,45 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+.Rprofile
+.vscode/
+
+# built package and check output
+*.tar.gz
+hsaCEtool.Rcheck/
+
+# data files: caribou locations must never be committed (see AGENTS.md).
+# Settings tables bundled with the package (inst/extdata/*.csv) are allowed.
+_targets/
+inputs/
+outputs/
+data/
+*.rds
+*.RDS
+*.rda
+*.RData
+*.qs
+*.qs2
+*.fst
+*.parquet
+*.feather
+*.csv
+!inst/extdata/*.csv
+*.txt.gz
+*.xlsx
+*.xls
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.gpkg
+*.geojson
+*.kml
+*.kmz
+*.gpx
+*.sqlite
+*.tif
+*.tiff

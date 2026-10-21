@@ -1,0 +1,52 @@
+Package: hsaCEtool
+Title: Habitat Selection Analysis Data Preparation for the Caribou Cumulative Effects Tool
+Version: 0.0.0.9000
+Authors@R:
+    person("Julie W.", "Turner", email = "jwturner@ualberta.ca",
+           role = c("aut", "cre"))
+Description: Steps for a 'targets' pipeline that prepares caribou location
+    data and landscape layers for habitat selection analysis (integrated step
+    selection analysis, iSSA) behind the caribou cumulative effects tool:
+    reading and cleaning GPS locations, building tracks and random steps,
+    building disturbance, fire, harvest, land cover, terrain and forest age
+    layers (including a merged Yukon disturbance layer), extracting them along
+    steps, and fitting the models. Settings are read from layered YAML files so
+    one set of code serves many study areas.
+License: Apache License (>= 2)
+URL: https://github.com/JWTurn/hsaCEtool
+BugReports: https://github.com/JWTurn/hsaCEtool/issues
+Encoding: UTF-8
+Depends:
+    R (>= 4.5)
+Imports:
+    amt,
+    curl,
+    data.table,
+    geotargets,
+    glmmTMB,
+    googledrive,
+    lubridate,
+    purrr,
+    reproducible,
+    rlang,
+    sf,
+    stats,
+    tarchetypes,
+    targets,
+    terra,
+    tools,
+    utils,
+    yaml
+Suggests:
+    crew,
+    move2,
+    nanoparquet,
+    readxl,
+    stringr,
+    testthat (>= 3.0.0),
+    units,
+    withr
+Remotes:
+    PredictiveEcology/reproducible@development
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)

@@ -1,0 +1,10 @@
+^\.githooks$
+^\.claude$
+^\.vscode$
+^AGENTS\.md$
+^CLAUDE\.md$
+^LICENSE\.md$
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^air\.toml$
