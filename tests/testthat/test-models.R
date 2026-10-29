@@ -76,6 +76,7 @@ test_that('the model table: groups, distance cap by step start, random steps, co
   # only formula columns, coded IDs, no positions or times
   expect_setequal(names(d), c('case_', 'indiv_step_id', 'id', 'prop_ab_240_end', 'dist_x_240_end'))
   expect_setequal(unique(d$id), codes$code)
+  expect_true(all(startsWith(d$indiv_step_id, paste0(d$id, '_'))))
   # groups: sum, and min (harvest folded in)
   v <- data.table::rbindlist(purrr::map(files, nanoparquet::read_parquet))
   keep_rows <- steps[, .(row = .I, k = cumsum(!case_)), by = indiv_step_id][k <= 3, row]
@@ -109,13 +110,13 @@ test_that('subsets, seasons and missing values in the model table', {
                  'prop_ab_240_end \\(1 used, 1 random\\)')
   expect_equal(r$log[grepl('used step', what), n], 1L)
   expect_equal(r$log[grepl('^random steps skipped', what), n], 1L)
-  expect_false('a_1' %in% r$data$indiv_step_id)
-  expect_equal(r$data[indiv_step_id == 'a_2', .N], 5L)   # only 4 complete random steps left
+  expect_false('A0001_1' %in% r$data$indiv_step_id)
+  expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 5L)   # only 4 complete random steps left
   expect_equal(r$log[grepl('fewer than 5', what), n], 1L)
   # with fewer random steps wanted than made, the skipped one is replaced by the next
   r <- suppressWarnings(build_model_data(steps, files, codes, common, list(formula = form, n_random = 3)))
-  expect_equal(r$data[indiv_step_id == 'a_2', .N], 4L)
-  expect_equal(r$data[indiv_step_id == 'a_2' & !case_, prop_ab_240_end],
+  expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 4L)
+  expect_equal(r$data[indiv_step_id == 'A0001_2' & !case_, prop_ab_240_end],
                v$prop_a_240_end[9:11] + v$prop_b_240_end[9:11])
   expect_equal(r$log[grepl('fewer than 3', what), n], 0L)
 })

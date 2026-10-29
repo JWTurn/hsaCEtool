@@ -271,8 +271,8 @@ read_extracted <- function(files, cols, rows) {
 #'      next random step is used instead;
 #'   5. each used step keeps its first `n_random` random steps with no missing
 #'      values (fewer only if not enough are left; counted in the log);
-#'   6. animal IDs are replaced by codes, and the table is checked for
-#'      positions and times.
+#'   6. animal IDs are replaced by codes (in `id` and in `indiv_step_id`),
+#'      and the table is checked for positions, times and animal IDs.
 #'   Steps 2 to 5 are done one year (extracted file) at a time, to limit
 #'   memory; a used step and its random steps share a year (of the step's
 #'   end), so they are always in the same file. Text columns stay text here;
@@ -371,8 +371,8 @@ build_model_data <- function(steps, files, codes, common, model) {
     n = c(sum(purrr::map_int(parts, 'bad')), sum(purrr::map_int(parts, 'skipped')), n_rand[n < n_random, .N]))
   rm(parts, n_rand)
 
-  # animal codes in place of IDs
-  s[codes, on = 'id', id := i.code]
+  # animal codes in place of IDs, also in the step IDs (<id>_<step> becomes <code>_<step>)
+  s[codes, on = 'id', `:=`(indiv_step_id = paste0(i.code, substring(indiv_step_id, nchar(id) + 1L)), id = i.code)]
   check_model_data(s, codes)
   log[[length(log) + 1]] <- data.table::data.table(
     what = c('animals', 'steps in the model (used)', 'rows in the model'),
@@ -395,6 +395,9 @@ check_model_data <- function(DT, codes) {
   }
   if ('id' %in% names(DT) && (anyNA(DT$id) || any(DT$id %in% codes$id) || !all(DT$id %in% codes$code))) {
     stop('model table holds animal IDs, not codes', call. = FALSE)
+  }
+  if ('indiv_step_id' %in% names(DT) && !all(sub('_[^_]*$', '', DT$indiv_step_id) %in% codes$code)) {
+    stop('model table step IDs (indiv_step_id) hold animal IDs, not codes', call. = FALSE)
   }
   invisible(DT)
 }
