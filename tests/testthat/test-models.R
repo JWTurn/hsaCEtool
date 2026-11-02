@@ -55,6 +55,10 @@ test_that('model settings are checked', {
   expect_true(any(grepl('n_random must be', p)))
   expect_true(any(grepl('seasons must be', p)))
   expect_true(any(grepl('positions and times', p)))
+  bad$models <- list(m3 = list(formula = form, n_random = 5, random_na = 'drop', export = 'yes'))
+  p <- check_model_settings(bad, 30)
+  expect_true(any(grepl('random_na must be', p)))
+  expect_true(any(grepl('export must be', p)))
 })
 
 test_that('a model formula keeps no environment of its own', {
@@ -119,6 +123,14 @@ test_that('subsets, seasons and missing values in the model table', {
   expect_equal(r$data[indiv_step_id == 'A0001_2' & !case_, prop_ab_240_end],
                v$prop_a_240_end[9:11] + v$prop_b_240_end[9:11])
   expect_equal(r$log[grepl('fewer than 3', what), n], 0L)
+  # random_na: keep takes the first random steps as they come, missing values and all
+  r <- suppressWarnings(build_model_data(steps, files, codes, common,
+                                         list(formula = form, n_random = 3, random_na = 'keep')))
+  expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 4L)
+  expect_equal(r$data[indiv_step_id == 'A0001_2' & !case_, is.na(prop_ab_240_end)], c(TRUE, FALSE, FALSE))
+  expect_false('A0001_1' %in% r$data$indiv_step_id)   # a missing value at a used step still drops it
+  expect_equal(r$log[grepl('^random steps kept', what), n], 1L)
+  expect_equal(r$log[grepl('fewer than 3', what), n], 1L)
 })
 
 test_that('text and grouping columns become factors only at the end, with the levels present', {
@@ -153,4 +165,11 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   expect_setequal(cf$by_group$level, codes$code)
   files_out <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_models'))
   expect_true(all(file.exists(files_out)))
+  # a saved table fits the same away from the pipeline
+  out_dir <- file.path(tempdir(), 'toy_models_file')
+  tab <- write_model_table(r, list(formula = form), 'toy', out_dir)
+  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'data', 'log'))
+  got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
+  expect_true(all(file.exists(got)))
+  expect_equal(glmmTMB::fixef(readRDS(got[1]))$cond, glmmTMB::fixef(fit)$cond)
 })

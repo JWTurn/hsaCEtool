@@ -15,7 +15,7 @@ build_model_data(steps, files, codes, common, model)
 
 \item{common}{named list. \verb{model:} settings \code{seasons}, \code{groups} and \code{distance_cap}.}
 
-\item{model}{named list. This model's settings (formula, n_random, seasons, subset).}
+\item{model}{named list. This model's settings (formula, n_random, random_na, seasons, subset).}
 }
 \value{
 list: \code{data} (data.table, in the order of \code{steps}) and \code{log}
@@ -35,12 +35,14 @@ covariate matching \code{columns}, a step whose START is more than
 for the used step and all its random steps. The start is the same for
 all of them, so this does not depend on where the animal went;
 \item missing values, with a warning naming the columns: a step whose used
-step has one is dropped; a random step with one is skipped, and the
-next random step is used instead;
-\item each used step keeps its first \code{n_random} random steps with no missing
-values (fewer only if not enough are left; counted in the log);
-\item animal IDs are replaced by codes, and the table is checked for
-positions and times.
+step has one is dropped. A random step with one is skipped, and the
+next random step is used instead (\code{random_na: replace}, the default),
+or kept as it is (\code{random_na: keep}; glmmTMB leaves it out when fitting);
+\item each used step keeps its first \code{n_random} random steps: with no missing
+values (fewer only if not enough are left; counted in the log), or with
+\code{random_na: keep}, the first \code{n_random} as they come;
+\item animal IDs are replaced by codes (in \code{id} and in \code{indiv_step_id}),
+and the table is checked for positions, times and animal IDs.
 Steps 2 to 5 are done one year (extracted file) at a time, to limit
 memory; a used step and its random steps share a year (of the step's
 end), so they are always in the same file. Text columns stay text here;

@@ -19,6 +19,9 @@ For each model named under \verb{model: models:}:
 \item \verb{model_data_<name>}: its table (\code{\link[=build_model_data]{build_model_data()}}): only the columns
 its formula uses, animal IDs as codes, no positions or times;
 \item \verb{model_log_<name>}: what the table kept, adjusted and dropped;
+\item \verb{model_table_<name>_file}: with \code{export: true}, the table saved to
+outputs/\if{html}{\out{<project>}}/models/tables/\if{html}{\out{<name>}}_table.rds (\code{\link[=write_model_table]{write_model_table()}}),
+to fit elsewhere with \code{\link[=fit_model_file]{fit_model_file()}} (e.g. on an HPC cluster);
 \item \verb{model_fit_<name>}: the glmmTMB fit (\code{\link[=fit_issa]{fit_issa()}}), unless the model has \code{fit: false};
 \item \verb{model_coefs_<name>} and \verb{model_coefs_<name>_files}: coefficient tables
 (\code{\link[=model_coefficients]{model_coefficients()}}) saved as CSV with the table's log.

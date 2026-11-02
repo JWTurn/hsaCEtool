@@ -10,6 +10,9 @@
 #'   - `model_data_<name>`: its table ([build_model_data()]): only the columns
 #'     its formula uses, animal IDs as codes, no positions or times;
 #'   - `model_log_<name>`: what the table kept, adjusted and dropped;
+#'   - `model_table_<name>_file`: with `export: true`, the table saved to
+#'     outputs/<project>/models/tables/<name>_table.rds ([write_model_table()]),
+#'     to fit elsewhere with [fit_model_file()] (e.g. on an HPC cluster);
 #'   - `model_fit_<name>`: the glmmTMB fit ([fit_issa()]), unless the model has `fit: false`;
 #'   - `model_coefs_<name>` and `model_coefs_<name>_files`: coefficient tables
 #'     ([model_coefficients()]) saved as CSV with the table's log.
@@ -40,6 +43,11 @@ targets_models <- function(cfg) {
         build_model_data(steps, extracted, animal_codes, cfg_model, CFG), list(CFG = cfg_nm))),
       tar_target_raw(paste0('model_log_', nm), substitute(DATA$log, list(DATA = data_nm)))
     ))
+    if (isTRUE(models[[nm]]$export)) {
+      out <- c(out, list(tar_target_raw(paste0('model_table_', nm, '_file'), substitute(
+        write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables')), list(DATA = data_nm, CFG = cfg_nm, NM = nm)),
+        format = 'file')))
+    }
     # fit: false builds the table only (e.g. to check it before a long fit)
     if (isFALSE(models[[nm]]$fit)) next
     out <- c(out, list(

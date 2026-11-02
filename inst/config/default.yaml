@@ -425,10 +425,16 @@ model:
   #                        resolution and _start or _end. Text columns (and grouping
   #                        columns such as id) become factors just before fitting.
   #     n_random: 10       random steps per used step, 1 to tracks: n_random (more needs more memory)
+  #     random_na: replace random steps with a missing value: replace (skip them and use the
+  #                        next random step) or keep (take the first n_random as they come;
+  #                        glmmTMB leaves rows with missing values out when fitting)
   #     seasons: all       all, or a list of season names, e.g. [winter] or [summer, fall]
   #     subset: null       optional condition on step columns, e.g. juris == 'yt',
   #                        herd %in% c('Hess', 'Klaza') or year >= 2015; null = all steps
   #     step_sd: 1000      fixed SD of the step intercepts (variance 1e6)
   #     fit: true          true: fit it; false: build its table only (target model_data_<name>
   #                        and its log), e.g. to check the table before a long fit
+  #     export: false      true: also save the table to outputs/<project>/models/tables/
+  #                        <name>_table.rds, to fit elsewhere with fit_model_file() (e.g. on
+  #                        an HPC cluster, see the project's hpc/ folder); false: don't
   models: {}

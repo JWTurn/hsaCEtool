@@ -112,6 +112,10 @@ check_model_settings <- function(mcfg, n_made) {
           paste(c(names(seasons), 'other'), collapse = ', '), ')')
     }
     if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) add('models: ', nm, ': fit must be true or false')
+    if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) add('models: ', nm, ': export must be true or false')
+    if (!is.null(m$random_na) && !identical(m$random_na, 'replace') && !identical(m$random_na, 'keep')) {
+      add('models: ', nm, ': random_na must be replace or keep')
+    }
     if (nzchar(m$subset %||% '')) {
       ok <- tryCatch({ str2lang(m$subset); TRUE }, error = function(e) FALSE)
       if (!ok) add('models: ', nm, ': subset could not be read')
@@ -170,7 +174,7 @@ write_animal_codes <- function(codes, out_dir) {
 #' @title Steps used by one model
 #' @description Keeps the steps in `subset` and the model's seasons, each used
 #'   step with all its random steps ([build_model_data()] picks the first
-#'   `n_random` with no missing values). Adds `season` and `yearseason` (e.g.
+#'   `n_random`). Adds `season` and `yearseason` (e.g.
 #'   2019_winter).
 #' @param steps data.table from [prep_steps()].
 #' @param model named list. One model's settings.
@@ -267,10 +271,12 @@ read_extracted <- function(files, cols, rows) {
 #'      for the used step and all its random steps. The start is the same for
 #'      all of them, so this does not depend on where the animal went;
 #'   4. missing values, with a warning naming the columns: a step whose used
-#'      step has one is dropped; a random step with one is skipped, and the
-#'      next random step is used instead;
-#'   5. each used step keeps its first `n_random` random steps with no missing
-#'      values (fewer only if not enough are left; counted in the log);
+#'      step has one is dropped. A random step with one is skipped, and the
+#'      next random step is used instead (`random_na: replace`, the default),
+#'      or kept as it is (`random_na: keep`; glmmTMB leaves it out when fitting);
+#'   5. each used step keeps its first `n_random` random steps: with no missing
+#'      values (fewer only if not enough are left; counted in the log), or with
+#'      `random_na: keep`, the first `n_random` as they come;
 #'   6. animal IDs are replaced by codes (in `id` and in `indiv_step_id`),
 #'      and the table is checked for positions, times and animal IDs.
 #'   Steps 2 to 5 are done one year (extracted file) at a time, to limit
@@ -281,7 +287,7 @@ read_extracted <- function(files, cols, rows) {
 #' @param files character. Parquet files from [write_extracted_year()].
 #' @param codes data.table from [make_animal_codes()].
 #' @param common named list. `model:` settings `seasons`, `groups` and `distance_cap`.
-#' @param model named list. This model's settings (formula, n_random, seasons, subset).
+#' @param model named list. This model's settings (formula, n_random, random_na, seasons, subset).
 #' @return list: `data` (data.table, in the order of `steps`) and `log`
 #'   (data.table: what was kept, adjusted and dropped).
 #' @author Julie W. Turner
@@ -314,6 +320,7 @@ build_model_data <- function(steps, files, codes, common, model) {
   keep_cols <- unique(c('case_', 'indiv_step_id', 'id', setdiff(vars, 'id')))
   check_cols <- setdiff(keep_cols, 'id')
   n_random <- model$n_random
+  keep_na <- identical(model$random_na, 'keep')
 
   # one year at a time
   parts <- purrr::map(files, function(fl) {
@@ -333,17 +340,19 @@ build_model_data <- function(steps, files, codes, common, model) {
       length(far)
     })
 
-    # missing values: drop the step at a used step, skip the row at a random step
+    # missing values: drop the step at a used step; at a random step, skip the row
+    # (random_na: replace) or keep it (random_na: keep)
     na_row <- !stats::complete.cases(x[, check_cols, with = FALSE])
     nas <- purrr::map(check_cols, function(cl) c(used = sum(is.na(x[[cl]]) & x$case_), random = sum(is.na(x[[cl]]) & !x$case_)))
     bad <- unique(x$indiv_step_id[x$case_ & na_row])
     skipped <- sum(na_row & !x$case_ & !x$indiv_step_id %in% bad)
-    x <- x[!na_row & !indiv_step_id %in% bad, c('row', keep_cols), with = FALSE]
+    x <- x[(keep_na | !na_row) & !indiv_step_id %in% bad, c('row', keep_cols), with = FALSE]
 
-    # first n_random complete random steps of each step
+    # first n_random random steps of each step (complete ones, unless random_na: keep)
     x[, .k := cumsum(!case_), by = indiv_step_id]
     x <- x[case_ | .k <= n_random]
     x[, .k := NULL]
+    if (keep_na) skipped <- sum(!x$case_ & !stats::complete.cases(x[, check_cols, with = FALSE]))
     list(data = x, n_far = n_far, nas = nas, bad = length(bad), skipped = skipped)
   })
   parts <- purrr::compact(parts)
@@ -359,17 +368,20 @@ build_model_data <- function(steps, files, codes, common, model) {
   nas <- purrr::map(seq_along(check_cols), function(j) Reduce(`+`, purrr::map(parts, function(p) p$nas[[j]])))
   nas <- stats::setNames(nas, check_cols)[purrr::map_lgl(nas, function(n) sum(n) > 0)]
   if (length(nas)) {
-    warning('model table has missing values (steps dropped or random steps replaced; see the data log): ',
+    warning('model table has missing values (steps dropped or random steps ',
+            if (keep_na) 'kept with them' else 'replaced', '; see the data log): ',
             paste(sprintf('%s (%d used, %d random)', names(nas), purrr::map_int(nas, 1), purrr::map_int(nas, 2)), collapse = '; '),
             call. = FALSE)
   }
-  n_rand <- s[, .(n = sum(!case_)), by = indiv_step_id]
+  complete <- stats::complete.cases(s[, check_cols, with = FALSE])
+  n_rand <- s[, .(n = sum(!case_ & complete[.I])), by = indiv_step_id]
   log[[length(log) + 1]] <- data.table::data.table(
     what = c('steps dropped: missing value at the used step',
-             'random steps skipped: missing value (later random steps used instead)',
+             if (keep_na) 'random steps kept with a missing value (left out when fitting)'
+             else 'random steps skipped: missing value (later random steps used instead)',
              paste0('steps with fewer than ', n_random, ' complete random steps')),
     n = c(sum(purrr::map_int(parts, 'bad')), sum(purrr::map_int(parts, 'skipped')), n_rand[n < n_random, .N]))
-  rm(parts, n_rand)
+  rm(parts, n_rand, complete)
 
   # animal codes in place of IDs, also in the step IDs (<id>_<step> becomes <code>_<step>)
   s[codes, on = 'id', `:=`(indiv_step_id = paste0(i.code, substring(indiv_step_id, nchar(id) + 1L)), id = i.code)]
@@ -506,4 +518,52 @@ write_model_coefficients <- function(coefs, log, name, out_dir) {
   files <- file.path(out_dir, paste0(name, '_', names(tabs), '.csv'))
   purrr::walk2(tabs, files, function(x, f) data.table::fwrite(x, f))
   files
+}
+
+#' @title Save a model's table, to fit it away from the pipeline
+#' @description Saves what [fit_model_file()] needs, e.g. to fit a large model
+#'   on an HPC cluster: the table and its log from [build_model_data()], the
+#'   formula and `step_sd`. The table holds only the formula's columns, coded
+#'   animal IDs and no positions or times, so it may be copied to the cluster;
+#'   the animal codes ([write_animal_codes()]) stay in restricted storage.
+#' @param data list from [build_model_data()].
+#' @param model named list. This model's settings (formula, step_sd).
+#' @inheritParams write_model_coefficients
+#' @return character. The file written, <out_dir>/<name>_table.rds.
+#' @author Julie W. Turner
+#' @export
+write_model_table <- function(data, model, name, out_dir) {
+  reproducible::checkPath(out_dir, create = TRUE)
+  file <- file.path(out_dir, paste0(name, '_table.rds'))
+  saveRDS(list(name = name, formula = model$formula, step_sd = model$step_sd %||% 1000,
+               data = data$data, log = data$log), file)
+  file
+}
+
+#' @title Fit a model from a saved table, e.g. in an HPC cluster job
+#' @description Reads a file from [write_model_table()], fits it with
+#'   [fit_issa()] and saves the fit and its coefficient tables
+#'   ([write_model_coefficients()]). Reports the table size, time taken and
+#'   whether the fit converged.
+#' @param file character. A <name>_table.rds file from [write_model_table()].
+#' @param out_dir character. Folder to write to.
+#' @param threads integer. Cores glmmTMB may use (its `parallel` control).
+#' @return character, invisibly. The files written: <name>_fit.rds and the
+#'   coefficient CSVs.
+#' @author Julie W. Turner
+#' @export
+fit_model_file <- function(file, out_dir, threads = 1L) {
+  x <- readRDS(file)
+  message(x$name, ': ', nrow(x$data), ' rows, ', data.table::uniqueN(x$data$id), ' animals, ',
+          threads, ' thread(s)')
+  t0 <- Sys.time()
+  fit <- fit_issa(x$data, x$formula, step_sd = x$step_sd,
+                  control = list(rank_check = 'adjust', parallel = as.integer(threads)))
+  message(x$name, ': fitted in ', format(round(difftime(Sys.time(), t0, units = 'mins'), 1)),
+          '; converged: ', fit$fit$convergence == 0, '; pdHess: ', isTRUE(fit$sdr$pdHess))
+  reproducible::checkPath(out_dir, create = TRUE)
+  fit_file <- file.path(out_dir, paste0(x$name, '_fit.rds'))
+  saveRDS(fit, fit_file)
+  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir)
+  invisible(c(fit_file, files))
 }
