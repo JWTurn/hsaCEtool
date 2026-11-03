@@ -614,6 +614,12 @@ model:
 - **Missing values**: a step whose used step has a missing value is dropped
   whole; a random step with one is dropped on its own. Counts are in
   `<name>_data_log.csv`.
+- **Fit settings** (a model's `control:`): passed to glmmTMB
+  (`glmmTMBControl()`), on top of `rank_check: adjust`. The usual one is a
+  higher iteration limit for a model that stops before it converges (the fit
+  log says "iteration limit reached"):
+  `control: {optCtrl: {iter.max: 1000, eval.max: 1000}}`. Only that model is
+  refitted.
 - **Factors**: text columns and grouping columns (`id`, `yearseason`, ...)
   become factors only just before fitting, with only the values left in the
   table, so a value dropped earlier is not an empty level.

@@ -14,6 +14,8 @@
 #'     outputs/<project>/models/tables/<name>_table.rds ([write_model_table()]),
 #'     to fit elsewhere with [fit_model_file()] (e.g. on an HPC cluster);
 #'   - `model_fit_<name>`: the glmmTMB fit ([fit_issa()]), unless the model has `fit: false`;
+#'     a model's `control:` goes to [glmmTMB::glmmTMBControl()], on top of
+#'     `rank_check = 'adjust'`;
 #'   - `model_coefs_<name>` and `model_coefs_<name>_files`: coefficient tables
 #'     ([model_coefficients()]) saved as CSV with the table's log.
 #'   Shared by all models: `cfg_model` (seasons, groups, distance cap),
@@ -50,9 +52,17 @@ targets_models <- function(cfg) {
     }
     # fit: false builds the table only (e.g. to check it before a long fit)
     if (isFALSE(models[[nm]]$fit)) next
+    # control: only in the command of a model that sets it, so adding it to one
+    # model does not change (and refit) the others
+    fit_cmd <- if (is.null(models[[nm]]$control)) {
+      substitute(fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000), list(DATA = data_nm, CFG = cfg_nm))
+    } else {
+      substitute(fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000,
+                          control = utils::modifyList(list(rank_check = 'adjust'), CFG$control)),
+                 list(DATA = data_nm, CFG = cfg_nm))
+    }
     out <- c(out, list(
-      tar_target_raw(as.character(fit_nm), substitute(
-        fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000), list(DATA = data_nm, CFG = cfg_nm))),
+      tar_target_raw(as.character(fit_nm), fit_cmd),
       tar_target_raw(as.character(coefs_nm), substitute(model_coefficients(FIT), list(FIT = fit_nm))),
       tar_target_raw(paste0(coefs_nm, '_files'), substitute(
         write_model_coefficients(COEFS, LOG, NM, model_dir),

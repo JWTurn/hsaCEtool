@@ -432,7 +432,11 @@ model:
   #     subset: null       optional condition on step columns, e.g. juris == 'yt',
   #                        herd %in% c('Hess', 'Klaza') or year >= 2015; null = all steps
   #     step_sd: 1000      fixed SD of the step intercepts (variance 1e6)
-  #     fit: true          true: fit it; false: build its table only (target model_data_<name>
+  #     control: null      optional settings for the fit (glmmTMB::glmmTMBControl()), on top of
+  #                        rank_check: adjust, e.g. {optCtrl: {iter.max: 1000, eval.max: 1000}}
+  #                        when a fit stops at the iteration limit (300) without converging;
+  #                        null = the defaults. Kept in an exported table for fit_model_file().
+  #     fit: true         true: fit it; false: build its table only (target model_data_<name>
   #                        and its log), e.g. to check the table before a long fit
   #     export: false      true: also save the table to outputs/<project>/models/tables/
   #                        <name>_table.rds, to fit elsewhere with fit_model_file() (e.g. on

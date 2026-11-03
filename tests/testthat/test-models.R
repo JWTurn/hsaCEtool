@@ -59,6 +59,10 @@ test_that('model settings are checked', {
   p <- check_model_settings(bad, 30)
   expect_true(any(grepl('random_na must be', p)))
   expect_true(any(grepl('export must be', p)))
+  bad$models <- list(m4 = list(formula = form, n_random = 5, control = list(iter.max = 1000)))
+  expect_true(any(grepl('control must be', check_model_settings(bad, 30))))
+  ok$models$full$control <- list(optCtrl = list(iter.max = 1000, eval.max = 1000))
+  expect_length(check_model_settings(ok, 30), 0)
 })
 
 test_that('a model formula keeps no environment of its own', {
@@ -168,8 +172,29 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   # a saved table fits the same away from the pipeline
   out_dir <- file.path(tempdir(), 'toy_models_file')
   tab <- write_model_table(r, list(formula = form), 'toy', out_dir)
-  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'data', 'log'))
+  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'control', 'data', 'log'))
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_true(all(file.exists(got)))
   expect_equal(glmmTMB::fixef(readRDS(got[1]))$cond, glmmTMB::fixef(fit)$cond)
+})
+
+test_that('a model\'s control reaches the fit, and only its own fit command', {
+  cfg <- list(model = list(models = list(
+    plain = list(formula = form, n_random = 5),
+    ctrl = list(formula = form, n_random = 5, control = list(optCtrl = list(iter.max = 7))))))
+  tg <- targets_models(cfg)
+  cmd <- function(nm) paste(deparse(purrr::detect(tg, function(t) t$settings$name == nm)$command$expr), collapse = ' ')
+  expect_false(grepl('control', cmd('model_fit_plain')))
+  expect_true(grepl('control = utils::modifyList', cmd('model_fit_ctrl')))
+  # the setting goes to glmmTMB: a 1-iteration limit stops the optimizer early
+  steps <- toy_model_steps(n_strata = 30)
+  files <- toy_extracted(steps, file.path(tempdir(), 'toy_extracted4'))
+  r <- build_model_data(steps, files, make_animal_codes(steps$id), common, list(formula = form, n_random = 5))
+  fit <- suppressWarnings(fit_issa(r$data, form, control = utils::modifyList(
+    list(rank_check = 'adjust'), list(optCtrl = list(iter.max = 1, eval.max = 1)))))
+  expect_equal(fit$fit$convergence, 1L)
+  out_dir <- file.path(tempdir(), 'toy_models_ctrl')
+  tab <- write_model_table(r, list(formula = form, control = list(optCtrl = list(iter.max = 1, eval.max = 1))), 'toy', out_dir)
+  got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
+  expect_equal(readRDS(got[1])$fit$convergence, 1L)
 })

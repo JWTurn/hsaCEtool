@@ -116,6 +116,13 @@ check_model_settings <- function(mcfg, n_made) {
     if (!is.null(m$random_na) && !identical(m$random_na, 'replace') && !identical(m$random_na, 'keep')) {
       add('models: ', nm, ': random_na must be replace or keep')
     }
+    if (!is.null(m$control)) {
+      ctrl_ok <- names(formals(glmmTMB::glmmTMBControl))
+      if (!is.list(m$control) || is.null(names(m$control)) || any(!names(m$control) %in% ctrl_ok)) {
+        add('models: ', nm, ': control must be named glmmTMBControl() settings, e.g. ',
+            '{optCtrl: {iter.max: 1000, eval.max: 1000}}')
+      }
+    }
     if (nzchar(m$subset %||% '')) {
       ok <- tryCatch({ str2lang(m$subset); TRUE }, error = function(e) FALSE)
       if (!ok) add('models: ', nm, ': subset could not be read')
@@ -536,7 +543,7 @@ write_model_table <- function(data, model, name, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, paste0(name, '_table.rds'))
   saveRDS(list(name = name, formula = model$formula, step_sd = model$step_sd %||% 1000,
-               data = data$data, log = data$log), file)
+               control = model$control, data = data$data, log = data$log), file)
   file
 }
 
@@ -548,6 +555,8 @@ write_model_table <- function(data, model, name, out_dir) {
 #' @param file character. A <name>_table.rds file from [write_model_table()].
 #' @param out_dir character. Folder to write to.
 #' @param threads integer. Cores glmmTMB may use (its `parallel` control).
+#'   The table's `control` (the model's `control:` setting) is also used,
+#'   on top of `rank_check = 'adjust'`; `threads` sets `parallel`.
 #' @return character, invisibly. The files written: <name>_fit.rds and the
 #'   coefficient CSVs.
 #' @author Julie W. Turner
@@ -557,8 +566,9 @@ fit_model_file <- function(file, out_dir, threads = 1L) {
   message(x$name, ': ', nrow(x$data), ' rows, ', data.table::uniqueN(x$data$id), ' animals, ',
           threads, ' thread(s)')
   t0 <- Sys.time()
-  fit <- fit_issa(x$data, x$formula, step_sd = x$step_sd,
-                  control = list(rank_check = 'adjust', parallel = as.integer(threads)))
+  ctrl <- utils::modifyList(list(rank_check = 'adjust'), x$control %||% list())
+  ctrl$parallel <- as.integer(threads)
+  fit <- fit_issa(x$data, x$formula, step_sd = x$step_sd, control = ctrl)
   message(x$name, ': fitted in ', format(round(difftime(Sys.time(), t0, units = 'mins'), 1)),
           '; converged: ', fit$fit$convergence == 0, '; pdHess: ', isTRUE(fit$sdr$pdHess))
   reproducible::checkPath(out_dir, create = TRUE)
