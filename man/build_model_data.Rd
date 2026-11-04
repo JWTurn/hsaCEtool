@@ -13,7 +13,8 @@ build_model_data(steps, files, codes, common, model)
 
 \item{codes}{data.table from \code{\link[=make_animal_codes]{make_animal_codes()}}.}
 
-\item{common}{named list. \verb{model:} settings \code{seasons}, \code{groups} and \code{distance_cap}.}
+\item{common}{named list. \verb{model:} settings \code{groups} and \code{distance_cap}, and
+\code{seasons}: the model's seasons (\code{\link[=season_dates]{season_dates()}}).}
 
 \item{model}{named list. This model's settings (formula, n_random, random_na, seasons, subset).}
 }

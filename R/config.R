@@ -44,6 +44,14 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   if (nzchar(cfg$landscape$layers %||% '')) {
     cfg$layers <- read_layers(file.path(config_dir, cfg$landscape$layers))
   }
+  # seasons: the project's season table, or the package's
+  season_file <- cfg$model$season_table %||% ''
+  season_file <- if (nzchar(season_file)) {
+    file.path(config_dir, season_file)
+  } else {
+    system.file('extdata', 'seasons_default.csv', package = 'hsaCEtool')
+  }
+  cfg$seasons <- read_seasons(season_file)
   cfg$project$name <- project
   cfg$config_dir <- config_dir
   check_config(cfg)
@@ -262,7 +270,7 @@ check_config <- function(cfg) {
     add('extract: where must be "start", "end" or "both"')
   }
   # iSSA models (see R/models.R)
-  for (p in check_model_settings(cfg$model %||% list(), cfg$tracks$n_random)) add(p)
+  for (p in check_model_settings(cfg$model %||% list(), cfg$tracks$n_random, cfg$seasons)) add(p)
 
   if (length(problems)) {
     stop('Problems in the settings for project "', cfg$project$name, '":\n  - ',

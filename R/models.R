@@ -59,19 +59,22 @@ model_bars <- function(f) {
 #' @description Called by [read_config()], so mistakes show before a run starts.
 #' @param mcfg named list. The `model:` settings.
 #' @param n_made integer. Random steps made per used step (`tracks: n_random`).
+#' @param seasons data.table. The season table ([read_seasons()]).
 #' @return character. Problems found (empty if none).
 #' @author Julie W. Turner
 #' @keywords internal
 #' @noRd
-check_model_settings <- function(mcfg, n_made) {
+check_model_settings <- function(mcfg, n_made, seasons) {
   out <- character()
   add <- function(...) out <<- c(out, paste0('model: ', ...))
-  seasons <- mcfg$seasons %||% list()
-  for (nm in names(seasons)) {
-    r <- unlist(seasons[[nm]])
-    if (length(r) != 2 || !all(grepl('^[0-1][0-9]-[0-3][0-9]$', r))) {
-      add('seasons: ', nm, ' must be two month-day dates, e.g. [\'11-01\', \'04-15\']')
-    }
+  if (!is.null(mcfg$seasons)) {
+    add('seasons: season dates are now set in a season table (model: season_table: and season_set:; ',
+        'see the package\'s config/README.md)')
+  }
+  sets <- unique(seasons$set)
+  default_set <- mcfg$season_set %||% ''
+  if (!default_set %in% sets) {
+    add('season_set: "', default_set, '" is not a set in the season table (', paste(sets, collapse = ', '), ')')
   }
   rules <- c('sum', 'min', 'max', 'mean')
   for (nm in names(mcfg$groups)) {
@@ -106,10 +109,16 @@ check_model_settings <- function(mcfg, n_made) {
     if (!is.numeric(n) || length(n) != 1 || n < 1 || n > n_made) {
       add('models: ', nm, ': n_random must be a number from 1 to ', n_made, ' (tracks: n_random)')
     }
+    m_set <- m$season_set %||% default_set
+    if (!is.null(m$season_set) && !m$season_set %in% sets) {
+      add('models: ', nm, ': season_set "', m$season_set, '" is not a set in the season table (',
+          paste(sets, collapse = ', '), ')')
+    }
     s <- unlist(m$seasons %||% 'all')
-    if (!identical(s, 'all') && length(setdiff(s, c(names(seasons), 'other')))) {
-      add('models: ', nm, ': seasons must be all or names from model: seasons (',
-          paste(c(names(seasons), 'other'), collapse = ', '), ')')
+    in_set <- c(seasons$season[seasons$set == m_set], 'other')
+    if (!identical(s, 'all') && length(setdiff(s, in_set))) {
+      add('models: ', nm, ': seasons must be all or names from season set ', m_set, ' (',
+          paste(in_set, collapse = ', '), ')')
     }
     if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) add('models: ', nm, ': fit must be true or false')
     if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) add('models: ', nm, ': export must be true or false')
@@ -185,7 +194,7 @@ write_animal_codes <- function(codes, out_dir) {
 #'   2019_winter).
 #' @param steps data.table from [prep_steps()].
 #' @param model named list. One model's settings.
-#' @param seasons named list. `model: seasons:`.
+#' @param seasons named list. The model's seasons ([season_dates()]).
 #' @param cols character. Step columns to keep.
 #' @return data.table with `row` (row number in `steps`), in the order of `steps`.
 #' @author Julie W. Turner
@@ -293,7 +302,8 @@ read_extracted <- function(files, cols, rows) {
 #' @param steps data.table from [prep_steps()].
 #' @param files character. Parquet files from [write_extracted_year()].
 #' @param codes data.table from [make_animal_codes()].
-#' @param common named list. `model:` settings `seasons`, `groups` and `distance_cap`.
+#' @param common named list. `model:` settings `groups` and `distance_cap`, and
+#'   `seasons`: the model's seasons ([season_dates()]).
 #' @param model named list. This model's settings (formula, n_random, random_na, seasons, subset).
 #' @return list: `data` (data.table, in the order of `steps`) and `log`
 #'   (data.table: what was kept, adjusted and dropped).

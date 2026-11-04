@@ -16,6 +16,9 @@ list of targets (empty if no models are set).
 For each model named under \verb{model: models:}:
 \itemize{
 \item \verb{cfg_model_<name>}: its settings, so editing one model refits only that one;
+\item \verb{seasons_<name>}: its seasons (\code{\link[=season_dates]{season_dates()}}): the set named by its
+\verb{season_set:}, or \verb{model: season_set:}, so editing one set of the season
+table rebuilds only the models that use it;
 \item \verb{model_data_<name>}: its table (\code{\link[=build_model_data]{build_model_data()}}): only the columns
 its formula uses, animal IDs as codes, no positions or times;
 \item \verb{model_log_<name>}: what the table kept, adjusted and dropped;
@@ -23,9 +26,12 @@ its formula uses, animal IDs as codes, no positions or times;
 outputs/\if{html}{\out{<project>}}/models/tables/\if{html}{\out{<name>}}_table.rds (\code{\link[=write_model_table]{write_model_table()}}),
 to fit elsewhere with \code{\link[=fit_model_file]{fit_model_file()}} (e.g. on an HPC cluster);
 \item \verb{model_fit_<name>}: the glmmTMB fit (\code{\link[=fit_issa]{fit_issa()}}), unless the model has \code{fit: false};
+a model's \verb{control:} goes to \code{\link[glmmTMB:glmmTMBControl]{glmmTMB::glmmTMBControl()}}, on top of
+\code{rank_check = 'adjust'};
 \item \verb{model_coefs_<name>} and \verb{model_coefs_<name>_files}: coefficient tables
 (\code{\link[=model_coefficients]{model_coefficients()}}) saved as CSV with the table's log.
-Shared by all models: \code{cfg_model} (seasons, groups, distance cap),
+Shared by all models: \code{cfg_model} (groups, distance cap), \code{season_table}
+(the season table, \code{\link[=read_seasons]{read_seasons()}}),
 \code{animal_codes} and \code{animal_codes_file} (the confidential table linking
 codes to animal IDs, in outputs/\if{html}{\out{<project>}}/models/).
 }

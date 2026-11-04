@@ -14,8 +14,10 @@ model_coefficients(fit, step_group = "indiv_step_id")
 \value{
 list of data.tables: \code{fixed} (population-level estimates: term,
 estimate, se, z, p), \code{random} (SD of each random term by group) and
-\code{by_group} (each animal code's, or year-season's, coefficient: the
-population estimate plus its deviation).
+\code{by_group} (each animal code's, or year's, coefficient: the
+population estimate plus its deviation). In a model whose fixed
+effects are by season (\code{season:x}, no \code{x} on its own), each deviation
+is added to every season's estimate, with one row per season.
 }
 \description{
 Coefficient tables of a fitted iSSA

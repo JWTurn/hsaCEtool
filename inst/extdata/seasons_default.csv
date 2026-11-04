@@ -1,0 +1,5 @@
+set,season,start_month,start_day,end_month,end_day,source
+default,winter,11,1,4,15,hsaCEtool default
+default,spring,4,16,6,30,hsaCEtool default
+default,summer,7,1,9,30,hsaCEtool default
+default,fall,10,1,10,31,hsaCEtool default

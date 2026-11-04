@@ -11,7 +11,9 @@ fit_model_file(file, out_dir, threads = 1L)
 
 \item{out_dir}{character. Folder to write to.}
 
-\item{threads}{integer. Cores glmmTMB may use (its \code{parallel} control).}
+\item{threads}{integer. Cores glmmTMB may use (its \code{parallel} control).
+The table's \code{control} (the model's \verb{control:} setting) is also used,
+on top of \code{rank_check = 'adjust'}; \code{threads} sets \code{parallel}.}
 }
 \value{
 character, invisibly. The files written: \if{html}{\out{<name>}}_fit.rds and the

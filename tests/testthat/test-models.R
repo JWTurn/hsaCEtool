@@ -34,6 +34,9 @@ common <- list(seasons = list(winter = list('11-01', '04-15'), summer = list('04
                groups = list(prop_ab = list(sum = list('prop_a', 'prop_b')),
                              dist_x = list(min = list('dist_x', 'harv_dist'))),
                distance_cap = list(columns = '^dist_', beyond_km = 20, set_to_km = 21))
+# season table: the default set as common$seasons, and a second set
+toy_seasons <- data.table(set = c('default', 'default', 'other_set'), season = c('winter', 'summer', 'calving'),
+                          start = c('11-01', '04-16', '05-15'), end = c('04-15', '10-31', '06-15'))
 form <- 'case_ ~ -1 + prop_ab_240_end + I(log((dist_x_240_end + 1)/1000)) + (1 | indiv_step_id) + (0 + prop_ab_240_end | id)'
 
 test_that('seasons follow the start date and can cross the new year', {
@@ -42,27 +45,64 @@ test_that('seasons follow the start date and can cross the new year', {
   expect_equal(season_of(t, list(summer = list('07-01', '09-30'))), rep('other', 5))
 })
 
+test_that('season tables are read and checked', {
+  dir <- withr::local_tempdir()
+  good <- file.path(dir, 'good.csv')
+  writeLines(c('set,season,start_month,start_day,end_month,end_day,source',
+               'simple,winter,11,1,4,15,made up', 'simple,summer,4,16,10,31,made up',
+               'bio,calving,5,15,6,15,made up'), good)
+  s <- read_seasons(good)
+  expect_equal(s$start, c('11-01', '04-16', '05-15'))
+  expect_equal(season_dates(s, 'simple'), list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31')))
+  expect_equal(names(season_dates(s, 'bio')), 'calving')
+  expect_error(season_dates(s, 'nope'), 'No seasons in set "nope" \\(sets: simple, bio\\)')
+  bad <- file.path(dir, 'bad.csv')
+  writeLines(c('set,season,start_month,start_day,end_month,end_day',
+               'simple,winter,13,1,4,15', 'simple,winter,4,16,2,30', 'simple,2nd,1,1,1,2'), bad)
+  expect_error(read_seasons(bad), 'start is not a real day .*: simple winter')
+  expect_error(read_seasons(bad), 'end is not a real day .*: simple winter')
+  expect_error(read_seasons(bad), 'listed more than once in a set: simple winter')
+  expect_error(read_seasons(bad), 'letters, numbers and _, starting with a letter: simple 2nd')
+  writeLines(c('set,season,start,end', 'simple,winter,11-01,04-15'), bad)
+  expect_error(read_seasons(bad), 'needs columns: start_month, start_day, end_month, end_day')
+  expect_error(read_seasons(file.path(dir, 'none.csv')), 'not found')
+})
+
 test_that('model settings are checked', {
-  ok <- list(seasons = common$seasons, groups = common$groups, distance_cap = common$distance_cap,
+  ok <- list(season_set = 'default', groups = common$groups, distance_cap = common$distance_cap,
              models = list(full = list(formula = form, n_random = 5)))
-  expect_length(check_model_settings(ok, 30), 0)
+  expect_length(check_model_settings(ok, 30, toy_seasons), 0)
   bad <- ok
   bad$models <- list(`1st model` = list(formula = 'case_ ~ x + (0 + x | id)', n_random = 50, seasons = list('spring')),
                      m2 = list(formula = 'case_ ~ x1_ + (1 | indiv_step_id)', n_random = 5))
-  p <- check_model_settings(bad, 30)
+  p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('not a usable name', p)))
   expect_true(any(grepl('needs \\(1 \\| indiv_step_id\\)', p)))
   expect_true(any(grepl('n_random must be', p)))
   expect_true(any(grepl('seasons must be', p)))
   expect_true(any(grepl('positions and times', p)))
+  # seasons: a known set, by default or per model, and names from that set
+  sets <- ok
+  sets$season_set <- 'nope'
+  sets$models <- list(m = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('calving')),
+                      m2 = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('winter')),
+                      m3 = list(formula = form, n_random = 5, season_set = 'gone'))
+  p_sets <- check_model_settings(sets, 30, toy_seasons)
+  expect_true(any(grepl('season_set: "nope" is not a set', p_sets)))
+  expect_false(any(grepl('models: m:', p_sets)))
+  expect_true(any(grepl('m2: seasons must be all or names from season set other_set \\(calving, other\\)', p_sets)))
+  expect_true(any(grepl('m3: season_set "gone" is not a set', p_sets)))
+  old <- ok
+  old$seasons <- common$seasons
+  expect_true(any(grepl('season dates are now set in a season table', check_model_settings(old, 30, toy_seasons))))
   bad$models <- list(m3 = list(formula = form, n_random = 5, random_na = 'drop', export = 'yes'))
-  p <- check_model_settings(bad, 30)
+  p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('random_na must be', p)))
   expect_true(any(grepl('export must be', p)))
   bad$models <- list(m4 = list(formula = form, n_random = 5, control = list(iter.max = 1000)))
-  expect_true(any(grepl('control must be', check_model_settings(bad, 30))))
+  expect_true(any(grepl('control must be', check_model_settings(bad, 30, toy_seasons))))
   ok$models$full$control <- list(optCtrl = list(iter.max = 1000, eval.max = 1000))
-  expect_length(check_model_settings(ok, 30), 0)
+  expect_length(check_model_settings(ok, 30, toy_seasons), 0)
 })
 
 test_that('a model formula keeps no environment of its own', {

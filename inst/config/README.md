@@ -609,8 +609,30 @@ model:
   random steps, so it says nothing about that disturbance. It goes by the step's
   start, which the used and random steps share, so it does not depend on where
   the animal went.
-- **Seasons** (`model: seasons:`): by the date a step starts; a model keeps
-  only its `seasons:`.
+- **Seasons**: by the date a step starts (UTC), from a season table (CSV) named
+  in `model: season_table:` (in the project's config folder; `''` uses the
+  package's `inst/extdata/seasons_default.csv`). Each row is one season of a **set**, one
+  way of dividing the year, so a project can keep several (e.g. simplified and
+  biological seasons):
+
+  ```
+  set,season,start_month,start_day,end_month,end_day,source
+  simplified,winter,11,1,4,15,Yukon (2026)
+  simplified,spring,4,16,6,15,Yukon (2026)
+  bio,calving,5,15,6,15,Yukon (2026)
+  ```
+
+  Each season runs from its start day to its end day, both included, and may
+  cross the new year. Months and days are separate numbers so a spreadsheet
+  cannot turn them into dates. Within a set, the first season listed that holds
+  a date wins; steps in no season are `other`. Other columns (e.g. `source`)
+  are kept as notes. Models use `model: season_set:`, or their own
+  `season_set:`; a model keeps only its `seasons:` (e.g. `[winter]`). Editing a
+  set refits only the models that use it.
+
+  The table could later hold definitions that differ by herd or jurisdiction,
+  with an optional column (e.g. `herd`) matched to the steps' column of that
+  name, and rows without it as the fallback. This is not built yet.
 - **Missing values**: a step whose used step has a missing value is dropped
   whole; a random step with one is dropped on its own. Counts are in
   `<name>_data_log.csv`.

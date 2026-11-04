@@ -24,6 +24,15 @@ test_that('read_config combines default, project and override files', {
   expect_equal(cfg$tracks$min_steps, 7)
   expect_equal(cfg$tracks$rate_hours, 11)   # from default.yaml
   expect_equal(cfg$project$name, 'TEST')
+  # seasons: the package's table unless the project names its own
+  expect_equal(names(season_dates(cfg$seasons, cfg$model$season_set)), c('winter', 'spring', 'summer', 'fall'))
+  writeLines(c('set,season,start_month,start_day,end_month,end_day', 'mine,warm,5,1,9,30'),
+             file.path(dir, 'seasons_TEST.csv'))
+  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+                        model = list(season_table = 'seasons_TEST.csv', season_set = 'mine')),
+                   file.path(dir, 'TEST.yaml'))
+  cfg <- read_config('TEST', config_dir = dir)
+  expect_equal(season_dates(cfg$seasons, 'mine'), list(warm = list('05-01', '09-30')))
 })
 
 test_that('check_config reports problems in plain language', {
