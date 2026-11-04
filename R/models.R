@@ -485,8 +485,10 @@ fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 
 #' @param step_group character. The step grouping, left out of the per-group table.
 #' @return list of data.tables: `fixed` (population-level estimates: term,
 #'   estimate, se, z, p), `random` (SD of each random term by group) and
-#'   `by_group` (each animal code's, or year-season's, coefficient: the
-#'   population estimate plus its deviation).
+#'   `by_group` (each animal code's, or year's, coefficient: the
+#'   population estimate plus its deviation). In a model whose fixed
+#'   effects are by season (`season:x`, no `x` on its own), each deviation
+#'   is added to every season's estimate, with one row per season.
 #' @author Julie W. Turner
 #' @export
 model_coefficients <- function(fit, step_group = 'indiv_step_id') {
@@ -505,9 +507,34 @@ model_coefficients <- function(fit, step_group = 'indiv_step_id') {
     d <- data.table::melt(d, id.vars = 'level', variable.name = 'term', value.name = 'deviation', variable.factor = FALSE)
     d[, group := base(g)]
   }))
-  by_group[fixed, on = 'term', coefficient := estimate + deviation]
-  data.table::setcolorder(by_group, c('group', 'level', 'term', 'coefficient', 'deviation'))
-  list(fixed = fixed, random = random, by_group = by_group)
+  list(fixed = fixed, random = random, by_group = group_coefficients(by_group, fixed))
+}
+
+#' @title Add the population estimate to each group's deviation
+#' @description Matches each random-effect term to its fixed effect. A fixed
+#'   effect named `season<level>:<term>` (from `season:x` with no `x` on its
+#'   own) matches `<term>` once for each season, so the table gets a `season`
+#'   column and one row per season. Without such terms the table is unchanged.
+#' @param by_group data.table. group, level, term and deviation.
+#' @param fixed data.table. term and estimate, from [model_coefficients()].
+#' @return `by_group` with `coefficient` (and `season`, if any).
+#' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
+group_coefficients <- function(by_group, fixed) {
+  pat <- '^season([^:]+):(.+)$'
+  est <- fixed[, .(term, estimate)]
+  est[, season := ifelse(grepl(pat, term), sub(pat, '\\1', term), NA_character_)]
+  est[!is.na(season), term := sub(pat, '\\2', term)]
+  out <- est[by_group, on = 'term', allow.cartesian = TRUE]
+  out[, coefficient := estimate + deviation]
+  cols <- c('group', 'level', 'term', 'coefficient', 'deviation')
+  if (all(is.na(out$season))) {
+    out <- out[, ..cols]
+  } else {
+    out <- out[, c('group', 'level', 'season', cols[-(1:2)]), with = FALSE]
+  }
+  out[]
 }
 
 #' @title Save a model's coefficient tables and table log as CSV

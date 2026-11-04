@@ -198,3 +198,14 @@ test_that('a model\'s control reaches the fit, and only its own fit command', {
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_equal(readRDS(got[1])$fit$convergence, 1L)
 })
+
+test_that('per-group coefficients add the deviation to each season\'s estimate', {
+  dev <- data.table(group = 'id', level = c('A0001', 'A0002'), term = 'x', deviation = c(0.1, -0.2))
+  plain <- group_coefficients(dev, data.table(term = 'x', estimate = 1))
+  expect_named(plain, c('group', 'level', 'term', 'coefficient', 'deviation'))
+  expect_equal(plain$coefficient, c(1.1, 0.8))
+  by_season <- group_coefficients(dev, data.table(term = c('seasonsummer:x', 'seasonwinter:x'), estimate = c(1, -1)))
+  expect_named(by_season, c('group', 'level', 'season', 'term', 'coefficient', 'deviation'))
+  expect_equal(by_season[level == 'A0001', setNames(coefficient, season)], c(summer = 1.1, winter = -0.9))
+  expect_equal(nrow(by_season), 4L)
+})
