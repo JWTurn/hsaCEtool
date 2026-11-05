@@ -137,9 +137,16 @@ check_config <- function(cfg) {
     if (type == 'file' && is.null(src$path) && is.null(src$url)) {
       add('locations: sources ', i, ': give a path or a url')
     }
-    if (type == 'movebank' && (is.null(src$study) || is.null(src$user))) {
-      add('locations: sources ', i, ': a movebank source needs a study and a user')
+    if (type == 'movebank' && is.null(src$study)) {
+      add('locations: sources ', i, ': a movebank source needs a study')
     }
+  }
+  # each source's targets are named after it (see source_target_name())
+  src_nms <- purrr::imap_chr(cfg$locations$sources, function(src, i) source_target_name(src, i))
+  dup <- unique(src_nms[duplicated(src_nms)])
+  if (length(dup)) {
+    add('locations: sources: two sources have the same name (after replacing characters other than ',
+        'letters, digits and _): ', paste(sub('locations_source_', '', dup, fixed = TRUE), collapse = ', '))
   }
 
   # cleaning steps must exist

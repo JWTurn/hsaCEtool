@@ -37,16 +37,39 @@ downloaded afresh and replaces the kept copy. Remove it afterwards.
 locations:
   sources:
     - type: file
+      name: NMC2020
       url: "https://drive.google.com/file/d/.../view"
       target_file: clean_NMC.RDS     # the file wanted from the download
     - type: file
+      name: BCtelemetry
       path: "BC/BC_NMC_Telemetry.csv"  # relative to paths: data_in
       columns: {id: animal_id, datetime: timestamp, x: longitude, y: latitude}
       input_crs: "EPSG:4326"
     - type: movebank
+      name: Klaza
       study: "Klaza caribou"
-      user: jwturner
 ```
+
+Each source's targets are named after its `name`: `locations_source_<name>`
+(characters other than letters, digits and `_` become `_`), so names must be
+unique. Sources can then be added, removed or reordered without renaming, and
+rerunning, the others. A source without a name is named by its position.
+
+Each source is got (downloaded) in one target and read in another, and only the
+settings that say which file it is (`path`, `url`, `target_file`, `archive`,
+`fun`, `subfolder`, `refresh`) are part of the download. So editing e.g. its
+`columns` or `herd` reads the file again but does not download it again.
+
+### Freezing downloads
+
+A download would still run again when `paths:` change (e.g. on another
+computer) or the package's download code changes, and a new download of a
+Movebank study that is still collecting brings new fixes, which rebuild
+everything after it. With `locations: freeze_downloads: true`, a location
+source, capture log or mortality file is downloaded again only if its file is
+missing or has changed, or the source has `refresh: true`. Updating the data is
+then always a choice. Note that it also ignores a new `url` or `study`: set
+`refresh: true` for one run when you change which file a source is.
 
 ### Premade or remade
 
@@ -81,9 +104,9 @@ geometry exactly (a shapefile can differ slightly, which would rebuild every
 layer). `upload_premade()` stops if the folder is shared with anyone with the
 link, as the files hold caribou locations.
 
-Movebank passwords are never written in the settings. Save yours once with
-`move2::movebank_store_credentials("<user>")`, which keeps it in your computer's
-keyring.
+Movebank user names and passwords are never written in the settings. Save
+yours once with `move2::movebank_store_credentials("<user>")`, which keeps it
+in your computer's keyring; downloads read it from there.
 
 All times are stored in UTC. A source whose times are local clock time gives
 its time zone as `tz` (a name from the time zone database, e.g.
@@ -148,7 +171,7 @@ mid-afternoon, about 22-23 h UTC) and the same collars on Movebank show that:
 - Each fix records `bc_file` (`new` or `old`) and `time_note` (how its time
   was set), and `time_clash` marks fixes that share their animal and time with
   another fix, for the cleaning steps to resolve. The animal ID is `Anml_ID`
-  (or `collar_<Cllr_ID>`). The target `locations_source_<n>_log` counts each step.
+  (or `collar_<Cllr_ID>`). The target `locations_source_<name>_log` (e.g. `locations_source_BC_log`) counts each step.
 
 Where sources overlap (e.g. Little Rancheria collars on Movebank and in the B.C.
 export), list the source that should win first: fixes another, earlier-listed

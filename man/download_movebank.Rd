@@ -7,7 +7,7 @@
 download_movebank(src, paths)
 }
 \arguments{
-\item{src}{named list. \code{study} (name or ID), \code{user} and optional \code{name}.}
+\item{src}{named list. \code{study} (name or ID) and optional \code{name}.}
 
 \item{paths}{named list. The \verb{paths:} settings (\code{inputs}).}
 }

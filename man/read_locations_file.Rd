@@ -10,7 +10,7 @@ read_locations_file(file, src, loc_cfg, crs)
 \item{file}{character. Path from \code{\link[=get_source]{get_source()}} (only the first is read).}
 
 \item{src}{named list. This source's settings; its \code{columns}, \code{input_crs} and
-\code{name} override the \verb{locations:} defaults.}
+\code{name} override the \verb{locations:} defaults, and its \code{fun} (if set) reads the file.}
 
 \item{loc_cfg}{named list. The \verb{locations:} settings.}
 

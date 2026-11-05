@@ -71,17 +71,20 @@ targets_locations <- function(cfg) {
   premade <- cfg$locations$premade
   # with premade cleaned locations, the sources are not read
   sources <- if (is.null(premade)) cfg$locations$sources else list()
+  # freeze_downloads: a download reruns only if its file is missing or changed
+  # (or with refresh: true), not when settings, paths or package code change
+  freeze <- isTRUE(cfg$locations$freeze_downloads)
   for (i in seq_along(sources)) {
     src <- sources[[i]]
-    nm <- paste0('locations_source_', i)
+    nm <- source_target_name(src, i)
     cue <- tar_cue(mode = if (isTRUE(src$refresh)) 'always' else 'thorough')
     if (identical(src$type, 'movebank')) {
       src_targets <- c(src_targets, list(
         # download one at a time, on the main process (Movebank limits parallel
         # requests); depends only on the study, so reading changes don't re-download
         tar_target_raw(paste0(nm, '_download'),
-                       substitute(download_movebank(SRC, cfg_paths), list(SRC = src[intersect(c('study', 'user', 'name'), names(src))])),
-                       format = 'file', cue = cue, deployment = 'main'),
+                       substitute(download_movebank(SRC, cfg_paths), list(SRC = src[intersect(c('study', 'name'), names(src))])),
+                       format = 'file', cue = download_cue(src$refresh, freeze), deployment = 'main'),
         tar_target_raw(nm, substitute(read_movebank(FILE, SRC, cfg_locations, cfg_project$crs),
                                       list(FILE = as.symbol(paste0(nm, '_download')), SRC = src)))
       ))
@@ -89,9 +92,9 @@ targets_locations <- function(cfg) {
       files <- list(NEW = quote(NULL), OLD = quote(NULL), REF = quote(NULL))
       for (part in intersect(c('new', 'old', 'reference'), names(src))) {
         part_nm <- paste0(nm, '_', part)
-        part_cue <- tar_cue(mode = if (isTRUE(src$refresh) || isTRUE(src[[part]]$refresh)) 'always' else 'thorough')
+        part_cue <- download_cue(isTRUE(src$refresh) || isTRUE(src[[part]]$refresh), freeze)
         src_targets <- c(src_targets, list(
-          tar_target_raw(part_nm, substitute(get_source(SRC, cfg_paths), list(SRC = src[[part]])),
+          tar_target_raw(part_nm, substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src[[part]]))),
                          format = 'file', cue = part_cue)
         ))
         files[[c(new = 'NEW', old = 'OLD', reference = 'REF')[[part]]]] <- as.symbol(part_nm)
@@ -101,18 +104,15 @@ targets_locations <- function(cfg) {
                                       c(files, list(SRC = src)))),
         tar_target_raw(paste0(nm, '_log'), substitute(attr(X, 'merge_log'), list(X = as.symbol(nm))))
       ))
-    } else if (!is.null(src$url)) {
-      src_targets <- c(src_targets, list(
-        tar_target_raw(nm, substitute(download_locations(SRC, cfg_locations, cfg_project$crs, cfg_paths),
-                                      list(SRC = src)), cue = cue)
-      ))
     } else {
+      # a path or a url: get (download) the file, then read it, so changes to
+      # how it is read don't download it again
       file_nm <- paste0(nm, '_file')
       src_targets <- c(src_targets, list(
-        tar_target_raw(file_nm, substitute(get_source(SRC, cfg_paths), list(SRC = src)),
-                       format = 'file', cue = cue),
+        tar_target_raw(file_nm, substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src))),
+                       format = 'file', cue = download_cue(src$refresh, freeze)),
         tar_target_raw(nm, substitute(read_locations_file(FILE, SRC, cfg_locations, cfg_project$crs),
-                                      list(FILE = as.symbol(file_nm), SRC = src)))
+                                      list(FILE = as.symbol(file_nm), SRC = src)), cue = cue)
       ))
     }
     src_names <- c(src_names, nm)
@@ -123,8 +123,8 @@ targets_locations <- function(cfg) {
   cap <- cfg$locations$captures
   if (!is.null(cap) && is.null(premade)) {
     rec_targets <- c(rec_targets, list(
-      tar_target_raw('captures_file', substitute(get_source(SRC, cfg_paths), list(SRC = utils::modifyList(list(subfolder = 'records'), cap))),
-                     format = 'file'),
+      tar_target_raw('captures_file', substitute(get_source(SRC, cfg_paths), list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), cap)))),
+                     format = 'file', cue = download_cue(cap$refresh, freeze)),
       tar_target_raw('capture_log', substitute(read_capture_log(captures_file, COLS, SOURCE, ORDER),
                                                list(COLS = cap$columns, SOURCE = cap$source, ORDER = cap$date_order %||% 'dmy')))
     ))
@@ -135,8 +135,8 @@ targets_locations <- function(cfg) {
     mr <- morts[[i]]
     nm <- paste0('mortality_records_', i)
     rec_targets <- c(rec_targets, list(
-      tar_target_raw(paste0(nm, '_file'), substitute(get_source(SRC, cfg_paths), list(SRC = utils::modifyList(list(subfolder = 'records'), mr))),
-                     format = 'file'),
+      tar_target_raw(paste0(nm, '_file'), substitute(get_source(SRC, cfg_paths), list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), mr)))),
+                     format = 'file', cue = download_cue(mr$refresh, freeze)),
       tar_target_raw(nm, substitute(read_mortality_records(FILE, COLS, SOURCE, ORDER),
                                     list(FILE = as.symbol(paste0(nm, '_file')), COLS = mr$columns, SOURCE = mr$source,
                                          ORDER = mr$date_order %||% 'dmy')))
@@ -239,4 +239,51 @@ targets_locations <- function(cfg) {
                                      cfg_project$name, cfg_project$crs))
     )
   )
+}
+
+#' @title Name of a location source's targets
+#' @description `locations_source_<name>`, with characters other than letters,
+#'   digits and `_` in the name replaced by `_`. Named this way, adding, removing
+#'   or reordering sources does not rename (and so rerun) the others. A source
+#'   without a `name` is named by its position in `locations: sources` instead.
+#' @param src named list. One source's settings.
+#' @param i integer. The source's position in `locations: sources`.
+#' @return character.
+#' @keywords internal
+#' @noRd
+source_target_name <- function(src, i) {
+  nm <- src$name %||% ''
+  paste0('locations_source_', if (nzchar(nm)) gsub('[^A-Za-z0-9_]', '_', nm) else i)
+}
+
+#' @title The settings that say which file a source is
+#' @description The parts of a source's settings that [get_source()] uses to
+#'   find or download its file. Only these go into a download target's
+#'   command, so editing the source's other settings (e.g. `columns`, `herd`)
+#'   reads the file again but does not download it again.
+#' @param src named list. One source's settings.
+#' @return named list.
+#' @keywords internal
+#' @noRd
+source_key <- function(src) {
+  src[intersect(c('path', 'url', 'target_file', 'archive', 'fun', 'subfolder', 'refresh'), names(src))]
+}
+
+#' @title When a download target runs again
+#' @param refresh logical. The source's `refresh` setting: TRUE downloads it
+#'   again every run.
+#' @param freeze logical. `locations: freeze_downloads`: TRUE runs a download
+#'   again only if its file is missing or has changed, not when the source's
+#'   settings, `paths:` or the package's code change.
+#' @return A [targets::tar_cue()].
+#' @keywords internal
+#' @noRd
+download_cue <- function(refresh, freeze) {
+  if (isTRUE(refresh)) {
+    tar_cue(mode = 'always')
+  } else if (isTRUE(freeze)) {
+    tar_cue(command = FALSE, depend = FALSE)
+  } else {
+    tar_cue()
+  }
 }

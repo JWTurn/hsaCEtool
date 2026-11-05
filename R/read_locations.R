@@ -4,7 +4,7 @@
 #'   `standardize_locations()`.
 #' @param file character. Path from [get_source()] (only the first is read).
 #' @param src named list. This source's settings; its `columns`, `input_crs` and
-#'   `name` override the `locations:` defaults.
+#'   `name` override the `locations:` defaults, and its `fun` (if set) reads the file.
 #' @param loc_cfg named list. The `locations:` settings.
 #' @param crs character. Project coordinate system.
 #' @return data.table of locations.
@@ -12,7 +12,7 @@
 #' @export
 read_locations_file <- function(file, src, loc_cfg, crs) {
   file <- file[1]
-  obj <- switch(tolower(tools::file_ext(file)),
+  obj <- if (is.function(as_reader(src$fun))) as_reader(src$fun)(file) else switch(tolower(tools::file_ext(file)),
                 rds = readRDS(file),
                 csv = data.table::fread(file),
                 shp = , gpkg = , geojson = sf::st_read(file, quiet = TRUE),
@@ -77,7 +77,7 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
 #'   `move2::movebank_store_credentials(<user>)`. You must have accepted the
 #'   study's terms of use on movebank.org. If Movebank asks for fewer requests
 #'   (its rate limit), the download is tried again after 1 and then 5 minutes.
-#' @param src named list. `study` (name or ID), `user` and optional `name`.
+#' @param src named list. `study` (name or ID) and optional `name`.
 #' @param paths named list. The `paths:` settings (`inputs`).
 #' @return character. Path to the saved file.
 #' @details Adapted from NMC_CEtool `scripts/1-DL-data.R` and caribouLocPrep `dataPrep_YT()`.

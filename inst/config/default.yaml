@@ -36,13 +36,20 @@ locations:
   # Each entry is a source (path or url, see above) with `type: file`, a
   # Movebank study with `type: movebank`, or the B.C. telemetry exports with
   # `type: bc` (see config/README.md). Each can have its own `columns` and `input_crs`.
+  # Each source's targets are named after its `name` (locations_source_<name>),
+  # so names must be unique.
   sources: []
     # - type: file
+    #   name: Klaza2015
     #   url: "https://drive.google.com/file/d/.../view"
     #   target_file: clean_NMC.RDS
     # - type: movebank
-    #   study: "Klaza caribou"
-    #   user: jwturner        # password is read from keyring::key_get("movebank", user)
+    #   name: Klaza
+    #   study: "Klaza caribou"   # password saved once with move2::movebank_store_credentials()
+  # true or false: true downloads a source (or capture or mortality file) again
+  # only if its file is missing or has changed, or with refresh: true; editing
+  # its settings, `paths:` or the package's code then does not download it again.
+  freeze_downloads: false
   # Premade: cleaned locations saved from the locations_clean target (a .rds;
   # a source: path or url) to use instead of reading and cleaning `sources`.
   premade: null
