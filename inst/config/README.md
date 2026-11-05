@@ -60,6 +60,39 @@ settings that say which file it is (`path`, `url`, `target_file`, `archive`,
 `fun`, `subfolder`, `refresh`) are part of the download. So editing e.g. its
 `columns` or `herd` reads the file again but does not download it again.
 
+### Location sources table: `locations_<project>.csv`
+
+Instead of typing the sources in the YAML, `locations: sources:` can name a CSV
+file in `config/`, one row per source in order of priority:
+
+```yaml
+locations:
+  sources: locations_NMC.csv
+```
+
+`read_config()` turns the table into the same settings as the typed list, so
+moving sources between the two does not change or rerun anything. Blank cells
+are left out. Columns (only `name` is required; leave out any not used):
+
+| Column | What it is |
+|---|---|
+| `name` | the source's name (unique; used in target names and the `source` column) |
+| `type` | `file` (the default), `movebank` or `bc` |
+| `movebank_study` | Movebank study ID (or name), for `type` movebank |
+| `part` | `new`, `old` or `reference`, for `type` bc: one row per part, all with the same `name` |
+| `url`, `path`, `target_file`, `archive`, `fun` | where the file is, as for any source |
+| `id_col`, `datetime_col`, `hour_col`, `x_col`, `y_col` | the source's `columns`: its animal ID, date and time, hour, and coordinate columns |
+| `input_crs`, `tz` | the source's coordinate system and time zone, if not the defaults |
+| `date_only`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
+| `study`, `herd`, `juris` | the source's study, herd and jurisdiction, for fixes without one from a column (`by_source`, see "After cleaning") |
+| `study_column`, `herd_column` | a column of the data checked first for each fix's study or herd in this source |
+| `notes` | anything worth knowing about the source; not used by the pipeline, so editing it reruns nothing |
+
+`by_source` entries and `columns` in the YAML still apply: the table's are added
+to them (its columns first, limited to their own sources). Rules that cover
+several sources, such as `herd: columns:` (`group_id`, `study_site`) and
+`herd: rename:`, stay in the YAML.
+
 ### Freezing downloads
 
 A download would still run again when `paths:` change (e.g. on another

@@ -37,7 +37,9 @@ locations:
   # Movebank study with `type: movebank`, or the B.C. telemetry exports with
   # `type: bc` (see config/README.md). Each can have its own `columns` and `input_crs`.
   # Each source's targets are named after its `name` (locations_source_<name>),
-  # so names must be unique.
+  # so names must be unique. A list typed here, or the name of a CSV file in
+  # config/ with one row per source (e.g. locations_NMC.csv; see config/README.md,
+  # "Location sources table").
   sources: []
     # - type: file
     #   name: Klaza2015

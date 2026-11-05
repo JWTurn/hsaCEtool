@@ -24,7 +24,9 @@ Named list of settings.
 Combines the package's default settings (\code{inst/config/default.yaml}),
 \verb{config/<project>.yaml},
 \code{config/local.yaml} (settings for this computer only, e.g. folder paths) and
-the optional \verb{config/<project>.R}, in that order, later ones winning. The
+the optional \verb{config/<project>.R}, in that order, later ones winning. If
+\verb{locations: sources:} names a CSV file (e.g. \code{locations_NMC.csv}), the sources
+are read from it with \code{\link[=read_location_sources]{read_location_sources()}} (before \verb{<project>.R}). The
 result is checked with \code{\link[=check_config]{check_config()}}.
 }
 \author{

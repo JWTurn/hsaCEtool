@@ -5,7 +5,9 @@
 #' @description Combines the package's default settings (`inst/config/default.yaml`),
 #'   `config/<project>.yaml`,
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
-#'   the optional `config/<project>.R`, in that order, later ones winning. The
+#'   the optional `config/<project>.R`, in that order, later ones winning. If
+#'   `locations: sources:` names a CSV file (e.g. `locations_NMC.csv`), the sources
+#'   are read from it with [read_location_sources()] (before `<project>.R`). The
 #'   result is checked with [check_config()].
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
 #' @param config_dir character. Folder holding the project's settings files.
@@ -32,6 +34,11 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   cfg <- merge_config(cfg, read_settings_file(project_file))
   if (file.exists(local_file)) {
     cfg <- merge_config(cfg, read_settings_file(local_file))
+  }
+  # sources given as a table: turned into the same settings as typed in the YAML
+  src_file <- cfg$locations$sources
+  if (is.character(src_file) && length(src_file) == 1) {
+    cfg <- apply_location_sources(cfg, read_location_sources(file.path(config_dir, src_file)))
   }
   if (file.exists(override_file)) {
     override <- source(override_file, local = new.env())$value

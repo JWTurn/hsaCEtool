@@ -1,5 +1,10 @@
 # hsaCEtool 0.0.0.9000
 
+- `locations: sources:` can name a CSV table in `config/` (e.g.
+  `locations_NMC.csv`), one row per source, read by the new
+  `read_location_sources()`. It gives the same settings as sources typed in the
+  YAML, including each source's study, herd and jurisdiction (`by_source`) and
+  `study_column`/`herd_column`, plus a `notes` column the pipeline ignores.
 - Location source targets are named after each source's `name`
   (`locations_source_<name>`), not its position, so adding or reordering
   sources does not rerun the others. Names must be unique. This renames the
