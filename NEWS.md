@@ -1,5 +1,9 @@
 # hsaCEtool 0.0.0.9000
 
+- Downloads from a `url` work again with reproducible 3.2.1, which fails
+  when `prepInputs()` is given the reading function itself. The reader (`fun`,
+  or the default for the file type) is now passed as a call such as
+  `sf::st_read(targetFile)`.
 - New `upload_models()` puts fitted models marked `upload: true` (or named)
   in the Drive folder `model: upload_folder:`, as a zipped fit
   (`.rds`) and zipped coefficient tables (`.csv`), skipping models unchanged

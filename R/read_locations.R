@@ -35,11 +35,11 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #' @author Julie W. Turner
 #' @export
 download_locations <- function(src, loc_cfg, crs, paths) {
-  fun <- as_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
-                             rds = 'readRDS',
-                             csv = 'data.table::fread',
-                             shp = , gpkg = , geojson = 'sf::st_read',
-                             stop('Set target_file (or fun) for ', src$url, call. = FALSE)))
+  fun <- prep_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
+                               rds = 'readRDS',
+                               csv = 'data.table::fread',
+                               shp = , gpkg = , geojson = 'sf::st_read',
+                               stop('Set target_file (or fun) for ', src$url, call. = FALSE)))
   reproducible::checkPath(paths$inputs, create = TRUE)
   get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
   obj <- get(url = src$url, targetFile = src$target_file, archive = src$archive,
