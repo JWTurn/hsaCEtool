@@ -26,7 +26,8 @@ Combines the package's default settings (\code{inst/config/default.yaml}),
 \code{config/local.yaml} (settings for this computer only, e.g. folder paths) and
 the optional \verb{config/<project>.R}, in that order, later ones winning. If
 \verb{locations: sources:} names a CSV file (e.g. \code{locations_NMC.csv}), the sources
-are read from it with \code{\link[=read_location_sources]{read_location_sources()}} (before \verb{<project>.R}). The
+are read from it with \code{\link[=read_location_sources]{read_location_sources()}}, and if \verb{locations: cleaning: params: exclude_points:} names one, the points are read with
+\code{\link[=read_exclude_points]{read_exclude_points()}} (both before \verb{<project>.R}). The
 result is checked with \code{\link[=check_config]{check_config()}}.
 }
 \author{

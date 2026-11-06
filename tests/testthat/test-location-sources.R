@@ -41,6 +41,17 @@ test_that('a sources table gives the same settings as the sources typed in the Y
   expect_false(any(purrr::map_lgl(cfg$locations$sources, function(s) 'notes' %in% names(s))))
 })
 
+test_that('provider and terms stay in the table, out of the source settings', {
+  dir <- withr::local_tempdir()
+  write_sources(dir, c('name,type,movebank_study,provider,terms',
+                       'HerdA,movebank,123,Made-up agency,No sharing'))
+  yaml::write_yaml(list(locations = list(sources = 'sources_TEST.csv')), file.path(dir, 'TEST.yaml'))
+  cfg <- read_config('TEST', config_dir = dir)
+  expect_identical(cfg$locations$sources, list(list(type = 'movebank', name = 'HerdA', study = 123L)))
+  expect_equal(cfg$location_sources$provider, 'Made-up agency')
+  expect_equal(cfg$location_sources$terms, 'No sharing')
+})
+
 test_that('a sources table with problems is reported row by row', {
   dir <- withr::local_tempdir()
   write_sources(dir, c('name,type,movebank_study,part,date_only,juris',

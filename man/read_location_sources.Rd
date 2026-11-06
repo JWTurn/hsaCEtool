@@ -33,6 +33,9 @@ its animal ID, date and time, hour, and coordinate columns}
 fixes that have none from a column (the \code{by_source} settings)}
 \item{study_column, herd_column}{a column of the data checked first for
 each fix's study or herd in this source (before \code{locations: study: columns} or \code{herd: columns})}
+\item{provider, terms}{who provided the data and on what terms (e.g. a
+data-sharing agreement), for the record of where the source came from;
+not used by the pipeline}
 \item{notes}{anything worth knowing about the source; not used by the pipeline}
 }
 }

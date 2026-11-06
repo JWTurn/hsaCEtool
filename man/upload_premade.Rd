@@ -2,24 +2,36 @@
 % Please edit documentation in R/premade.R
 \name{upload_premade}
 \alias{upload_premade}
-\title{Upload the premade files to the project's Drive folder}
+\title{Upload the premade files to the project's Drive folders}
 \usage{
-upload_premade(project = Sys.getenv("TAR_PROJECT"), zips = NULL)
+upload_premade(
+  project = Sys.getenv("TAR_PROJECT"),
+  zips = NULL,
+  folders = NULL
+)
 }
 \arguments{
 \item{project}{character. Project name.}
 
 \item{zips}{character. Files to upload (default: those \code{\link[=write_premade]{write_premade()}} writes).}
+
+\item{folders}{Drive folder link or ID, or a named list or vector of them by
+file name pattern, used instead of \verb{locations: premade_folder:}.}
 }
 \value{
 data.table: \code{name}, \code{action} (updated or uploaded), \code{id}, \code{url}.
 }
 \description{
-Puts each zip from \code{\link[=write_premade]{write_premade()}} in the Drive folder
-\verb{locations: premade_folder:}. A file of the same name already there is
-replaced in place, so its link (e.g. in the settings) stays the same; a
-new name is uploaded as a new file. The folder must be restricted (not
-"anyone with the link"): this is checked first. Uses the Google login of
+Puts each zip from \code{\link[=write_premade]{write_premade()}} in a Drive folder of
+\verb{locations: premade_folder:}: one folder for all of them, or file name
+patterns, each with its folder (see \code{\link[=upload_destinations]{upload_destinations()}}), so that, for
+example, the cleaned locations go to a private folder and the study areas to
+one shared with other phases. A file of the same name already in its
+folder is replaced in place, so its link (e.g. in the settings) stays the
+same; a new name is uploaded as a new file. The cleaned locations
+(\verb{clean_<project>.zip}) are caribou locations: their folder must be
+restricted (not "anyone with the link"), which is checked first. The study
+areas may go to a folder shared more widely. Uses the Google login of
 \code{run: google_email}.
 }
 \author{

@@ -4,7 +4,16 @@
   `locations_NMC.csv`), one row per source, read by the new
   `read_location_sources()`. It gives the same settings as sources typed in the
   YAML, including each source's study, herd and jurisdiction (`by_source`) and
-  `study_column`/`herd_column`, plus a `notes` column the pipeline ignores.
+  `study_column`/`herd_column`, plus `provider`, `terms` and `notes` columns
+  the pipeline ignores (for the record of where each source came from).
+- `locations: premade_folder:` can give file name patterns, each with its
+  Drive folder (first match wins), e.g. the cleaned locations to a private
+  folder and the study areas to a shared one; `upload_premade()` also takes
+  them as `folders`. The matching (`upload_destinations()`) is not specific
+  to premade files, so other uploads can use it.
+- `locations: cleaning: params: exclude_points:` can name a CSV table in
+  `config/` (`name`, `lon`, `lat`, `radius_m`, `notes`), read by the new
+  `read_exclude_points()`; it gives the same settings as points typed in the YAML.
 - Location source targets are named after each source's `name`
   (`locations_source_<name>`), not its position, so adding or reordering
   sources does not rerun the others. Names must be unique. This renames the

@@ -5,7 +5,7 @@
 source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 'target_file', 'archive', 'fun',
                        'id_col', 'datetime_col', 'hour_col', 'x_col', 'y_col', 'input_crs', 'tz',
                        'date_only', 'id_from_deployment', 'refresh',
-                       'study', 'study_column', 'herd', 'herd_column', 'juris', 'notes')
+                       'study', 'study_column', 'herd', 'herd_column', 'juris', 'provider', 'terms', 'notes')
 
 #' @title Read the location sources table
 #' @description Reads a table of location sources, one row per source, in order
@@ -29,6 +29,9 @@ source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 
 #'     \item{study_column, herd_column}{a column of the data checked first for
 #'       each fix's study or herd in this source (before `locations: study:
 #'       columns` or `herd: columns`)}
+#'     \item{provider, terms}{who provided the data and on what terms (e.g. a
+#'       data-sharing agreement), for the record of where the source came from;
+#'       not used by the pipeline}
 #'     \item{notes}{anything worth knowing about the source; not used by the pipeline}
 #'   }
 #' @param file character. Path to the CSV file.
@@ -66,7 +69,7 @@ read_location_sources <- function(file) {
         paste0(col, ' must be TRUE or FALSE'))
   }
   # a bc source's rows must agree on everything but their part's file
-  file_cols <- c('part', 'url', 'path', 'target_file', 'archive', 'refresh', 'notes')
+  file_cols <- c('part', 'url', 'path', 'target_file', 'archive', 'refresh', 'provider', 'terms', 'notes')
   for (nm in unique(tab[type == 'bc', name])) {
     rows <- tab[type == 'bc' & name == nm, setdiff(source_table_cols, file_cols), with = FALSE]
     differ <- names(rows)[purrr::map_lgl(rows, function(x) data.table::uniqueN(stats::na.omit(x)) > 1)]
@@ -87,7 +90,7 @@ read_location_sources <- function(file) {
 #'   `herd:` and `juris:` (added to, and replacing for the same source, any in the YAML),
 #'   and `study_column` and `herd_column` as `columns` entries limited to their
 #'   sources, put before those in the YAML. The table itself is kept as
-#'   `cfg$location_sources` (e.g. for its notes).
+#'   `cfg$location_sources` (e.g. for its provider, terms and notes).
 #' @param cfg named list of settings.
 #' @param tab data.table from [read_location_sources()].
 #' @return `cfg`, changed.

@@ -86,12 +86,31 @@ are left out. Columns (only `name` is required; leave out any not used):
 | `date_only`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
 | `study`, `herd`, `juris` | the source's study, herd and jurisdiction, for fixes without one from a column (`by_source`, see "After cleaning") |
 | `study_column`, `herd_column` | a column of the data checked first for each fix's study or herd in this source |
+| `provider`, `terms` | who provided the data and on what terms (e.g. a data-sharing agreement), for the record of where the source came from; not used by the pipeline, so editing them reruns nothing |
 | `notes` | anything worth knowing about the source; not used by the pipeline, so editing it reruns nothing |
 
 `by_source` entries and `columns` in the YAML still apply: the table's are added
 to them (its columns first, limited to their own sources). Rules that cover
 several sources, such as `herd: columns:` (`group_id`, `study_site`) and
 `herd: rename:`, stay in the YAML.
+
+### Exclusion points table
+
+The cleaning step `exclude_points` drops fixes near known false locations, such
+as an office where collars are stored. The points can be typed in the YAML or
+listed in a CSV file in `config/`, one row per point:
+
+```yaml
+locations:
+  cleaning:
+    params:
+      exclude_points: exclude_points_NMC.csv
+```
+
+Columns: `name` (optional), `lon` and `lat` (decimal degrees, WGS 84),
+`radius_m` (fixes closer than this, in metres, are dropped) and `notes` (not
+used by the pipeline). `read_config()` turns the table into the same settings
+as typed points, so moving them between the two reruns nothing.
 
 ### Freezing downloads
 
@@ -123,7 +142,23 @@ Set to `null` (or blank in the layer table, with a `build`), each is remade.
 restricted shared drive.
 
 To share or update these files, set `locations: premade_folder:` to a
-restricted Google Drive folder, then in R:
+restricted Google Drive folder, or to file name patterns, each with its folder,
+e.g. so the cleaned locations go to a private folder and the study areas to one
+shared with other phases:
+
+```yaml
+locations:
+  premade_folder:
+    clean_NMC.zip: "https://drive.google.com/drive/folders/<private folder>"
+    "*": "https://drive.google.com/drive/folders/<shared folder>"
+```
+
+Patterns are wildcards as for file names (`*` any characters, `?` one
+character; quote a pattern that starts with `*`). They are tried in order, and
+the first that matches a file's whole name gives its folder, so put `"*"`
+(everything else) last.
+
+Then in R:
 
 ```r
 targets::tar_source("R")
@@ -134,8 +169,9 @@ upload_premade("NMC")   # puts them in premade_folder, replacing files of the sa
 Replacing keeps each file's link, so the `premade:` and `source:` links in the
 settings stay valid. Study areas are saved as GeoPackages, which keep the
 geometry exactly (a shapefile can differ slightly, which would rebuild every
-layer). `upload_premade()` stops if the folder is shared with anyone with the
-link, as the files hold caribou locations.
+layer). `upload_premade()` stops if the folder for the cleaned locations
+(`clean_<project>.zip`) is shared with anyone with the link, as they are caribou
+locations; the study areas may go to a folder shared more widely.
 
 Movebank user names and passwords are never written in the settings. Save
 yours once with `move2::movebank_store_credentials("<user>")`, which keeps it

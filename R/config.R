@@ -7,7 +7,9 @@
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
 #'   the optional `config/<project>.R`, in that order, later ones winning. If
 #'   `locations: sources:` names a CSV file (e.g. `locations_NMC.csv`), the sources
-#'   are read from it with [read_location_sources()] (before `<project>.R`). The
+#'   are read from it with [read_location_sources()], and if `locations: cleaning:
+#'   params: exclude_points:` names one, the points are read with
+#'   [read_exclude_points()] (both before `<project>.R`). The
 #'   result is checked with [check_config()].
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
 #' @param config_dir character. Folder holding the project's settings files.
@@ -39,6 +41,10 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   src_file <- cfg$locations$sources
   if (is.character(src_file) && length(src_file) == 1) {
     cfg <- apply_location_sources(cfg, read_location_sources(file.path(config_dir, src_file)))
+  }
+  pts_file <- cfg$locations$cleaning$params$exclude_points
+  if (is.character(pts_file) && length(pts_file) == 1) {
+    cfg$locations$cleaning$params$exclude_points <- read_exclude_points(file.path(config_dir, pts_file))
   }
   if (file.exists(override_file)) {
     override <- source(override_file, local = new.env())$value
