@@ -36,20 +36,31 @@ locations:
   # Each entry is a source (path or url, see above) with `type: file`, a
   # Movebank study with `type: movebank`, or the B.C. telemetry exports with
   # `type: bc` (see config/README.md). Each can have its own `columns` and `input_crs`.
+  # Each source's targets are named after its `name` (locations_source_<name>),
+  # so names must be unique. A list typed here, or the name of a CSV file in
+  # config/ with one row per source (e.g. locations_NMC.csv; see config/README.md,
+  # "Location sources table").
   sources: []
     # - type: file
+    #   name: Klaza2015
     #   url: "https://drive.google.com/file/d/.../view"
     #   target_file: clean_NMC.RDS
     # - type: movebank
-    #   study: "Klaza caribou"
-    #   user: jwturner        # password is read from keyring::key_get("movebank", user)
+    #   name: Klaza
+    #   study: "Klaza caribou"   # password saved once with move2::movebank_store_credentials()
+  # true or false: true downloads a source (or capture or mortality file) again
+  # only if its file is missing or has changed, or with refresh: true; editing
+  # its settings, `paths:` or the package's code then does not download it again.
+  freeze_downloads: false
   # Premade: cleaned locations saved from the locations_clean target (a .rds;
   # a source: path or url) to use instead of reading and cleaning `sources`.
   premade: null
-  # Restricted Google Drive folder the premade files are shared in (cleaned
-  # locations and study areas, zipped): write_premade() makes them from the
+  # Google Drive folder the premade files are shared in (cleaned locations,
+  # which must be restricted, and study areas, zipped): write_premade() makes them from the
   # current results and upload_premade() puts them there, replacing files of
-  # the same name so their links stay the same. null = not shared.
+  # the same name so their links stay the same. One folder, or file name
+  # patterns with their folders, first match wins, e.g.
+  # {clean_NMC.zip: <private folder>, "*": <shared folder>}. null = not shared.
   premade_folder: null
   columns:               # names of the columns in the input data (default for every source)
     id: id                # animal (collar deployment) ID
@@ -98,7 +109,7 @@ locations:
     #   min_points      drop animals with too few fixes
     params:
       bounds: {xmin: -180, ymin: -90, xmax: 180, ymax: 90}
-      exclude_points: []  # list of {name:, lon:, lat:, radius_m:}
+      exclude_points: []  # list of {name:, lon:, lat:, radius_m:}, or a CSV file in config/ with those columns
       capture_effect: {days: 7}
       dop: {column: gps_dop, max_dop: 10, keep_missing: true}
       duplicates: {gamma_minutes: 15, dop_column: gps_dop}
@@ -403,6 +414,10 @@ model:
   #   season_set: the set models use, unless a model names its own (season_set:)
   season_table: ''
   season_set: default
+  # Drive folder (ID) that upload_models() puts fitted models in, run by hand after
+  # a run; it may be shared widely (each fit is first checked for positions, times
+  # and real animal IDs). null = none.
+  upload_folder: null
   # Combined covariates. Each: name: {rule: [layers]}, rule one of sum, min, max or mean,
   # layers named without resolution or start/end (e.g. prop_herbaceous, harv_dist).
   # A group is made at every resolution, for start and end, and used in formulas
@@ -447,4 +462,6 @@ model:
   #     export: false      true: also save the table to outputs/<project>/models/tables/
   #                        <name>_table.rds, to fit elsewhere with fit_model_file() (e.g. on
   #                        an HPC cluster, see the project's hpc/ folder); false: don't
+  #     upload: false      true: upload_models() puts its fit and coefficient tables in
+  #                        model: upload_folder: (needs a fit); false: only if named
   models: {}

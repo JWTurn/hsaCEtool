@@ -37,16 +37,91 @@ downloaded afresh and replaces the kept copy. Remove it afterwards.
 locations:
   sources:
     - type: file
+      name: NMC2020
       url: "https://drive.google.com/file/d/.../view"
       target_file: clean_NMC.RDS     # the file wanted from the download
     - type: file
+      name: BCtelemetry
       path: "BC/BC_NMC_Telemetry.csv"  # relative to paths: data_in
       columns: {id: animal_id, datetime: timestamp, x: longitude, y: latitude}
       input_crs: "EPSG:4326"
     - type: movebank
+      name: Klaza
       study: "Klaza caribou"
-      user: jwturner
 ```
+
+Each source's targets are named after its `name`: `locations_source_<name>`
+(characters other than letters, digits and `_` become `_`), so names must be
+unique. Sources can then be added, removed or reordered without renaming, and
+rerunning, the others. A source without a name is named by its position.
+
+Each source is got (downloaded) in one target and read in another, and only the
+settings that say which file it is (`path`, `url`, `target_file`, `archive`,
+`fun`, `subfolder`, `refresh`) are part of the download. So editing e.g. its
+`columns` or `herd` reads the file again but does not download it again.
+
+### Location sources table: `locations_<project>.csv`
+
+Instead of typing the sources in the YAML, `locations: sources:` can name a CSV
+file in `config/`, one row per source in order of priority:
+
+```yaml
+locations:
+  sources: locations_NMC.csv
+```
+
+`read_config()` turns the table into the same settings as the typed list, so
+moving sources between the two does not change or rerun anything. Blank cells
+are left out. Columns (only `name` is required; leave out any not used):
+
+| Column | What it is |
+|---|---|
+| `name` | the source's name (unique; used in target names and the `source` column) |
+| `type` | `file` (the default), `movebank` or `bc` |
+| `movebank_study` | Movebank study ID (or name), for `type` movebank |
+| `part` | `new`, `old` or `reference`, for `type` bc: one row per part, all with the same `name` |
+| `url`, `path`, `target_file`, `archive`, `fun` | where the file is, as for any source |
+| `id_col`, `datetime_col`, `hour_col`, `x_col`, `y_col` | the source's `columns`: its animal ID, date and time, hour, and coordinate columns |
+| `input_crs`, `tz` | the source's coordinate system and time zone, if not the defaults |
+| `date_only`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
+| `study`, `herd`, `juris` | the source's study, herd and jurisdiction, for fixes without one from a column (`by_source`, see "After cleaning") |
+| `study_column`, `herd_column` | a column of the data checked first for each fix's study or herd in this source |
+| `provider`, `terms` | who provided the data and on what terms (e.g. a data-sharing agreement), for the record of where the source came from; not used by the pipeline, so editing them reruns nothing |
+| `notes` | anything worth knowing about the source; not used by the pipeline, so editing it reruns nothing |
+
+`by_source` entries and `columns` in the YAML still apply: the table's are added
+to them (its columns first, limited to their own sources). Rules that cover
+several sources, such as `herd: columns:` (`group_id`, `study_site`) and
+`herd: rename:`, stay in the YAML.
+
+### Exclusion points table
+
+The cleaning step `exclude_points` drops fixes near known false locations, such
+as an office where collars are stored. The points can be typed in the YAML or
+listed in a CSV file in `config/`, one row per point:
+
+```yaml
+locations:
+  cleaning:
+    params:
+      exclude_points: exclude_points_NMC.csv
+```
+
+Columns: `name` (optional), `lon` and `lat` (decimal degrees, WGS 84),
+`radius_m` (fixes closer than this, in metres, are dropped) and `notes` (not
+used by the pipeline). `read_config()` turns the table into the same settings
+as typed points, so moving them between the two reruns nothing.
+
+### Freezing downloads
+
+A download would still run again when `paths:` change (e.g. on another
+computer) or the package's download code changes, and a new download of a
+Movebank study that is still collecting brings new fixes, which rebuild
+everything after it. With `locations: freeze_downloads: true`, a location
+source, capture log or mortality file is downloaded again only if its file is
+missing or has changed, or the source has `refresh: true`. Updating the data is
+then always a choice. Note that it also ignores a new `url` or `study`: set
+`refresh: true` for one run when you change which file a source is.
 
 ### Premade or remade
 
@@ -67,7 +142,23 @@ Set to `null` (or blank in the layer table, with a `build`), each is remade.
 restricted shared drive.
 
 To share or update these files, set `locations: premade_folder:` to a
-restricted Google Drive folder, then in R:
+restricted Google Drive folder, or to file name patterns, each with its folder,
+e.g. so the cleaned locations go to a private folder and the study areas to one
+shared with other phases:
+
+```yaml
+locations:
+  premade_folder:
+    clean_NMC.zip: "https://drive.google.com/drive/folders/<private folder>"
+    "*": "https://drive.google.com/drive/folders/<shared folder>"
+```
+
+Patterns are wildcards as for file names (`*` any characters, `?` one
+character; quote a pattern that starts with `*`). They are tried in order, and
+the first that matches a file's whole name gives its folder, so put `"*"`
+(everything else) last.
+
+Then in R:
 
 ```r
 targets::tar_source("R")
@@ -78,12 +169,13 @@ upload_premade("NMC")   # puts them in premade_folder, replacing files of the sa
 Replacing keeps each file's link, so the `premade:` and `source:` links in the
 settings stay valid. Study areas are saved as GeoPackages, which keep the
 geometry exactly (a shapefile can differ slightly, which would rebuild every
-layer). `upload_premade()` stops if the folder is shared with anyone with the
-link, as the files hold caribou locations.
+layer). `upload_premade()` stops if the folder for the cleaned locations
+(`clean_<project>.zip`) is shared with anyone with the link, as they are caribou
+locations; the study areas may go to a folder shared more widely.
 
-Movebank passwords are never written in the settings. Save yours once with
-`move2::movebank_store_credentials("<user>")`, which keeps it in your computer's
-keyring.
+Movebank user names and passwords are never written in the settings. Save
+yours once with `move2::movebank_store_credentials("<user>")`, which keeps it
+in your computer's keyring; downloads read it from there.
 
 All times are stored in UTC. A source whose times are local clock time gives
 its time zone as `tz` (a name from the time zone database, e.g.
@@ -148,7 +240,7 @@ mid-afternoon, about 22-23 h UTC) and the same collars on Movebank show that:
 - Each fix records `bc_file` (`new` or `old`) and `time_note` (how its time
   was set), and `time_clash` marks fixes that share their animal and time with
   another fix, for the cleaning steps to resolve. The animal ID is `Anml_ID`
-  (or `collar_<Cllr_ID>`). The target `locations_source_<n>_log` counts each step.
+  (or `collar_<Cllr_ID>`). The target `locations_source_<name>_log` (e.g. `locations_source_BC_log`) counts each step.
 
 Where sources overlap (e.g. Little Rancheria collars on Movebank and in the B.C.
 export), list the source that should win first: fixes another, earlier-listed
@@ -642,6 +734,17 @@ model:
   log says "iteration limit reached"):
   `control: {optCtrl: {iter.max: 1000, eval.max: 1000}}`. Only that model is
   refitted.
+- **Sharing fitted models** (a model's `upload: true`): after a run,
+  `upload_models("<project>")` puts each such model in the Drive folder
+  `model: upload_folder:` (it may be shared widely: each fit is first checked
+  for positions, times and animal IDs that are not codes) as two zips,
+  `<project>_model_fit_<name>.zip` (the fit, `.rds`) and `<project>_model_<name>.zip` (the coefficient tables,
+  `.csv`). Files of the same name are replaced in place, so links stay the
+  same. Models unchanged since their last upload are skipped (recorded in
+  `outputs/<project>/upload/uploaded_models.csv`); `force = TRUE` uploads them
+  anyway, and `models = "<name>"` uploads named models only. It stops if a
+  model is not up to date, or if a fit holds positions, times or animal IDs
+  that are not codes. It is never run as part of the pipeline.
 - **Factors**: text columns and grouping columns (`id`, `yearseason`, ...)
   become factors only just before fitting, with only the values left in the
   table, so a value dropped earlier is not an empty level.

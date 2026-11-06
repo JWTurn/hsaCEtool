@@ -1,8 +1,9 @@
 # === Premade files: cleaned locations and study areas, shared on Drive ---------
 # So that later runs (or other projects and people) can start from the cleaned
 # locations and study areas instead of downloading and cleaning every source
-# (see locations: premade: and study_area: source: in the settings). The files
-# hold caribou locations: they go only to a restricted folder.
+# (see locations: premade: and study_area: source: in the settings). The cleaned
+# locations are caribou locations: they go only to a restricted folder. The study
+# areas may be shared more widely.
 
 #' @title Write the premade files from the current results
 #' @description Zips, in `outputs/<project>/premade/`:
@@ -42,41 +43,94 @@ write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
   zips
 }
 
-#' @title Upload the premade files to the project's Drive folder
-#' @description Puts each zip from [write_premade()] in the Drive folder
-#'   `locations: premade_folder:`. A file of the same name already there is
-#'   replaced in place, so its link (e.g. in the settings) stays the same; a
-#'   new name is uploaded as a new file. The folder must be restricted (not
-#'   "anyone with the link"): this is checked first. Uses the Google login of
+#' @title Upload the premade files to the project's Drive folders
+#' @description Puts each zip from [write_premade()] in a Drive folder of
+#'   `locations: premade_folder:`: one folder for all of them, or file name
+#'   patterns, each with its folder (see [upload_destinations()]), so that, for
+#'   example, the cleaned locations go to a private folder and the study areas to
+#'   one shared with other phases. A file of the same name already in its
+#'   folder is replaced in place, so its link (e.g. in the settings) stays the
+#'   same; a new name is uploaded as a new file. The cleaned locations
+#'   (`clean_<project>.zip`) are caribou locations: their folder must be
+#'   restricted (not "anyone with the link"), which is checked first. The study
+#'   areas may go to a folder shared more widely. Uses the Google login of
 #'   `run: google_email`.
 #' @param project character. Project name.
 #' @param zips character. Files to upload (default: those [write_premade()] writes).
+#' @param folders Drive folder link or ID, or a named list or vector of them by
+#'   file name pattern, used instead of `locations: premade_folder:`.
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
 #' @export
-upload_premade <- function(project = Sys.getenv('TAR_PROJECT'), zips = NULL) {
+upload_premade <- function(project = Sys.getenv('TAR_PROJECT'), zips = NULL, folders = NULL) {
   cfg <- read_config(project)
-  if (is.null(cfg$locations$premade_folder)) stop('Set locations: premade_folder: in config/', project, '.yaml', call. = FALSE)
+  folders <- folders %||% cfg$locations$premade_folder
+  if (!length(folders)) stop('Set locations: premade_folder: in config/', project, '.yaml', call. = FALSE)
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
   zips <- zips %||% list.files(file.path(cfg$paths$outputs, project, 'premade'), pattern = '[.]zip$', full.names = TRUE)
-  upload_to_drive(zips, cfg$locations$premade_folder,
-                  'The premade folder is shared with anyone with the link; caribou locations must not be. Restrict it first.')
+  dest <- upload_destinations(basename(zips), folders)
+  # only the cleaned locations must stay restricted
+  locs <- basename(zips) == paste0('clean_', project, '.zip')
+  out <- data.table::rbindlist(purrr::map(unique(dest), function(folder) {
+    msg <- if (any(locs[dest == folder])) {
+      paste0('The Drive folder for ', paste0('clean_', project, '.zip'), ' (', folder,
+             ') is shared with anyone with the link; caribou locations must not be. Restrict it first.')
+    }
+    upload_to_drive(zips[dest == folder], folder, msg)
+  }))
+  out[]
 }
 
-#' @title Upload files to a restricted Drive folder, replacing files of the same name
+#' @title The Drive folder for each file to upload
+#' @description For any upload setting that is either one Drive folder for every
+#'   file, or file name patterns, each with its folder, e.g.
+#'   `{clean_NMC.zip: <private folder>, "*": <shared folder>}`. Patterns are
+#'   wildcards, as for file names (`*` any characters, `?` one character); a
+#'   name with none is the file name itself. Patterns are tried in order and the
+#'   first that matches a file gives its folder, so put `"*"` (everything else)
+#'   last.
+#' @param files character. File names (no folders).
+#' @param folders character or list. One folder link or ID, or folders named by pattern.
+#' @return character. The folder for each file, in order.
+#' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
+upload_destinations <- function(files, folders) {
+  folders <- unlist(folders)
+  if (length(folders) == 1 && is.null(names(folders))) return(rep(unname(folders), length(files)))
+  if (is.null(names(folders)) || any(!nzchar(names(folders)))) {
+    stop('Give one Drive folder, or folders named by file name pattern (e.g. "*.zip")', call. = FALSE)
+  }
+  dest <- rep(NA_character_, length(files))
+  for (pat in names(folders)) {
+    hit <- is.na(dest) & grepl(utils::glob2rx(pat), files)
+    dest[hit] <- folders[[pat]]
+  }
+  if (anyNA(dest)) {
+    stop('No Drive folder for: ', paste(files[is.na(dest)], collapse = ', '),
+         ' (add a pattern that matches, or "*" for everything else)', call. = FALSE)
+  }
+  dest
+}
+
+#' @title Upload files to a Drive folder, replacing files of the same name
 #' @description A file of the same name already in the folder is replaced in
 #'   place, so its link stays the same; a new name is uploaded as a new file.
-#'   Stops first if the folder is shared with anyone with the link.
+#'   Unless `public_msg` is NULL, stops first if the folder is shared with anyone
+#'   with the link.
 #' @param files character. Files to upload.
 #' @param folder character. Drive folder ID.
-#' @param public_msg character. Error message if the folder is shared with anyone with the link.
+#' @param public_msg character. Error message if the folder is shared with anyone
+#'   with the link; NULL for files that may be shared widely (no check).
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @keywords internal
 #' @noRd
 upload_to_drive <- function(files, folder, public_msg) {
   folder <- googledrive::drive_get(googledrive::as_id(folder))
   perms <- googledrive::drive_reveal(folder, 'permissions')$permissions_resource[[1]]$permissions
-  if (any(purrr::map_lgl(perms, function(p) identical(p$type, 'anyone')))) stop(public_msg, call. = FALSE)
+  if (!is.null(public_msg) && any(purrr::map_lgl(perms, function(p) identical(p$type, 'anyone')))) {
+    stop(public_msg, call. = FALSE)
+  }
   have <- googledrive::drive_ls(folder)
   out <- data.table::rbindlist(purrr::map(files, function(z) {
     hit <- have[have$name == basename(z), ]

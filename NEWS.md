@@ -1,5 +1,36 @@
 # hsaCEtool 0.0.0.9000
 
+- New `upload_models()` puts fitted models marked `upload: true` (or named)
+  in the Drive folder `model: upload_folder:`, as a zipped fit
+  (`.rds`) and zipped coefficient tables (`.csv`), skipping models unchanged
+  since their last upload. Run by hand after a pipeline run.
+- `locations: sources:` can name a CSV table in `config/` (e.g.
+  `locations_NMC.csv`), one row per source, read by the new
+  `read_location_sources()`. It gives the same settings as sources typed in the
+  YAML, including each source's study, herd and jurisdiction (`by_source`) and
+  `study_column`/`herd_column`, plus `provider`, `terms` and `notes` columns
+  the pipeline ignores (for the record of where each source came from).
+- `locations: premade_folder:` can give file name patterns, each with its
+  Drive folder (first match wins), e.g. the cleaned locations to a private
+  folder and the study areas to a shared one; `upload_premade()` also takes
+  them as `folders`. The matching (`upload_destinations()`) is not specific
+  to premade files, so other uploads can use it.
+- `locations: cleaning: params: exclude_points:` can name a CSV table in
+  `config/` (`name`, `lon`, `lat`, `radius_m`, `notes`), read by the new
+  `read_exclude_points()`; it gives the same settings as points typed in the YAML.
+- Location source targets are named after each source's `name`
+  (`locations_source_<name>`), not its position, so adding or reordering
+  sources does not rerun the others. Names must be unique. This renames the
+  targets of existing projects, so their sources are read (and downloaded)
+  again once.
+- A location source given by `url` is now downloaded and read in two targets
+  (`locations_source_<name>_file` and `locations_source_<name>`), as a `path`
+  already was. Download targets include only the settings that say which
+  file a source is, so editing e.g. `columns` does not download it again.
+- New setting `locations: freeze_downloads:` (default `false`): `true`
+  downloads a location source, capture log or mortality file again only if its
+  file is missing or has changed, or with `refresh: true`.
+- Movebank sources no longer need `user:`; credentials come from the keyring.
 - Seasons now come from a season table (CSV) with named sets of seasons
   (`model: season_table:` and `season_set:`; a model can use its own
   `season_set:`), read by the new `read_seasons()` and `season_dates()`.

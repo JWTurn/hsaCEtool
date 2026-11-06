@@ -122,6 +122,11 @@ check_model_settings <- function(mcfg, n_made, seasons) {
     }
     if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) add('models: ', nm, ': fit must be true or false')
     if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) add('models: ', nm, ': export must be true or false')
+    if (!is.null(m$upload) && !isTRUE(m$upload) && !isFALSE(m$upload)) add('models: ', nm, ': upload must be true or false')
+    if (isTRUE(m$upload) && isFALSE(m$fit)) add('models: ', nm, ': upload: true needs a fit (not fit: false)')
+    if (isTRUE(m$upload) && !nzchar(mcfg$upload_folder %||% '')) {
+      add('models: ', nm, ': upload: true needs model: upload_folder: (a Drive folder)')
+    }
     if (!is.null(m$random_na) && !identical(m$random_na, 'replace') && !identical(m$random_na, 'keep')) {
       add('models: ', nm, ': random_na must be replace or keep')
     }

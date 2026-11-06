@@ -5,7 +5,11 @@
 #' @description Combines the package's default settings (`inst/config/default.yaml`),
 #'   `config/<project>.yaml`,
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
-#'   the optional `config/<project>.R`, in that order, later ones winning. The
+#'   the optional `config/<project>.R`, in that order, later ones winning. If
+#'   `locations: sources:` names a CSV file (e.g. `locations_NMC.csv`), the sources
+#'   are read from it with [read_location_sources()], and if `locations: cleaning:
+#'   params: exclude_points:` names one, the points are read with
+#'   [read_exclude_points()] (both before `<project>.R`). The
 #'   result is checked with [check_config()].
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
 #' @param config_dir character. Folder holding the project's settings files.
@@ -32,6 +36,15 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   cfg <- merge_config(cfg, read_settings_file(project_file))
   if (file.exists(local_file)) {
     cfg <- merge_config(cfg, read_settings_file(local_file))
+  }
+  # sources given as a table: turned into the same settings as typed in the YAML
+  src_file <- cfg$locations$sources
+  if (is.character(src_file) && length(src_file) == 1) {
+    cfg <- apply_location_sources(cfg, read_location_sources(file.path(config_dir, src_file)))
+  }
+  pts_file <- cfg$locations$cleaning$params$exclude_points
+  if (is.character(pts_file) && length(pts_file) == 1) {
+    cfg$locations$cleaning$params$exclude_points <- read_exclude_points(file.path(config_dir, pts_file))
   }
   if (file.exists(override_file)) {
     override <- source(override_file, local = new.env())$value
@@ -137,9 +150,16 @@ check_config <- function(cfg) {
     if (type == 'file' && is.null(src$path) && is.null(src$url)) {
       add('locations: sources ', i, ': give a path or a url')
     }
-    if (type == 'movebank' && (is.null(src$study) || is.null(src$user))) {
-      add('locations: sources ', i, ': a movebank source needs a study and a user')
+    if (type == 'movebank' && is.null(src$study)) {
+      add('locations: sources ', i, ': a movebank source needs a study')
     }
+  }
+  # each source's targets are named after it (see source_target_name())
+  src_nms <- purrr::imap_chr(cfg$locations$sources, function(src, i) source_target_name(src, i))
+  dup <- unique(src_nms[duplicated(src_nms)])
+  if (length(dup)) {
+    add('locations: sources: two sources have the same name (after replacing characters other than ',
+        'letters, digits and _): ', paste(sub('locations_source_', '', dup, fixed = TRUE), collapse = ', '))
   }
 
   # cleaning steps must exist
