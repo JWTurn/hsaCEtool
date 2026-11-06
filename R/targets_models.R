@@ -6,7 +6,8 @@
 
 #' @title Targets: model tables, fits and coefficients, one set per named model
 #' @description For each model named under `model: models:`:
-#'   - `cfg_model_<name>`: its settings, so editing one model refits only that one;
+#'   - `cfg_model_<name>`: its settings (without `upload:`), so editing one model
+#'     refits only that one;
 #'   - `seasons_<name>`: its seasons ([season_dates()]): the set named by its
 #'     `season_set:`, or `model: season_set:`, so editing one set of the season
 #'     table rebuilds only the models that use it;
@@ -47,7 +48,12 @@ targets_models <- function(cfg) {
     seasons_nm <- as.symbol(paste0('seasons_', nm))
     set_nm <- models[[nm]]$season_set %||% cfg$model$season_set
     out <- c(out, list(
-      tar_target_raw(as.character(cfg_nm), substitute(cfg$model$models[[NM]], list(NM = nm))),
+      # without upload:, which only says whether upload_models() shares the fit,
+      # so marking a model for upload does not refit it
+      tar_target_raw(as.character(cfg_nm), substitute({
+        s <- cfg$model$models[[NM]]
+        s[setdiff(names(s), 'upload')]
+      }, list(NM = nm))),
       tar_target_raw(as.character(seasons_nm), substitute(season_dates(season_table, SET), list(SET = set_nm))),
       tar_target_raw(as.character(data_nm), substitute(
         build_model_data(steps, extracted, animal_codes, c(cfg_model, list(seasons = SEASONS)), CFG),

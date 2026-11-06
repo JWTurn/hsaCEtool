@@ -17,7 +17,7 @@ text (e.g. \code{list('11-01', '04-15')}).
 }
 \description{
 The seasons of one set of a season table, in table order, as
-\code{\link[=season_of]{season_of()}} takes them: the first season listed that holds a date wins.
+\code{season_of()} takes them: the first season listed that holds a date wins.
 }
 \author{
 Julie W. Turner

@@ -1,5 +1,9 @@
 # hsaCEtool 0.0.0.9000
 
+- New `upload_models()` puts fitted models marked `upload: true` (or named)
+  in the Drive folder `model: upload_folder:`, as a zipped fit
+  (`.rds`) and zipped coefficient tables (`.csv`), skipping models unchanged
+  since their last upload. Run by hand after a pipeline run.
 - `locations: sources:` can name a CSV table in `config/` (e.g.
   `locations_NMC.csv`), one row per source, read by the new
   `read_location_sources()`. It gives the same settings as sources typed in the

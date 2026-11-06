@@ -15,7 +15,8 @@ list of targets (empty if no models are set).
 \description{
 For each model named under \verb{model: models:}:
 \itemize{
-\item \verb{cfg_model_<name>}: its settings, so editing one model refits only that one;
+\item \verb{cfg_model_<name>}: its settings (without \verb{upload:}), so editing one model
+refits only that one;
 \item \verb{seasons_<name>}: its seasons (\code{\link[=season_dates]{season_dates()}}): the set named by its
 \verb{season_set:}, or \verb{model: season_set:}, so editing one set of the season
 table rebuilds only the models that use it;

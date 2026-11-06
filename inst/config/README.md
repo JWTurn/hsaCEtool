@@ -734,6 +734,17 @@ model:
   log says "iteration limit reached"):
   `control: {optCtrl: {iter.max: 1000, eval.max: 1000}}`. Only that model is
   refitted.
+- **Sharing fitted models** (a model's `upload: true`): after a run,
+  `upload_models("<project>")` puts each such model in the Drive folder
+  `model: upload_folder:` (it may be shared widely: each fit is first checked
+  for positions, times and animal IDs that are not codes) as two zips,
+  `<project>_model_fit_<name>.zip` (the fit, `.rds`) and `<project>_model_<name>.zip` (the coefficient tables,
+  `.csv`). Files of the same name are replaced in place, so links stay the
+  same. Models unchanged since their last upload are skipped (recorded in
+  `outputs/<project>/upload/uploaded_models.csv`); `force = TRUE` uploads them
+  anyway, and `models = "<name>"` uploads named models only. It stops if a
+  model is not up to date, or if a fit holds positions, times or animal IDs
+  that are not codes. It is never run as part of the pipeline.
 - **Factors**: text columns and grouping columns (`id`, `yearseason`, ...)
   become factors only just before fitting, with only the values left in the
   table, so a value dropped earlier is not an empty level.

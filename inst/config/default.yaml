@@ -414,6 +414,10 @@ model:
   #   season_set: the set models use, unless a model names its own (season_set:)
   season_table: ''
   season_set: default
+  # Drive folder (ID) that upload_models() puts fitted models in, run by hand after
+  # a run; it may be shared widely (each fit is first checked for positions, times
+  # and real animal IDs). null = none.
+  upload_folder: null
   # Combined covariates. Each: name: {rule: [layers]}, rule one of sum, min, max or mean,
   # layers named without resolution or start/end (e.g. prop_herbaceous, harv_dist).
   # A group is made at every resolution, for start and end, and used in formulas
@@ -458,4 +462,6 @@ model:
   #     export: false      true: also save the table to outputs/<project>/models/tables/
   #                        <name>_table.rds, to fit elsewhere with fit_model_file() (e.g. on
   #                        an HPC cluster, see the project's hpc/ folder); false: don't
+  #     upload: false      true: upload_models() puts its fit and coefficient tables in
+  #                        model: upload_folder: (needs a fit); false: only if named
   models: {}

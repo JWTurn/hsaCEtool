@@ -45,7 +45,7 @@ read_seasons <- function(file) {
 
 #' @title The seasons of one set
 #' @description The seasons of one set of a season table, in table order, as
-#'   [season_of()] takes them: the first season listed that holds a date wins.
+#'   `season_of()` takes them: the first season listed that holds a date wins.
 #' @param seasons data.table from [read_seasons()].
 #' @param set character. The set's name (column `set`).
 #' @return named list: for each season, its first and last day as month-day
