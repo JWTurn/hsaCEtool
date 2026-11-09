@@ -4,19 +4,20 @@
 \alias{upload_premade}
 \title{Upload the premade files to the project's Drive folders}
 \usage{
-upload_premade(
-  project = Sys.getenv("TAR_PROJECT"),
-  zips = NULL,
-  folders = NULL
-)
+upload_premade(project = NULL, zips = NULL, folders = NULL, config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name.}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{zips}{character. Files to upload (default: those \code{\link[=write_premade]{write_premade()}} writes).}
 
 \item{folders}{Drive folder link or ID, or a named list or vector of them by
 file name pattern, used instead of \verb{locations: premade_folder:}.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table: \code{name}, \code{action} (updated or uploaded), \code{id}, \code{url}.
@@ -33,6 +34,9 @@ same; a new name is uploaded as a new file. The cleaned locations
 restricted (not "anyone with the link"), which is checked first. The study
 areas may go to a folder shared more widely. Uses the Google login of
 \code{run: google_email}.
+}
+\details{
+The settings and the targets store are found as in \code{\link[=write_premade]{write_premade()}}.
 }
 \author{
 Julie W. Turner

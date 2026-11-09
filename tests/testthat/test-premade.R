@@ -22,7 +22,7 @@ test_that('folders by file name pattern: the first match wins', {
 test_that('only the folder of the cleaned locations must be restricted', {
   calls <- list()
   local_mocked_bindings(
-    read_config = function(project) list(locations = list(premade_folder = list(clean_TEST.zip = 'private', '*' = 'shared'))),
+    read_config = function(project, ...) list(locations = list(premade_folder = list(clean_TEST.zip = 'private', '*' = 'shared'))),
     upload_to_drive = function(files, folder, public_msg) {
       calls[[folder]] <<- list(files = basename(files), checked = !is.null(public_msg))
       data.table::data.table(name = basename(files))

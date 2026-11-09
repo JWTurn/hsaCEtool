@@ -4,19 +4,20 @@
 \alias{upload_models}
 \title{Upload fitted models to the project's Drive folder}
 \usage{
-upload_models(
-  project = Sys.getenv("TAR_PROJECT"),
-  models = NULL,
-  force = FALSE
-)
+upload_models(project = NULL, models = NULL, force = FALSE, config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name, e.g. "NMC".}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{models}{character. Models to upload; \code{NULL} (default) = those with
 \code{upload: true} in \verb{model: models:}.}
 
 \item{force}{logical. Upload even models unchanged since their last upload.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table, one row per model: \code{model}, \code{action} (uploaded or
@@ -44,6 +45,9 @@ and tables, by their targets fingerprints), as recorded in
 soon as both its zips are up, so a call stopped part way (e.g. by a lost
 connection) can simply be run again. Uses the Google login of
 \code{run: google_email}.
+}
+\details{
+The settings and the targets store are found as in \code{\link[=write_premade]{write_premade()}}.
 }
 \author{
 Julie W. Turner

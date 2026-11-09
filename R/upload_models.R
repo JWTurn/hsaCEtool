@@ -29,7 +29,8 @@
 #'   soon as both its zips are up, so a call stopped part way (e.g. by a lost
 #'   connection) can simply be run again. Uses the Google login of
 #'   `run: google_email`.
-#' @param project character. Project name, e.g. "NMC".
+#' @inheritParams write_premade
+#' @details The settings and the targets store are found as in [write_premade()].
 #' @param models character. Models to upload; `NULL` (default) = those with
 #'   `upload: true` in `model: models:`.
 #' @param force logical. Upload even models unchanged since their last upload.
@@ -37,11 +38,12 @@
 #'   skipped), and the Drive IDs of the two zips.
 #' @author Julie W. Turner
 #' @export
-upload_models <- function(project = Sys.getenv('TAR_PROJECT'), models = NULL, force = FALSE) {
-  Sys.setenv(TAR_PROJECT = project)
-  cfg <- read_config(project)
+upload_models <- function(project = NULL, models = NULL, force = FALSE, config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  project <- ctx$project
+  cfg <- ctx$cfg
   folder <- cfg$model$upload_folder
-  if (!nzchar(folder %||% '')) stop('Set model: upload_folder: in config/', project, '.yaml', call. = FALSE)
+  if (!nzchar(folder %||% '')) stop('Set model: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml', call. = FALSE)
   models <- models_to_upload(cfg$model$models, models)
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
 
@@ -52,11 +54,12 @@ upload_models <- function(project = Sys.getenv('TAR_PROJECT'), models = NULL, fo
   # on a computer that cannot download the locations
   check <- c('cfg_model', 'season_table', paste0(c('cfg_model_', 'seasons_', 'model_data_'), rep(models, each = 3)),
              fit_nm, paste0('model_coefs_', models), coefs_nm)
-  stale <- targets::tar_outdated(names = targets::any_of(check), shortcut = TRUE, callr_function = NULL)
+  stale <- targets::tar_outdated(names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
+                                 script = ctx$script, store = ctx$store)
   if (length(stale)) {
     stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   }
-  meta <- targets::tar_meta(names = targets::any_of(c(fit_nm, coefs_nm)), fields = 'data')
+  meta <- targets::tar_meta(names = targets::any_of(c(fit_nm, coefs_nm)), fields = 'data', store = ctx$store)
   hash <- stats::setNames(meta$data, meta$name)
   missing <- setdiff(c(fit_nm, coefs_nm), names(hash))
   if (length(missing)) stop('Not built yet: ', paste(missing, collapse = ', '), call. = FALSE)
@@ -74,9 +77,9 @@ upload_models <- function(project = Sys.getenv('TAR_PROJECT'), models = NULL, fo
       message(m, ': unchanged since its last upload, skipped')
       next
     }
-    fit <- targets::tar_read_raw(fit_nm[i])
+    fit <- targets::tar_read_raw(fit_nm[i], store = ctx$store)
     check_fit_shareable(fit, m)
-    zips <- write_model_zips(fit, targets::tar_read_raw(coefs_nm[i]), m, project, dir)
+    zips <- write_model_zips(fit, targets::tar_read_raw(coefs_nm[i], store = ctx$store), m, project, dir)
     rm(fit); gc()
     # checked shareable above, so the folder need not be restricted
     up <- upload_to_drive(zips, folder, NULL)

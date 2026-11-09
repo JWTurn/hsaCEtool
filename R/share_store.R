@@ -12,23 +12,26 @@
 #' @description Runs `targets::tar_make()` for a project, then copies the
 #'   results to the shared folder with [push_store()], even if the run stopped
 #'   with an error (finished targets are still worth sharing).
-#' @param project character. Project name, matching `config/<project>.yaml`.
+#' @inheritParams write_premade
+#' @details The settings and the targets store are found as in [write_premade()].
+#'   `TAR_PROJECT` is set to the targets project, as its `_targets.R` may read it.
 #' @param share logical. Copy results to the shared folder afterwards?
 #' @param ... passed to `targets::tar_make()`, e.g. `names = steps`.
 #' @return NULL, invisibly.
 #' @author Julie W. Turner
 #' @export
-run_pipeline <- function(project = Sys.getenv('TAR_PROJECT'), share = TRUE, ...) {
-  Sys.setenv(TAR_PROJECT = project)
-  result <- tryCatch(targets::tar_make(...), error = function(e) e)
-  if (share) push_store(project)
+run_pipeline <- function(project = NULL, share = TRUE, ..., config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  Sys.setenv(TAR_PROJECT = ctx$tar_project)
+  result <- tryCatch(targets::tar_make(..., script = ctx$script, store = ctx$store), error = function(e) e)
+  if (share) push_store(ctx$project, config_dir = ctx$config_dir)
   if (inherits(result, 'error')) stop(result)
   invisible()
 }
 
 #' @title Copy this computer's results to the shared folder
 #' @description Copies new and changed files from the local targets store and
-#'   the project's outputs folder to `<paths: shared>/<project>/`. Results
+#'   the project's outputs folder to `<paths: shared>/<targets project>/`. Results
 #'   (`objects/`) are copied before the record of them (`meta/`), so the shared
 #'   copy never lists results that are not there yet. Stops if the shared copy
 #'   was updated from another computer since this computer last synced, so one
@@ -41,9 +44,10 @@ run_pipeline <- function(project = Sys.getenv('TAR_PROJECT'), share = TRUE, ...)
 #' @return data.table of files copied (and deleted), invisibly.
 #' @author Julie W. Turner
 #' @export
-push_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, force = FALSE,
-                       dry_run = FALSE) {
-  loc <- store_locations(project)
+push_store <- function(project = NULL, prune = FALSE, force = FALSE,
+                       dry_run = FALSE, config_dir = NULL) {
+  loc <- store_locations(project, config_dir)
+  project <- loc$name
   remote_info <- read_sync_info(file.path(loc$remote, 'sync_info.yaml'))
   local_info <- read_sync_info(loc$local_info)
   if (!force && !is.null(remote_info) &&
@@ -72,15 +76,16 @@ push_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, force
 
 #' @title Copy the shared results to this computer
 #' @description The reverse of [push_store()]: copies new and changed files
-#'   from `<paths: shared>/<project>/` into the local store and outputs folder.
+#'   from `<paths: shared>/<targets project>/` into the local store and outputs folder.
 #'   Local results of targets that were rerun here since the last sync are
 #'   replaced by the shared ones.
 #' @inheritParams push_store
 #' @return data.table of files copied (and deleted), invisibly.
 #' @author Julie W. Turner
 #' @export
-pull_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, dry_run = FALSE) {
-  loc <- store_locations(project)
+pull_store <- function(project = NULL, prune = FALSE, dry_run = FALSE, config_dir = NULL) {
+  loc <- store_locations(project, config_dir)
+  project <- loc$name
   if (!dir.exists(file.path(loc$remote, '_targets'))) {
     stop('No shared results for ', project, ' in ', loc$remote, call. = FALSE)
   }
@@ -95,22 +100,25 @@ pull_store <- function(project = Sys.getenv('TAR_PROJECT'), prune = FALSE, dry_r
 
 #' @title Where a project's local and shared results are
 #' @inheritParams run_pipeline
-#' @return named list: `store`, `outputs`, `remote`, `local_info`.
+#' @return named list: `name` (the targets project), `store`, `outputs`, `remote`, `local_info`.
 #' @keywords internal
 #' @noRd
-store_locations <- function(project) {
-  cfg <- read_config(project)
+store_locations <- function(project = NULL, config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  cfg <- ctx$cfg
   if (!nzchar(cfg$paths$shared %||% '')) {
-    stop('No shared folder set. Add `paths: shared: <folder>` to config/local.yaml.', call. = FALSE)
+    stop('No shared folder set. Add `paths: shared: <folder>` to ', file.path(ctx$config_dir, 'local.yaml'), '.',
+         call. = FALSE)
   }
   if (!dir.exists(cfg$paths$shared)) {
     stop('Shared folder not found: ', cfg$paths$shared, ' (is Google Drive running?)', call. = FALSE)
   }
   list(
-    store = targets::tar_config_get('store', project = project),
-    outputs = file.path(cfg$paths$outputs, project),
-    remote = file.path(cfg$paths$shared, project),
-    local_info = file.path('.sync', paste0(project, '.yaml'))
+    name = ctx$tar_project,
+    store = ctx$store,
+    outputs = file.path(cfg$paths$outputs, ctx$project),
+    remote = file.path(cfg$paths$shared, ctx$tar_project),
+    local_info = file.path('.sync', paste0(ctx$tar_project, '.yaml'))
   )
 }
 

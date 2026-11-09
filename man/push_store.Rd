@@ -5,14 +5,17 @@
 \title{Copy this computer's results to the shared folder}
 \usage{
 push_store(
-  project = Sys.getenv("TAR_PROJECT"),
+  project = NULL,
   prune = FALSE,
   force = FALSE,
-  dry_run = FALSE
+  dry_run = FALSE,
+  config_dir = NULL
 )
 }
 \arguments{
-\item{project}{character. Project name, matching \verb{config/<project>.yaml}.}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{prune}{logical. Also delete shared files no longer in the local copy
 (e.g. results of targets that were removed)? Run with \code{dry_run = TRUE} first.}
@@ -20,13 +23,16 @@ push_store(
 \item{force}{logical. Push even if the shared copy is newer.}
 
 \item{dry_run}{logical. Only list what would be copied or deleted.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table of files copied (and deleted), invisibly.
 }
 \description{
 Copies new and changed files from the local targets store and
-the project's outputs folder to \verb{<paths: shared>/<project>/}. Results
+the project's outputs folder to \verb{<paths: shared>/<targets project>/}. Results
 (\verb{objects/}) are copied before the record of them (\verb{meta/}), so the shared
 copy never lists results that are not there yet. Stops if the shared copy
 was updated from another computer since this computer last synced, so one

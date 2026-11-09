@@ -5,14 +5,20 @@
 \title{Upload the merged Yukon files to the restricted Drive folder}
 \usage{
 upload_yukon_disturbance(
-  project = Sys.getenv("TAR_PROJECT"),
-  names = c("YT_linear", "YT_areal")
+  project = NULL,
+  names = c("YT_linear", "YT_areal"),
+  config_dir = NULL
 )
 }
 \arguments{
-\item{project}{character. Project name, e.g. "NMC".}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{names}{character. Which files to upload.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table: \code{name}, \code{action} (updated or uploaded), \code{id}, \code{url}.
@@ -25,6 +31,9 @@ YT_areal.zip, each with the cleaning log, and puts them in
 (so links in the settings stay the same). The folder must not be shared
 with anyone with the link. Uses the Google login of \code{run: google_email}.
 Run by hand, not by the pipeline.
+}
+\details{
+The settings and the targets store are found as in \code{\link[=write_premade]{write_premade()}}.
 }
 \author{
 Julie W. Turner

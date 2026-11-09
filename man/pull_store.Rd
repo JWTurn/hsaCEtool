@@ -4,22 +4,27 @@
 \alias{pull_store}
 \title{Copy the shared results to this computer}
 \usage{
-pull_store(project = Sys.getenv("TAR_PROJECT"), prune = FALSE, dry_run = FALSE)
+pull_store(project = NULL, prune = FALSE, dry_run = FALSE, config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name, matching \verb{config/<project>.yaml}.}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{prune}{logical. Also delete shared files no longer in the local copy
 (e.g. results of targets that were removed)? Run with \code{dry_run = TRUE} first.}
 
 \item{dry_run}{logical. Only list what would be copied or deleted.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table of files copied (and deleted), invisibly.
 }
 \description{
 The reverse of \code{\link[=push_store]{push_store()}}: copies new and changed files
-from \verb{<paths: shared>/<project>/} into the local store and outputs folder.
+from \verb{<paths: shared>/<targets project>/} into the local store and outputs folder.
 Local results of targets that were rerun here since the last sync are
 replaced by the shared ones.
 }

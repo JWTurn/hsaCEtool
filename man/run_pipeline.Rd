@@ -4,14 +4,19 @@
 \alias{run_pipeline}
 \title{Run the pipeline and share the results}
 \usage{
-run_pipeline(project = Sys.getenv("TAR_PROJECT"), share = TRUE, ...)
+run_pipeline(project = NULL, share = TRUE, ..., config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name, matching \verb{config/<project>.yaml}.}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
 
 \item{share}{logical. Copy results to the shared folder afterwards?}
 
 \item{...}{passed to \code{targets::tar_make()}, e.g. \code{names = steps}.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 NULL, invisibly.
@@ -20,6 +25,10 @@ NULL, invisibly.
 Runs \code{targets::tar_make()} for a project, then copies the
 results to the shared folder with \code{\link[=push_store]{push_store()}}, even if the run stopped
 with an error (finished targets are still worth sharing).
+}
+\details{
+The settings and the targets store are found as in \code{\link[=write_premade]{write_premade()}}.
+\code{TAR_PROJECT} is set to the targets project, as its \verb{_targets.R} may read it.
 }
 \author{
 Julie W. Turner

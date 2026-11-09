@@ -790,15 +790,21 @@ apply_border_years <- function(merged, check, bc, out_dir) {
 #'   (so links in the settings stay the same). The folder must not be shared
 #'   with anyone with the link. Uses the Google login of `run: google_email`.
 #'   Run by hand, not by the pipeline.
-#' @param project character. Project name, e.g. "NMC".
+#' @inheritParams write_premade
+#' @details The settings and the targets store are found as in [write_premade()].
 #' @param names character. Which files to upload.
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
 #' @export
-upload_yukon_disturbance <- function(project = Sys.getenv('TAR_PROJECT'), names = c('YT_linear', 'YT_areal')) {
-  cfg <- read_config(project)
+upload_yukon_disturbance <- function(project = NULL, names = c('YT_linear', 'YT_areal'), config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  project <- ctx$project
+  cfg <- ctx$cfg
   folder <- cfg$landscape$disturbance$yukon_merge$upload_folder
-  if (is.null(folder)) stop('Set landscape: disturbance: yukon_merge: upload_folder: in config/', project, '.yaml', call. = FALSE)
+  if (is.null(folder)) {
+    stop('Set landscape: disturbance: yukon_merge: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml',
+         call. = FALSE)
+  }
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
   dir <- file.path(cfg$paths$outputs, project, 'derived')
   up <- reproducible::checkPath(file.path(dir, 'upload'), create = TRUE)

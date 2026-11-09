@@ -202,14 +202,20 @@ combine_disturbance_features <- function(features, cb, out_dir) {
 #'   their links stay the same.
 #'   The folder must not be shared with anyone with the link (the Yukon work
 #'   packages are not public). Run by hand, not by the pipeline.
-#' @param project character. Project name, e.g. "NMC".
+#' @inheritParams write_premade
+#' @details The settings and the targets store are found as in [write_premade()].
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
 #' @export
-upload_combined_disturbance <- function(project = Sys.getenv('TAR_PROJECT')) {
-  cfg <- read_config(project)
+upload_combined_disturbance <- function(project = NULL, config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  project <- ctx$project
+  cfg <- ctx$cfg
   cb <- cfg$landscape$disturbance$combined
-  if (is.null(cb$upload_folder)) stop('Set landscape: disturbance: combined: upload_folder: in config/', project, '.yaml', call. = FALSE)
+  if (is.null(cb$upload_folder)) {
+    stop('Set landscape: disturbance: combined: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml',
+         call. = FALSE)
+  }
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
   files <- file.path(cfg$paths$outputs, project, 'derived', 'combined', c(cb$files$lines, cb$files$areal))
   if (!all(file.exists(files))) stop('Not found (run the pipeline first): ', paste(files[!file.exists(files)], collapse = ', '),

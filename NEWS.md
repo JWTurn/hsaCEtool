@@ -1,5 +1,20 @@
 # hsaCEtool 0.0.0.9000
 
+- The helpers run by hand after a pipeline run (`write_premade()`,
+  `upload_premade()`, `upload_models()`, `upload_combined_disturbance()`,
+  `upload_yukon_disturbance()`, `run_pipeline()`, `push_store()`,
+  `pull_store()`) find the settings and the targets store the same way in a
+  repository with one targets project and its settings in `config/` (as
+  before) and in one with several, each with its settings beside its
+  `_targets.R` (e.g. YT_caribou's `pipelines/dataprep-caribou/config/NMC.yaml`).
+  New argument `config_dir`; `project` may be the settings name or the
+  targets project, and defaults to `TAR_PROJECT`. They no longer change
+  `TAR_PROJECT` (except `run_pipeline()`, which runs that project).
+  `push_store()` and `pull_store()` name the shared copy after the targets
+  project.
+- A disturbance source with no lookup tables no longer names a missing
+  `disturb_lookup_` in its target's command (it worked only because the
+  lookups were never read). The command changes, so those targets rerun.
 - Downloads from a `url` work again with reproducible 3.2.1, which fails
   when `prepInputs()` is given the reading function itself. The reader (`fun`,
   or the default for the file type) is now passed as a call such as

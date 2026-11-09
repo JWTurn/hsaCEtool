@@ -16,13 +16,28 @@
 #'   }
 #'   GeoPackages keep the geometry exactly, so an area read back from one
 #'   gives the same templates (shapefiles can differ slightly).
-#' @param project character. Project name, e.g. "NMC".
+#' @param project character or `NULL`. The settings name (e.g. "NMC", for
+#'   `<config_dir>/NMC.yaml`) or a targets project listed in `_targets.yaml`;
+#'   `NULL` (default) = the targets project in `TAR_PROJECT`.
+#' @param config_dir character or `NULL`. Folder of the settings; `NULL`
+#'   (default) = `config/` beside the targets project's script (`_targets.R`).
+#' @details The settings and the targets store are found the same way in a
+#'   repository with one targets project and its settings in `config/` (e.g.
+#'   `TAR_PROJECT = "NMC"`, `config/NMC.yaml`) and in one with several, each
+#'   with its settings beside its script (e.g. YT_caribou:
+#'   `TAR_PROJECT = "dataprep-caribou"`,
+#'   `pipelines/dataprep-caribou/config/NMC.yaml`). The targets project is
+#'   `project` if `_targets.yaml` lists it, otherwise `TAR_PROJECT`; the
+#'   settings are `<config_dir>/<project>.yaml`, or, if there is none, the
+#'   targets project's `.yaml` or the only `.yaml` in `config_dir` (apart
+#'   from `local.yaml`). `TAR_PROJECT` is not changed.
 #' @return character. The zip files written.
 #' @author Julie W. Turner
 #' @export
-write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
-  Sys.setenv(TAR_PROJECT = project)
-  cfg <- read_config(project)
+write_premade <- function(project = NULL, config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  project <- ctx$project
+  cfg <- ctx$cfg
   dir <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'premade'), create = TRUE)
   tmp <- tempfile(); reproducible::checkPath(tmp, create = TRUE)
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
@@ -30,9 +45,11 @@ write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
   names <- c(clean = paste0('clean_', project), area = sprintf('clean_%s_%skmBuff', project, km),
              extended = paste0(project, '_studyArea_extended'))
 
-  saveRDS(targets::tar_read(locations_clean), file.path(tmp, paste0(names[['clean']], '.rds')))
-  terra::writeVector(targets::tar_read(study_area), file.path(tmp, paste0(names[['area']], '.gpkg')), overwrite = TRUE)
-  terra::writeVector(targets::tar_read(study_area_extended), file.path(tmp, paste0(names[['extended']], '.gpkg')),
+  saveRDS(targets::tar_read(locations_clean, store = ctx$store), file.path(tmp, paste0(names[['clean']], '.rds')))
+  terra::writeVector(targets::tar_read(study_area, store = ctx$store), file.path(tmp, paste0(names[['area']], '.gpkg')),
+                     overwrite = TRUE)
+  terra::writeVector(targets::tar_read(study_area_extended, store = ctx$store),
+                     file.path(tmp, paste0(names[['extended']], '.gpkg')),
                      overwrite = TRUE)
   files <- c(paste0(names[['clean']], '.rds'), paste0(names[['area']], '.gpkg'), paste0(names[['extended']], '.gpkg'))
   zips <- file.path(dir, paste0(names, '.zip'))
@@ -55,17 +72,20 @@ write_premade <- function(project = Sys.getenv('TAR_PROJECT')) {
 #'   restricted (not "anyone with the link"), which is checked first. The study
 #'   areas may go to a folder shared more widely. Uses the Google login of
 #'   `run: google_email`.
-#' @param project character. Project name.
+#' @inheritParams write_premade
+#' @details The settings and the targets store are found as in [write_premade()].
 #' @param zips character. Files to upload (default: those [write_premade()] writes).
 #' @param folders Drive folder link or ID, or a named list or vector of them by
 #'   file name pattern, used instead of `locations: premade_folder:`.
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
 #' @export
-upload_premade <- function(project = Sys.getenv('TAR_PROJECT'), zips = NULL, folders = NULL) {
-  cfg <- read_config(project)
+upload_premade <- function(project = NULL, zips = NULL, folders = NULL, config_dir = NULL) {
+  ctx <- pipeline_context(project, config_dir)
+  project <- ctx$project
+  cfg <- ctx$cfg
   folders <- folders %||% cfg$locations$premade_folder
-  if (!length(folders)) stop('Set locations: premade_folder: in config/', project, '.yaml', call. = FALSE)
+  if (!length(folders)) stop('Set locations: premade_folder: in ', file.path(ctx$config_dir, project), '.yaml', call. = FALSE)
   if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
   zips <- zips %||% list.files(file.path(cfg$paths$outputs, project, 'premade'), pattern = '[.]zip$', full.names = TRUE)
   dest <- upload_destinations(basename(zips), folders)

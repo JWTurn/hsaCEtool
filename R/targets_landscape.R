@@ -254,7 +254,9 @@ targets_disturbance <- function(built, dcfg, config_dir = 'config') {
     dl_nm <- paste0('disturb_download_', nm)
     ft_nm <- paste0('disturb_features_', nm)
     used <- unique(unlist(purrr::map(src$files, function(f) f$lookup$table)))
-    lookups <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('disturb_lookup_', used), as.symbol), used)))
+    # recycle0: no lookup tables gives list(), not a call naming disturb_lookup_
+    lookups <- as.call(c(quote(list), stats::setNames(purrr::map(paste0('disturb_lookup_', used, recycle0 = TRUE),
+                                                                 as.symbol), used)))
     from_merge <- merged && identical(src$from, 'yukon_merge')
     if (!from_merge) out <- c(out, list(download(dl_nm, src$url, purrr::map_chr(src$files, 'file'), nm, src$refresh)))
     out <- c(out, list(

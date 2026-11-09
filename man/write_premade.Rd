@@ -4,10 +4,15 @@
 \alias{write_premade}
 \title{Write the premade files from the current results}
 \usage{
-write_premade(project = Sys.getenv("TAR_PROJECT"))
+write_premade(project = NULL, config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name, e.g. "NMC".}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 character. The zip files written.
@@ -23,6 +28,18 @@ Zips, in \verb{outputs/<project>/premade/}:
 }
 GeoPackages keep the geometry exactly, so an area read back from one
 gives the same templates (shapefiles can differ slightly).
+}
+\details{
+The settings and the targets store are found the same way in a
+repository with one targets project and its settings in \verb{config/} (e.g.
+\code{TAR_PROJECT = "NMC"}, \code{config/NMC.yaml}) and in one with several, each
+with its settings beside its script (e.g. YT_caribou:
+\code{TAR_PROJECT = "dataprep-caribou"},
+\code{pipelines/dataprep-caribou/config/NMC.yaml}). The targets project is
+\code{project} if \verb{_targets.yaml} lists it, otherwise \code{TAR_PROJECT}; the
+settings are \verb{<config_dir>/<project>.yaml}, or, if there is none, the
+targets project's \code{.yaml} or the only \code{.yaml} in \code{config_dir} (apart
+from \code{local.yaml}). \code{TAR_PROJECT} is not changed.
 }
 \author{
 Julie W. Turner

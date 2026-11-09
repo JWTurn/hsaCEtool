@@ -4,10 +4,15 @@
 \alias{upload_combined_disturbance}
 \title{Upload the combined disturbance files to the restricted Drive folder}
 \usage{
-upload_combined_disturbance(project = Sys.getenv("TAR_PROJECT"))
+upload_combined_disturbance(project = NULL, config_dir = NULL)
 }
 \arguments{
-\item{project}{character. Project name, e.g. "NMC".}
+\item{project}{character or \code{NULL}. The settings name (e.g. "NMC", for
+\verb{<config_dir>/NMC.yaml}) or a targets project listed in \verb{_targets.yaml};
+\code{NULL} (default) = the targets project in \code{TAR_PROJECT}.}
+
+\item{config_dir}{character or \code{NULL}. Folder of the settings; \code{NULL}
+(default) = \verb{config/} beside the targets project's script (\verb{_targets.R}).}
 }
 \value{
 data.table: \code{name}, \code{action} (updated or uploaded), \code{id}, \code{url}.
@@ -19,6 +24,9 @@ NMC_linear_combined.zip) and puts the zips in \verb{landscape: disturbance: comb
 their links stay the same.
 The folder must not be shared with anyone with the link (the Yukon work
 packages are not public). Run by hand, not by the pipeline.
+}
+\details{
+The settings and the targets store are found as in \code{\link[=write_premade]{write_premade()}}.
 }
 \author{
 Julie W. Turner
