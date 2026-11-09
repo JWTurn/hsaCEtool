@@ -39,6 +39,7 @@ Imports:
     yaml
 Suggests:
     crew,
+    keyring,
     move2,
     nanoparquet,
     readxl,
