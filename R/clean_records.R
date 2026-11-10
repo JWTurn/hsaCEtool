@@ -87,6 +87,7 @@ read_table_file <- function(file) {
   f <- file[grepl('[.](xlsx|xls|csv)$', file, ignore.case = TRUE)][1]
   if (is.na(f)) stop('No xlsx, xls or csv file in: ', paste(basename(file), collapse = ', '), call. = FALSE)
   if (grepl('csv$', f, ignore.case = TRUE)) return(data.table::fread(f, colClasses = 'character'))
+  rlang::check_installed('readxl', reason = 'to read xlsx tables.')
   data.table::as.data.table(readxl::read_excel(f, col_types = 'text'))
 }
 

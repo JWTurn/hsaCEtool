@@ -255,6 +255,7 @@ write_disturbance_summary <- function(summary, out_dir) {
 add_lookup <- function(d, lookup, lookups, file) {
   tf <- lookups[[lookup$table]]
   if (is.null(tf)) stop(file, ': no lookup table "', lookup$table, '"', call. = FALSE)
+  if (grepl('[.]xlsx?$', tf, ignore.case = TRUE)) rlang::check_installed('readxl', reason = 'to read xlsx lookup tables.')
   tab <- if (grepl('[.]xlsx?$', tf, ignore.case = TRUE)) {
     data.table::as.data.table(readxl::read_excel(tf, sheet = lookup$sheet %||% 1))
   } else {

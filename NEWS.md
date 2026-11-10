@@ -1,5 +1,13 @@
 # hsaCEtool 0.0.0.9000
 
+- `nanoparquet` is now a required package (Imports), not an optional one
+  (Suggests). Every run with extraction reads and writes parquet files with it,
+  and renv leaves optional packages out of a project's lock file, so a library
+  restored from that lock lacked it.
+- `download_movebank()`, `read_movebank()`, `read_yukon_reclass()` and the
+  readers of xlsx tables now say which package to install when `move2` or
+  `readxl` is missing.
+
 - The helpers run by hand after a pipeline run (`write_premade()`,
   `upload_premade()`, `upload_models()`, `upload_combined_disturbance()`,
   `upload_yukon_disturbance()`, `run_pipeline()`, `push_store()`,

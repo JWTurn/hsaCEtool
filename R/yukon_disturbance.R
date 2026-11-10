@@ -69,6 +69,7 @@ yukon_size <- function(g, kind) {
 #' @author Julie W. Turner
 #' @export
 read_yukon_reclass <- function(xlsx, patches = NULL) {
+  rlang::check_installed('readxl', reason = 'to read the Yukon reclass workbook.')
   sheets <- c(lines = 'Linear', polys = 'Areal')
   lut <- data.table::rbindlist(purrr::imap(sheets, function(sheet, kind) {
     d <- readxl::read_excel(xlsx, sheet = sheet, .name_repair = 'minimal')

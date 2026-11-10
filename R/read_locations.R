@@ -84,6 +84,7 @@ locations_from_object <- function(obj, src, loc_cfg, crs) {
 #' @author Julie W. Turner
 #' @export
 download_movebank <- function(src, paths) {
+  rlang::check_installed('move2', reason = 'to download Movebank studies.')
   options(move2_movebank_key_name = 'movebank')
   for (wait in c(0, 60, 300)) {
     if (wait) {
@@ -116,6 +117,7 @@ download_movebank <- function(src, paths) {
 #' @author Julie W. Turner
 #' @export
 read_movebank <- function(file, src, loc_cfg, crs) {
+  rlang::check_installed('move2', reason = 'to read Movebank downloads.')
   dat <- readRDS(file)
   dat <- dat[!sf::st_is_empty(dat), ]   # records without a position
 
