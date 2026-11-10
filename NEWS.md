@@ -1,5 +1,25 @@
 # hsaCEtool 0.0.0.9000
 
+- A disturbance source can take its categories from a crosswalk table
+  (`crosswalk: crosswalk_<source>_<project>.csv`) listing every value of the
+  fields used, instead of `category` or `rules` in the YAML
+  (`read_disturbance_crosswalk()`, `apply_disturbance_crosswalk()`; see
+  `config/README.md`, "Crosswalk tables"). `read_config()` turns each row
+  into an exact-value rule, so the rest of the pipeline is unchanged.
+- New target `disturb_uncovered` (`check_disturbance_coverage()`) lists the
+  kinds of disturbance feature that no rule or crosswalk row covers in
+  `outputs/<project>/disturbance_uncovered.csv`, and stops the run if there
+  are any; the disturbance layers wait for it. Before, such features were
+  left out with only a warning. The `disturb_history_*` commands change, so
+  they rerun once; the layers after them rerun only if the features changed.
+- In a rule's `where`, `""` now matches a missing value.
+- The disturbance settings `unpaved_type` and `unpaved_type_field` are now
+  `subtype` and `subtype_field`, a finer grouping within any category, not
+  only unpaved roads. The `unpaved_type` column of the features, the
+  disturbance summary and the combined files is now `subtype`. The merged
+  Yukon files keep their `unpaved_type` column (name it with
+  `subtype_field: unpaved_type`).
+
 - `nanoparquet` is now a required package (Imports), not an optional one
   (Suggests). Every run with extraction reads and writes parquet files with it,
   and renv leaves optional packages out of a project's lock file, so a library

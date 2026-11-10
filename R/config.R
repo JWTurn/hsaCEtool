@@ -9,7 +9,9 @@
 #'   `locations: sources:` names a CSV file (e.g. `locations_NMC.csv`), the sources
 #'   are read from it with [read_location_sources()], and if `locations: cleaning:
 #'   params: exclude_points:` names one, the points are read with
-#'   [read_exclude_points()] (both before `<project>.R`). The
+#'   [read_exclude_points()], and each disturbance source with a `crosswalk:`
+#'   gets its categories from that table ([apply_disturbance_crosswalk()]) (all
+#'   before `<project>.R`). The
 #'   result is checked with [check_config()].
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
 #' @param config_dir character. Folder holding the project's settings files.
@@ -45,6 +47,9 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   pts_file <- cfg$locations$cleaning$params$exclude_points
   if (is.character(pts_file) && length(pts_file) == 1) {
     cfg$locations$cleaning$params$exclude_points <- read_exclude_points(file.path(config_dir, pts_file))
+  }
+  if (length(cfg$landscape$disturbance$sources)) {
+    cfg$landscape$disturbance <- apply_disturbance_crosswalks(cfg$landscape$disturbance, config_dir)
   }
   if (file.exists(override_file)) {
     override <- source(override_file, local = new.env())$value

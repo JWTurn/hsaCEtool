@@ -567,7 +567,9 @@ counts in every year.
 | `disturb_dist` | The mean distance (m) from its 30 m cells to the nearest touched 30 m cell (including those in the margin) |
 
 Each source is a download (`url`: a file, a zip, or a Google Drive folder) and
-the `files` wanted from it. Each file has:
+the `files` wanted from it. A source's categories can come from a crosswalk
+table (`crosswalk:`, below) instead of each file's `category` or `rules`.
+Each file has:
 
 - `category`: one category for all its features, or `rules`: a list of
   `{where: {field: value(s)}, category: ...}`, checked in order; the first
@@ -577,10 +579,10 @@ the `files` wanted from it. Each file has:
   Category `drop` leaves features out (e.g. harvest, which comes from CanLaD).
 - `keep`: fields copied into the features (e.g. Yukon `feature_id`,
   `REF_ID`, `year_rule`, `year_source`), for the combined files below.
-- `unpaved_type` (on a rule or the whole file) or `unpaved_type_field` (a
-  field holding it): the kind of unpaved road, recorded on each feature and in
-  the summary (for NMC: winter, resource or all-season). The layers are by
-  category only.
+- `subtype` (on a rule or the whole file) or `subtype_field` (a
+  field holding it): optionally, a finer grouping within the category,
+  recorded on each feature and in the summary (for NMC, the kind of unpaved
+  road: winter, resource or all-season). The layers are by category only.
 - `year`: fields giving the year built, in order of preference (a year or a
   date). None, or all empty: the feature counts in every year.
 - `lookup`: optionally, columns added from a table in `landscape: disturbance:
@@ -596,6 +598,48 @@ category (dropped ones included), with their total length (km, lines) or area
 feature's type is the values of the fields its rules look at (e.g.
 `feature_type=placer`). Features are those overlapping the template with its
 margin, measured whole.
+
+#### Crosswalk tables (`crosswalk: crosswalk_<source>_<project>.csv`)
+
+A crosswalk table says which category each kind of feature goes into, listing
+every value of the fields used, so it can be checked in a spreadsheet by
+people who know the data. Name it on the source (`crosswalk:`, a CSV file in
+the project's settings folder) and leave `category` and `rules` off its files;
+the other file settings (`year`, `keep`, `subtype_field`) stay in the
+YAML. Several sources can share one table (e.g. the Yukon lines and polygons).
+Columns:
+
+| Column | What it holds |
+|---|---|
+| `file` | The file of the source the row is for |
+| one column per field used (e.g. `ReportClass`, `RoadDescription`, `Industry`) | The field's value for this kind of feature |
+| `category` | The category given (e.g. `paved`), or `drop` to leave those features out |
+| `subtype` | Optional: a finer grouping within the category (e.g. for unpaved roads: `winter`, `resource`, `all-season`) |
+| `notes` | Optional: anything worth knowing about the row; not used by the pipeline |
+
+A file uses the field columns that any of its rows fill in. A blank cell in
+a field the file uses means the value is missing in the data. A file whose
+rows fill in no field has one row: all its features get that category. For
+example:
+
+```
+file,ReportClass,Industry,category,subtype,notes
+roads.gpkg,Paved 2 Lane,Transportation,paved,,
+roads.gpkg,Loose 1 Lane,Forestry,unpaved,resource,
+roads.gpkg,,Forestry,unpaved,resource,no surface recorded
+trails.gpkg,,,lfother,,
+```
+
+The values must match exactly (spaces at either end are ignored); there are
+no patterns and no catch-all row. Features whose values the table doesn't
+list are left out of the layers, so target `disturb_uncovered` lists them in
+`outputs/<project>/disturbance_uncovered.csv` (one column per field, so rows
+can be copied into the table) and stops the run until they are added, with
+`drop` for those meant to be left out. It does the same for features that
+match none of a file's `rules`. Only the features in the area kept (the
+template with its margin) are checked, so a new study area or a new data
+release can bring new values. Editing a table reruns only the sources that
+use it.
 
 #### Merged Yukon disturbance (`yukon_merge:`)
 
@@ -641,7 +685,7 @@ year (`years_from`).
 `combined:` writes every source's features (the area the layers use) to one
 lines and one polygons GeoPackage, for maps of results (target
 `disturb_combined`, in `outputs/<project>/derived/combined/`), with `region`,
-`source`, `file`, `category`, `unpaved_type`, `year` and the sources' `keep`
+`source`, `file`, `category`, `subtype`, `year` and the sources' `keep`
 columns. `upload_combined_disturbance()` (run by hand) replaces the files of
 the same name in `upload_folder`.
 

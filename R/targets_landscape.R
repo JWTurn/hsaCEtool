@@ -193,7 +193,10 @@ targets_landcover <- function(built, window_m, web_cue = tar_cue()) {
 #'   years in which they change, and for each metric (dist, pa, dens) one target
 #'   per such year, building every resolution asked for. `disturb_summary`
 #'   counts the features of each type that went into each category, written
-#'   to outputs/<project>/disturbance_summary.csv. Each source's settings
+#'   to outputs/<project>/disturbance_summary.csv. `disturb_uncovered` lists
+#'   the kinds of feature that no rule or crosswalk row covers in
+#'   outputs/<project>/disturbance_uncovered.csv and stops if there are any
+#'   ([check_disturbance_coverage()]); the layers wait for it. Each source's settings
 #'   are written into its own targets, so changing one source's rules reruns
 #'   only that source.
 #' @param built data.table. The layer-table rows with a `build`.
@@ -274,6 +277,9 @@ targets_disturbance <- function(built, dcfg, config_dir = 'config') {
     tar_target_raw('disturb_summary', substitute(summarize_disturbance(FEATURES), list(FEATURES = all_features))),
     tar_target_raw('disturb_summary_file',
                    quote(write_disturbance_summary(disturb_summary, file.path(cfg_paths$outputs, cfg_project$name))),
+                   format = 'file'),
+    tar_target_raw('disturb_uncovered',
+                   quote(check_disturbance_coverage(disturb_summary, file.path(cfg_paths$outputs, cfg_project$name))),
                    format = 'file')
   ))
   if (!is.null(dcfg$combined)) {
@@ -312,7 +318,8 @@ targets_disturbance <- function(built, dcfg, config_dir = 'config') {
     hist_nm <- paste0('disturb_history_', cl)
     years_nm <- paste0('disturb_years_', cl)
     out <- c(out, list(
-      tar_target_raw(hist_nm, substitute(disturbance_cells(FEATURES, CL, template_margin),
+      # after the coverage check, so no layer is built while features are left out
+      tar_target_raw(hist_nm, substitute({disturb_uncovered; disturbance_cells(FEATURES, CL, template_margin)},
                                          list(FEATURES = all_features, CL = cl))),
       tar_target_raw(years_nm, substitute(disturbance_years(H, FY, LY),
                                           list(H = as.symbol(hist_nm), FY = year_bound(cr$first_year, 1),

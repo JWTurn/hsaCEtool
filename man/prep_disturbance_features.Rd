@@ -10,8 +10,8 @@ prep_disturbance_features(files, src, lookups, template, crs, out)
 \item{files}{character. From \code{\link[=download_disturbance]{download_disturbance()}}.}
 
 \item{src}{named list. The source's settings (\verb{landscape: disturbance: sources: <name>}): \code{url} and \code{files}, each with \code{file}, \code{category} or
-\code{rules}, and optionally \code{year}, \code{lookup}, \code{crs}, \code{unpaved_type} or
-\code{unpaved_type_field} (see \code{disturbance_unpaved_type()}), and \code{keep}
+\code{rules}, and optionally \code{year}, \code{lookup}, \code{crs}, \code{subtype} or
+\code{subtype_field} (see \code{disturbance_subtype()}), and \code{keep}
 (fields copied into the features, e.g. for maps).}
 
 \item{lookups}{named list. Lookup table files by name, from \code{\link[=download_disturbance]{download_disturbance()}}.}
@@ -24,7 +24,7 @@ prep_disturbance_features(files, src, lookups, template, crs, out)
 }
 \value{
 \code{out}, with layers "disturbance" (the features: category,
-unpaved_type, year and file) and "summary".
+subtype, year and file) and "summary".
 }
 \description{
 For each file of the source: reads the features overlapping

@@ -27,7 +27,9 @@ Combines the package's default settings (\code{inst/config/default.yaml}),
 the optional \verb{config/<project>.R}, in that order, later ones winning. If
 \verb{locations: sources:} names a CSV file (e.g. \code{locations_NMC.csv}), the sources
 are read from it with \code{\link[=read_location_sources]{read_location_sources()}}, and if \verb{locations: cleaning: params: exclude_points:} names one, the points are read with
-\code{\link[=read_exclude_points]{read_exclude_points()}} (both before \verb{<project>.R}). The
+\code{\link[=read_exclude_points]{read_exclude_points()}}, and each disturbance source with a \verb{crosswalk:}
+gets its categories from that table (\code{\link[=apply_disturbance_crosswalk]{apply_disturbance_crosswalk()}}) (all
+before \verb{<project>.R}). The
 result is checked with \code{\link[=check_config]{check_config()}}.
 }
 \author{

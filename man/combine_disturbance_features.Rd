@@ -21,7 +21,7 @@ character. The lines and polygons GeoPackages.
 \description{
 For maps: the features of all sources (as used by the
 layers: the template and its margin), with \code{region} (from \code{regions}),
-\code{source}, \code{file}, \code{category}, \code{unpaved_type}, \code{year} (NA = every year) and
+\code{source}, \code{file}, \code{category}, \code{subtype}, \code{year} (NA = every year) and
 any columns the sources keep (e.g. Yukon feature_id, REF_ID, year_rule,
 year_source; blank for the others).
 }

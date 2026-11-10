@@ -177,16 +177,16 @@ test_that('rules can match patterns and give unpaved roads a type', {
   fs <- list(file = 'roads.gpkg', rules = list(
     list(match = list(Surface = '^Ferry'), category = 'drop'),
     list(match = list(Surface = '^Paved'), category = 'paved'),
-    list(match = list(Surface = '^Winter'), category = 'unpaved', unpaved_type = 'winter'),
-    list(where = list(Use = c('Forestry', 'Oil')), category = 'unpaved', unpaved_type = 'resource'),
-    list(category = 'unpaved', unpaved_type = 'all-season')))
+    list(match = list(Surface = '^Winter'), category = 'unpaved', subtype = 'winter'),
+    list(where = list(Use = c('Forestry', 'Oil')), category = 'unpaved', subtype = 'resource'),
+    list(category = 'unpaved', subtype = 'all-season')))
   cat <- disturbance_category(d, fs)
   expect_equal(as.vector(cat), c('paved', 'paved', 'unpaved', 'unpaved', 'unpaved', 'drop'))
-  expect_equal(disturbance_unpaved_type(d, fs, attr(cat, 'rule')), c(NA, NA, 'resource', 'winter', 'all-season', NA))
+  expect_equal(disturbance_subtype(d, fs, attr(cat, 'rule')), c(NA, NA, 'resource', 'winter', 'all-season', NA))
   # a whole file, or a field
-  expect_equal(disturbance_unpaved_type(d, list(file = 'x', category = 'unpaved', unpaved_type = 'resource'), rep(NA_integer_, 6)),
+  expect_equal(disturbance_subtype(d, list(file = 'x', category = 'unpaved', subtype = 'resource'), rep(NA_integer_, 6)),
                rep('resource', 6))
-  expect_equal(disturbance_unpaved_type(d, list(file = 'x', category = 'unpaved', unpaved_type_field = 'Use'), rep(NA_integer_, 6)), d$Use)
+  expect_equal(disturbance_subtype(d, list(file = 'x', category = 'unpaved', subtype_field = 'Use'), rep(NA_integer_, 6)), d$Use)
 })
 
 test_that('kept columns and the combined lines and polygons files', {
@@ -206,7 +206,7 @@ test_that('kept columns and the combined lines and polygons files', {
   expect_equal(nrow(l), 4); expect_equal(nrow(r), 1)
   expect_equal(unique(l$region), 'YT'); expect_equal(r$region, 'BC')
   expect_true(is.na(r$Type))
-  expect_equal(names(l)[1:6], c('region', 'source', 'file', 'category', 'unpaved_type', 'year'))
+  expect_equal(names(l)[1:6], c('region', 'source', 'file', 'category', 'subtype', 'year'))
   # sources with different kept columns stack fine for the cells
   expect_equal(nrow(disturbance_cells(c(a, b), 'paved', g$margin)), 18)
 })

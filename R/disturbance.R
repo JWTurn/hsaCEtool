@@ -52,15 +52,15 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 #' @param files character. From [download_disturbance()].
 #' @param src named list. The source's settings (`landscape: disturbance:
 #'   sources: <name>`): `url` and `files`, each with `file`, `category` or
-#'   `rules`, and optionally `year`, `lookup`, `crs`, `unpaved_type` or
-#'   `unpaved_type_field` (see `disturbance_unpaved_type()`), and `keep`
+#'   `rules`, and optionally `year`, `lookup`, `crs`, `subtype` or
+#'   `subtype_field` (see `disturbance_subtype()`), and `keep`
 #'   (fields copied into the features, e.g. for maps).
 #' @param lookups named list. Lookup table files by name, from [download_disturbance()].
 #' @param template character. Raster whose extent sets the area kept.
 #' @param crs character. The project's coordinate system.
 #' @param out character. GeoPackage to write.
 #' @return `out`, with layers "disturbance" (the features: category,
-#'   unpaved_type, year and file) and "summary".
+#'   subtype, year and file) and "summary".
 #' @author Julie W. Turner
 #' @export
 prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
@@ -83,16 +83,16 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
     d <- data.table::as.data.table(sf::st_drop_geometry(x))
     if (!is.null(fs$lookup)) d <- add_lookup(d, fs$lookup, lookups, fs$file)
     category <- disturbance_category(d, fs)
-    unpaved_type <- disturbance_unpaved_type(d, fs, attr(category, 'rule'))
+    subtype <- disturbance_subtype(d, fs, attr(category, 'rule'))
     year <- feature_year(d, unlist(fs$year), fs$file)
     geom <- sf::st_transform(sf::st_geometry(x), crs)
     full <- !sf::st_is_empty(geom)
     keep <- !is.na(category) & category != 'drop' & full
-    feats <- sf::st_sf(category = category[keep], unpaved_type = unpaved_type[keep], year = year[keep],
+    feats <- sf::st_sf(category = category[keep], subtype = subtype[keep], year = year[keep],
                        file = rep(fs$file, sum(keep)), geometry = geom[keep])
     for (k in extra) feats[[k]] <- if (k %in% names(d)) as.character(d[[k]])[keep] else rep(NA_character_, sum(keep))
     list(features = feats,
-         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full], unpaved_type[full]))
+         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full], subtype[full]))
   })
   feats <- purrr::reduce(purrr::map(parts, 'features'), rbind)
   unlink(out)
@@ -112,15 +112,15 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
 #' @param category character. Each feature's category (NA = matched no rule).
 #' @param year integer. Each feature's year built (NA = none).
 #' @param geom sfc. The features, in the project's coordinate system (metres).
-#' @param unpaved_type character. Each feature's unpaved type (NA = none), from
-#'   `disturbance_unpaved_type()`.
-#' @return data.table, one row per file, type, category and unpaved type: `features`
+#' @param subtype character. Each feature's subtype (NA = none), from
+#'   `disturbance_subtype()`.
+#' @return data.table, one row per file, type, category and subtype: `features`
 #'   (count), `length_km` (lines), `area_km2` (polygons), `no_year` (features
 #'   with no year, counted in every year), and the `first_year` and
 #'   `last_year` built.
 #' @keywords internal
 #' @noRd
-summarize_feature_types <- function(d, fs, category, year, geom, unpaved_type = rep(NA_character_, nrow(d))) {
+summarize_feature_types <- function(d, fs, category, year, geom, subtype = rep(NA_character_, nrow(d))) {
   fields <- unique(unlist(purrr::map(fs$rules, function(r) c(names(r$where), names(r$match)))))
   type <- if (length(fields)) {
     purrr::reduce(purrr::map(fields, function(f) paste0(f, '=', trimws(as.character(d[[f]])))),
@@ -128,7 +128,7 @@ summarize_feature_types <- function(d, fs, category, year, geom, unpaved_type = 
   } else rep(NA_character_, nrow(d))
   dt <- data.table::data.table(
     file = rep(fs$file, nrow(d)), type = type,
-    category = data.table::fifelse(is.na(category), 'none (left out)', category), unpaved_type = unpaved_type,
+    category = data.table::fifelse(is.na(category), 'none (left out)', category), subtype = subtype,
     year = year, dim = sf::st_dimension(geom),
     len = as.numeric(sf::st_length(geom)), area = as.numeric(sf::st_area(geom)))
   dt[, .(features = .N,
@@ -137,7 +137,7 @@ summarize_feature_types <- function(d, fs, category, year, geom, unpaved_type = 
          no_year = sum(is.na(year)),
          first_year = if (all(is.na(year))) NA_integer_ else min(year, na.rm = TRUE),
          last_year = if (all(is.na(year))) NA_integer_ else max(year, na.rm = TRUE)),
-     by = .(file, type, category, unpaved_type)][order(file, category, unpaved_type, type)]
+     by = .(file, type, category, subtype)][order(file, category, subtype, type)]
 }
 
 #' @title Table of the features of each type that went into each category, all sources
@@ -159,7 +159,7 @@ summarize_disturbance <- function(features) {
 #' @title Combine every source's features into one lines and one polygons file
 #' @description For maps: the features of all sources (as used by the
 #'   layers: the template and its margin), with `region` (from `regions`),
-#'   `source`, `file`, `category`, `unpaved_type`, `year` (NA = every year) and
+#'   `source`, `file`, `category`, `subtype`, `year` (NA = every year) and
 #'   any columns the sources keep (e.g. Yukon feature_id, REF_ID, year_rule,
 #'   year_source; blank for the others).
 #' @param features named character. GeoPackages from [prep_disturbance_features()],
@@ -184,7 +184,7 @@ combine_disturbance_features <- function(features, cb, out_dir) {
     s[, cols]
   })
   x <- purrr::reduce(x, rbind)
-  first <- c('region', 'source', 'file', 'category', 'unpaved_type', 'year')
+  first <- c('region', 'source', 'file', 'category', 'subtype', 'year')
   x <- x[, c(first, setdiff(cols, first))]
   dim <- sf::st_dimension(x)
   files <- file.path(out_dir, c(cb$files$lines %||% 'combined_linear.gpkg', cb$files$areal %||% 'combined_areal.gpkg'))
@@ -292,7 +292,9 @@ add_lookup <- function(d, lookup, lookups, file) {
 #' @description A file's settings give either one `category` for all its
 #'   features, or `rules`: each rule has `where` (field: value or values),
 #'   `match` (field: pattern, a regular expression), or both (all must hold),
-#'   and a `category`; a rule without either matches every feature left.
+#'   and a `category`; a rule without either matches every feature left. In
+#'   `where`, the value `""` matches a missing value (from a blank cell in a
+#'   crosswalk table, see [apply_disturbance_crosswalk()]).
 #' @param d data.table. The features' attributes.
 #' @param fs named list. The file's settings.
 #' @return character, one per feature (NA = no rule matched), with attribute
@@ -310,7 +312,9 @@ disturbance_category <- function(d, fs) {
       if (!f %in% names(d)) stop(fs$file, ': no field "', f, '" for the rule giving ', rule$category, call. = FALSE)
     }
     for (f in names(rule$where)) {
-      hit <- hit & trimws(as.character(d[[f]])) %in% as.character(unlist(rule$where[[f]]))
+      v <- trimws(as.character(d[[f]]))
+      v[is.na(v)] <- ''
+      hit <- hit & v %in% as.character(unlist(rule$where[[f]]))
     }
     for (f in names(rule$match)) {
       hit <- hit & grepl(rule$match[[f]], as.character(d[[f]]))
@@ -322,9 +326,10 @@ disturbance_category <- function(d, fs) {
   structure(out, rule = which_rule)
 }
 
-#' @title Unpaved type of each feature (e.g. winter, all-season, resource)
-#' @description From the `unpaved_type` of the rule each feature matched, else
-#'   the file's `unpaved_type`, else the value of the file's `unpaved_type_field`.
+#' @title Subtype of each feature, within its category
+#' @description An optional finer grouping within a category (e.g. for
+#'   unpaved roads: winter, resource or all-season). From the `subtype` of the rule each feature matched, else
+#'   the file's `subtype`, else the value of the file's `subtype_field`.
 #'   Recorded on each feature and in the summary; the layers are by category.
 #' @param d data.table. The features' attributes.
 #' @param fs named list. The file's settings.
@@ -333,17 +338,17 @@ disturbance_category <- function(d, fs) {
 #' @return character, one per feature (NA = none).
 #' @keywords internal
 #' @noRd
-disturbance_unpaved_type <- function(d, fs, rule) {
+disturbance_subtype <- function(d, fs, rule) {
   out <- rep(NA_character_, nrow(d))
-  # [[ ]], not $: $ would also match unpaved_type_field when looking for unpaved_type
-  field <- fs[['unpaved_type_field']]
+  # [[ ]], not $: $ would also match subtype_field when looking for subtype
+  field <- fs[['subtype_field']]
   if (!is.null(field)) {
-    if (!field %in% names(d)) stop(fs$file, ': no unpaved_type_field "', field, '"', call. = FALSE)
+    if (!field %in% names(d)) stop(fs$file, ': no subtype_field "', field, '"', call. = FALSE)
     out <- as.character(d[[field]])
   }
-  if (!is.null(fs[['unpaved_type']])) out[] <- fs[['unpaved_type']]
+  if (!is.null(fs[['subtype']])) out[] <- fs[['subtype']]
   if (length(fs$rules) && length(rule)) {
-    rt <- purrr::map_chr(fs$rules, function(r) r[['unpaved_type']] %||% NA_character_)
+    rt <- purrr::map_chr(fs$rules, function(r) r[['subtype']] %||% NA_character_)
     from_rule <- !is.na(rule) & !is.na(rt[rule])
     out[from_rule] <- rt[rule[from_rule]]
   }

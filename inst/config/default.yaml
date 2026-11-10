@@ -350,8 +350,9 @@ landscape:
   disturbance:
     lookups: {}           # tables the rules can use, e.g. a reclassification spreadsheet
     sources: {}           # <name>: {url, files: [{file, category or rules, year, lookup,
-                          # unpaved_type or unpaved_type_field}]}; a rule has where (exact values)
-                          # and/or match (regular expression), category, and optionally unpaved_type
+                          # subtype or subtype_field}]}; a rule has where (exact values)
+                          # and/or match (regular expression), category, and optionally subtype
+                          # (a finer grouping within the category, e.g. winter roads)
                           # Categories are your own names (e.g. paved, unpaved); category drop
                           # leaves features out
                           # Downloads are kept in paths: input_cache and not repeated; add
