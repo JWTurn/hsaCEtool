@@ -60,6 +60,52 @@ settings that say which file it is (`path`, `url`, `target_file`, `archive`,
 `fun`, `subfolder`, `refresh`) are part of the download. So editing e.g. its
 `columns` or `herd` reads the file again but does not download it again.
 
+### Inputs table: `inputs_<project>.csv`
+
+Input files can be named once in a table, one row per file, and referred to by
+name in the settings (`input: <name>`) instead of repeating their url. The
+table also records who provided each file and on what terms, for an input
+manifest or a report's data sources. The package has its own table
+(`inst/extdata/inputs_default.csv`) for the national inputs (CanLaD, SCANFI,
+NTEMS, MRDEM, NBAC, NFDB), which `default.yaml` uses. A project's table, named
+in `inputs:` (relative to the config folder), adds its own inputs and replaces
+the package's row of the same name.
+
+| Column | What it holds |
+|---|---|
+| `name` | the input's name, used in the settings and as its id in a manifest (required) |
+| `title` | a short title, e.g. "SCANFI land cover v3" |
+| `theme` | what kind of data it is, e.g. `landcover`, `harvest`, `fire`, `forest_age`, `elevation`, `disturbance`, `boundary`, `study_area` or `caribou` |
+| `url` or `path` | where the file is (one of them is required) |
+| `target_file`, `archive` | with `url`: the file wanted from the download, and the archive's name |
+| `access` | `public` (the url may be published) or `restricted` (shared with named people only: never publish its url) (required) |
+| `provider`, `terms` | who provided the data, and on what terms (a licence or data-sharing agreement) |
+| `notes` | anything worth knowing about the input |
+
+```yaml
+inputs: inputs_NMC.csv
+locations:
+  captures:
+    source: BC
+    input: bc_captures      # its url, target_file and archive come from the table
+    columns: {...}
+landscape:
+  fire:
+    nbac: {input: nbac}     # in the package's table
+  harvest:
+    canlad_old:
+      type_input: canlad_1965_1984_type   # <what>_input: <name> becomes <what>_url
+```
+
+`read_config()` puts each input's `url` (or `path`), `target_file` and
+`archive` where the settings name it, so the settings come out as if the urls
+were typed there. A url or path typed beside `input:` wins (e.g. a project's own
+NBAC). The other columns never reach the pipeline, so editing them reruns
+nothing. The combined table is kept as `cfg$inputs_table`, with a column
+`used_in` saying where in the settings each input is used (blank if nowhere).
+What a file is used for (its years, fields, crosswalk, the file wanted from a
+folder) stays in the YAML.
+
 ### Location sources table: `locations_<project>.csv`
 
 Instead of typing the sources in the YAML, `locations: sources:` can name a CSV
@@ -796,6 +842,43 @@ model:
   IDs replaced by codes, so a fitted model can be shared. The table linking
   codes to IDs, `outputs/<project>/models/animal_codes_CONFIDENTIAL.csv`,
   cannot.
+
+## Layer stacks for maps (`model_land:`)
+
+To map a model for a year (e.g. in caribou_SSUD), the pipeline makes one
+GeoTIFF per year in `model_land: years:`,
+`outputs/<project>/model_land/model_land_<year>.tif` (target `model_land`). It
+holds every covariate the models' formulas use (`model_land: models:`, `all` by
+default), made from the layers exactly as the model tables are, so a map
+uses the same values the model was fitted to:
+
+- **Names**: as in the formulas, without `_start` or `_end`, e.g.
+  `prop_forest_240` for `prop_forest_240_end`.
+- **Years**: each layer's raster for that year; years past a layer's last year
+  use its last raster (before its first, its first), and layers that do not
+  change (e.g. elevation) are in every stack.
+- **Groups** (`model: groups:`, e.g. `prop_forest`): combined cell by cell by
+  the same code as the model tables: a sum counts a missing layer as 0, and
+  the group is missing only where all its layers are.
+- **Time since disturbance** (e.g. `ts_fire_240`): the year minus the
+  disturbance year. No disturbance, or one after that year, is left NA (the
+  model tables use the layer's `ts_nodata` there): caribou_SSUD fills these in,
+  so that forecasts from the stack's year can age the disturbances.
+- **Capped distances**: each distance matching `model: distance_cap: columns`
+  is there twice, as it is (`dist_paved_240`) and capped (`dist_paved_240_adj`:
+  more than `beyond_km` set to `set_to_km`, as the model tables do).
+- **Grid**: the finest cell size used (e.g. 240 m); coarser layers (e.g.
+  1200 m) give each fine cell the value of the coarse cell it lies in, as a
+  point there would get. Masked to the extended study area's template.
+
+`model_land_layers.csv` in the same folder says what each layer is made from.
+After a run, `upload_model_land("<project>")` puts the years in
+`model_land: upload_years:` (all years if empty) in the Drive folder
+`model_land: upload_folder:`, each as `<project>_model_land_<year>.zip` (the
+stack and the layer list). As for models, files of the same name are replaced
+in place, unchanged years are skipped (recorded in
+`outputs/<project>/upload/uploaded_model_land.csv`), `force = TRUE` uploads
+anyway, and it stops if the stacks are not up to date.
 
 ## Running steps in parallel
 

@@ -75,3 +75,12 @@ test_that('a disturbance source without lookup tables gets an empty list of them
                                                             as.symbol), used)))
   expect_identical(call, quote(list()))
 })
+
+test_that('TAR_PROJECT is set only while checking the store, then left as it was', {
+  withr::local_envvar(TAR_PROJECT = NA)
+  expect_equal(with_tar_project('NMC', Sys.getenv('TAR_PROJECT')), 'NMC')
+  expect_equal(Sys.getenv('TAR_PROJECT', unset = 'none'), 'none')
+  Sys.setenv(TAR_PROJECT = 'other')
+  expect_error(with_tar_project('NMC', stop('failed')), 'failed')
+  expect_equal(Sys.getenv('TAR_PROJECT'), 'other')
+})

@@ -1,5 +1,40 @@
 # hsaCEtool 0.0.0.9000
 
+- Layer stacks for maps (`model_land:`; targets `model_land_spec`,
+  `model_land_layers_file` and `model_land`, in `targets_maps()`): for each year
+  in `model_land: years:`, one GeoTIFF,
+  `outputs/<project>/model_land/model_land_<year>.tif`, with every covariate the
+  models' formulas use, so a model can be mapped for that year from its stack
+  alone (e.g. in caribou_SSUD). Replaces NMC_CEtool `scripts/7-SSUDmaps.R`.
+  Layers are made as the model tables are: named as in the formulas without
+  `_start` or `_end` (e.g. `prop_forest_240`); groups (`model: groups:`)
+  combined by the same rules; each distance as it is and capped
+  (`<name>_adj`, `model: distance_cap:`); layers that do not change in every
+  stack, and years past a layer's last year using its last raster. Time since
+  disturbance (`ts_*`) is left NA where there was none (the model tables use
+  `ts_nodata`), for caribou_SSUD to fill in for its forecasts.
+  `model_land_layers.csv` says what each layer is made from
+  (`make_model_land_spec()`, `make_model_land()`, `write_model_land_spec()`).
+- `upload_model_land()`, run by hand, zips each year in
+  `model_land: upload_years:` with the layer list and puts it in the Drive
+  folder `model_land: upload_folder:`, skipping years unchanged since their
+  last upload.
+- `upload_models()` and `upload_model_land()` no longer need `TAR_PROJECT` set
+  before they are called: they set it to their project while checking that
+  the results are up to date, then put it back.
+
+- Input files can be named once in an inputs table (`inputs:
+  inputs_<project>.csv`; `read_inputs_table()`) and referred to by name in the
+  settings (`input: <name>`, or `<what>_input:` for `<what>_url`). Each row has
+  the file's url or path and its title, theme (kind of data), access (`public`
+  or `restricted`), provider, terms and notes, for an input manifest. The
+  package's own table (`inst/extdata/inputs_default.csv`) has the national
+  inputs, which `default.yaml` now names instead of giving their urls; a
+  project's table adds to it and replaces its rows by name. `read_config()`
+  puts the urls back where they were, so the settings, and the targets, are
+  unchanged; the combined table is kept as `cfg$inputs_table`, with where each
+  input is used (`used_in`).
+
 - A disturbance source can take its categories from a crosswalk table
   (`crosswalk: crosswalk_<source>_<project>.csv`) listing every value of the
   fields used, instead of `category` or `rules` in the YAML

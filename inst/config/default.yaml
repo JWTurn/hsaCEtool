@@ -15,6 +15,15 @@
 #   target_file: "file.shp"          with url: which file to use from the download (e.g. inside a .zip)
 #   archive: "file.zip"              with url: the archive's name, if prepInputs can't tell
 # Give either path or url.
+#   input: name                      or name an input from an inputs table instead (see `inputs:` below)
+
+# Inputs table: input files named once, with where each comes from (url or path)
+# and on what terms (provider, terms, access), referred to by name in the
+# settings (`input: <name>`). The package's table (inst/extdata/inputs_default.csv)
+# has the national inputs (CanLaD, SCANFI, NTEMS, MRDEM, NBAC, NFDB); a project's
+# table (relative to the config folder) adds to it and replaces its rows of the
+# same name. See config/README.md, "Inputs table".
+inputs: ""                # e.g. inputs_NMC.csv; "" = the package's table only
 
 project:
   crs: "EPSG:3154"        # coordinate reference system for all spatial data (units must be metres)
@@ -237,13 +246,13 @@ landscape:
     recent_years: 2       # harvest this many years back (that year included) counts as recent,
                           # for presence (pa), density (dens) and distance (dist)
     canlad_annual:
-      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canlad_including_insect_defoliation/v1/Disturbances_Time_Series/canlad_annual_{year}_v1.tif"
+      input: canlad_annual  # in the inputs table
       first_year: 1985
       last_year: 2024
       code: 2             # value meaning harvest (2 = Harvesting)
     canlad_old:           # 1965-1984: disturbance type, and the year from a second raster
-      type_url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canada_disturbances_1965to1984/v1/canlad_1965_1984_disturbanceType.tif"
-      year_url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/canada_disturbances_1965to1984/v1/canlad_1965_1984_disturbanceYear.tif"
+      type_input: canlad_1965_1984_type   # in the inputs table (or type_url: a url)
+      year_input: canlad_1965_1984_year   # (or year_url)
       code: 3             # type value meaning harvest (3 = harvest)
 
   # Land cover: yearly proportion of each class (build: landcover / landcover_cell).
@@ -254,7 +263,7 @@ landscape:
     window_m:             # radius (m) of the circular moving window, by resolution (as in
       240: 500            # make_landforest_prop); resolutions not listed get plain cell proportions
     scanfi:
-      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/SCANFI/v3/cog_SCANFI_landcover_{year}_v3_20260528.tif"
+      input: scanfi_landcover
       first_year: 1985
       last_year: 2025
       classes:            # source code: class name (https://open.canada.ca/data/en/dataset/50f132f9-f312-4951-bb9f-9ea99580f29f)
@@ -279,7 +288,7 @@ landscape:
         19: road
         20: snow_ice
     ntems:
-      url: "https://opendata.nfis.org/downloads/forest_change/CA_forest_VLCE2_{year}.zip"
+      input: ntems_landcover
       archive_file: "CA_forest_VLCE2_{year}.tif"   # the raster inside the zip
       first_year: 1984
       last_year: 2022
@@ -304,7 +313,7 @@ landscape:
     source: mrdem         # mrdem (NRCan MRDEM-30, 30 m bare-earth elevation) or your own
                           # elevation raster (a source: path or url)
     mrdem:
-      url: "https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dtm.tif"
+      input: mrdem
     northness: fine       # fine (worked out at 30 m, then averaged) or coarse (from the
                           # mean elevation at each resolution, as in NMC_CEtool)
     access: stream        # stream or download; MRDEM is 84 GB, so stream unless you have it locally
@@ -316,11 +325,9 @@ landscape:
   # layer's class, e.g. 2 or 60, or recent_years below).
   fire:
     nbac:
-      url: "https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2025_20260513_shp.zip"
-      target_file: NBAC_merged_1972_to_2025_20260513.shp
+      input: nbac           # url and target_file in the inputs table
     nfdb:
-      url: "https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly_pre1972.zip"
-      target_file: NFDB_poly_pre1972_20250630.shp
+      input: nfdb
     pre1972: true         # true (add NFDB fires before 1972) or false (NBAC only)
     last_year: 2025       # last year of fires in nbac
     recent_years: 2       # years counted as recent for rows without a class
@@ -334,10 +341,10 @@ landscape:
     reset_by_disturbance: true  # true: a cell burned (fire) or harvested (CanLaD) after the
                           # map's year gets the years since; false: map ages only
     scanfi:
-      url: "https://ftp.maps.canada.ca/pub/nrcan_rncan/Forests_Foret/SCANFI/v2/SCANFI_age_median_{year}_v2_20260119.tif"
+      input: scanfi_age
       years: [1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
     ntems:
-      url: "https://opendata.nfis.org/downloads/forest_change/CA_forest_age_2019.zip"
+      input: ntems_age
       archive_file: CA_forest_age_2019.tif   # the raster inside the zip
       years: [2019]
       zero_is_na: true    # 0 means not forest
@@ -466,3 +473,21 @@ model:
   #     upload: false      true: upload_models() puts its fit and coefficient tables in
   #                        model: upload_folder: (needs a fit); false: only if named
   models: {}
+
+# Layer stacks for maps (model land) ----------------------------------------------
+# One GeoTIFF per year, outputs/<project>/model_land/model_land_<year>.tif, with every
+# covariate the models use, made from the layers as the model tables are: groups
+# (model: groups:) combined the same way, time since disturbance (NA where there was
+# none, for caribou_SSUD to fill in), and distances capped as in model: distance_cap: as a second
+# layer, <name>_adj. Layers are named as in the formulas without _start or _end (e.g.
+# prop_forest_240, dist_paved_240, dist_paved_240_adj), on the finest grid used, so a
+# model can be mapped for that year from its stack alone (e.g. in caribou_SSUD). Layers
+# that do not change are in every stack; years past a layer's last year use its last
+# raster. outputs/<project>/model_land/model_land_layers.csv says what each layer is.
+model_land:
+  years: []               # years to make a stack for, e.g. [2015, 2020, 2025]; [] = none
+  models: all             # all, or a list of models whose covariates go in the stacks
+  # Drive folder (ID) that upload_model_land() puts stacks in (as zips with the layer
+  # list), run by hand after a run. The stacks hold landscape layers only. null = none.
+  upload_folder: null
+  upload_years: []        # years upload_model_land() uploads; [] = all of years

@@ -2,7 +2,7 @@
 % Please edit documentation in R/targets_later.R
 \name{targets_maps}
 \alias{targets_maps}
-\title{Targets: selection maps (comparable to caribou_SSUD)}
+\title{Targets: layer stacks for maps (and, to come, selection maps)}
 \usage{
 targets_maps(cfg)
 }
@@ -10,10 +10,20 @@ targets_maps(cfg)
 \item{cfg}{named list of settings from \code{\link[=read_config]{read_config()}}.}
 }
 \value{
-list of targets (empty until round 2).
+list of targets (empty if no years are set).
 }
 \description{
-Targets: selection maps (comparable to caribou_SSUD)
+With years in \verb{model_land: years:} (and layers and models set):
+\itemize{
+\item \code{cfg_model_land}: the formulas whose covariates go in the stacks
+(\verb{model_land: models:}), with \verb{model: groups:} and \verb{distance_cap:};
+\item \code{model_land_spec}: what each stack layer is (\code{\link[=make_model_land_spec]{make_model_land_spec()}});
+\item \code{model_land_layers_file}: that list as
+outputs/\if{html}{\out{<project>}}/model_land/model_land_layers.csv;
+\item \code{model_land}: one stack per year, outputs/\if{html}{\out{<project>}}/model_land/
+model_land_\if{html}{\out{<year>}}.tif (\code{\link[=make_model_land]{make_model_land()}}), one branch per year.
+\code{\link[=upload_model_land]{upload_model_land()}}, run by hand, puts some years on Drive.
+}
 }
 \author{
 Julie W. Turner
