@@ -466,3 +466,21 @@ model:
   #     upload: false      true: upload_models() puts its fit and coefficient tables in
   #                        model: upload_folder: (needs a fit); false: only if named
   models: {}
+
+# Layer stacks for maps (model land) ----------------------------------------------
+# One GeoTIFF per year, outputs/<project>/model_land/model_land_<year>.tif, with every
+# covariate the models use, made from the layers as the model tables are: groups
+# (model: groups:) combined the same way, time since disturbance (NA where there was
+# none, for caribou_SSUD to fill in), and distances capped as in model: distance_cap: as a second
+# layer, <name>_adj. Layers are named as in the formulas without _start or _end (e.g.
+# prop_forest_240, dist_paved_240, dist_paved_240_adj), on the finest grid used, so a
+# model can be mapped for that year from its stack alone (e.g. in caribou_SSUD). Layers
+# that do not change are in every stack; years past a layer's last year use its last
+# raster. outputs/<project>/model_land/model_land_layers.csv says what each layer is.
+model_land:
+  years: []               # years to make a stack for, e.g. [2015, 2020, 2025]; [] = none
+  models: all             # all, or a list of models whose covariates go in the stacks
+  # Drive folder (ID) that upload_model_land() puts stacks in (as zips with the layer
+  # list), run by hand after a run. The stacks hold landscape layers only. null = none.
+  upload_folder: null
+  upload_years: []        # years upload_model_land() uploads; [] = all of years
