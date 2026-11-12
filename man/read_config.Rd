@@ -24,7 +24,11 @@ Named list of settings.
 Combines the package's default settings (\code{inst/config/default.yaml}),
 \verb{config/<project>.yaml},
 \code{config/local.yaml} (settings for this computer only, e.g. folder paths) and
-the optional \verb{config/<project>.R}, in that order, later ones winning. If
+the optional \verb{config/<project>.R}, in that order, later ones winning.
+Inputs named in the package's inputs table (\code{inst/extdata/inputs_default.csv})
+and the project's (\verb{inputs: inputs_<project>.csv}, read with
+\code{\link[=read_inputs_table]{read_inputs_table()}}) are put where the settings name them (\verb{input: <name>}).
+If
 \verb{locations: sources:} names a CSV file (e.g. \code{locations_NMC.csv}), the sources
 are read from it with \code{\link[=read_location_sources]{read_location_sources()}}, and if \verb{locations: cleaning: params: exclude_points:} names one, the points are read with
 \code{\link[=read_exclude_points]{read_exclude_points()}}, and each disturbance source with a \verb{crosswalk:}

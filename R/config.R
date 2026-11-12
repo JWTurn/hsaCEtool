@@ -5,7 +5,11 @@
 #' @description Combines the package's default settings (`inst/config/default.yaml`),
 #'   `config/<project>.yaml`,
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
-#'   the optional `config/<project>.R`, in that order, later ones winning. If
+#'   the optional `config/<project>.R`, in that order, later ones winning.
+#'   Inputs named in the package's inputs table (`inst/extdata/inputs_default.csv`)
+#'   and the project's (`inputs: inputs_<project>.csv`, read with
+#'   [read_inputs_table()]) are put where the settings name them (`input: <name>`).
+#'   If
 #'   `locations: sources:` names a CSV file (e.g. `locations_NMC.csv`), the sources
 #'   are read from it with [read_location_sources()], and if `locations: cleaning:
 #'   params: exclude_points:` names one, the points are read with
@@ -39,6 +43,13 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   if (file.exists(local_file)) {
     cfg <- merge_config(cfg, read_settings_file(local_file))
   }
+  # inputs named in a table: the package's (national inputs) and the project's
+  inputs <- read_inputs_table(system.file('extdata', 'inputs_default.csv', package = 'hsaCEtool'))
+  in_file <- cfg$inputs %||% ''
+  if (is.character(in_file) && length(in_file) == 1 && nzchar(in_file)) {
+    inputs <- merge_inputs_tables(inputs, read_inputs_table(file.path(config_dir, in_file)))
+  }
+  cfg <- apply_inputs_table(cfg, inputs)
   # sources given as a table: turned into the same settings as typed in the YAML
   src_file <- cfg$locations$sources
   if (is.character(src_file) && length(src_file) == 1) {

@@ -60,6 +60,52 @@ settings that say which file it is (`path`, `url`, `target_file`, `archive`,
 `fun`, `subfolder`, `refresh`) are part of the download. So editing e.g. its
 `columns` or `herd` reads the file again but does not download it again.
 
+### Inputs table: `inputs_<project>.csv`
+
+Input files can be named once in a table, one row per file, and referred to by
+name in the settings (`input: <name>`) instead of repeating their url. The
+table also records who provided each file and on what terms, for an input
+manifest or a report's data sources. The package has its own table
+(`inst/extdata/inputs_default.csv`) for the national inputs (CanLaD, SCANFI,
+NTEMS, MRDEM, NBAC, NFDB), which `default.yaml` uses. A project's table, named
+in `inputs:` (relative to the config folder), adds its own inputs and replaces
+the package's row of the same name.
+
+| Column | What it holds |
+|---|---|
+| `name` | the input's name, used in the settings and as its id in a manifest (required) |
+| `title` | a short title, e.g. "SCANFI land cover v3" |
+| `theme` | what kind of data it is, e.g. `landcover`, `harvest`, `fire`, `forest_age`, `elevation`, `disturbance`, `boundary`, `study_area` or `caribou` |
+| `url` or `path` | where the file is (one of them is required) |
+| `target_file`, `archive` | with `url`: the file wanted from the download, and the archive's name |
+| `access` | `public` (the url may be published) or `restricted` (shared with named people only: never publish its url) (required) |
+| `provider`, `terms` | who provided the data, and on what terms (a licence or data-sharing agreement) |
+| `notes` | anything worth knowing about the input |
+
+```yaml
+inputs: inputs_NMC.csv
+locations:
+  captures:
+    source: BC
+    input: bc_captures      # its url, target_file and archive come from the table
+    columns: {...}
+landscape:
+  fire:
+    nbac: {input: nbac}     # in the package's table
+  harvest:
+    canlad_old:
+      type_input: canlad_1965_1984_type   # <what>_input: <name> becomes <what>_url
+```
+
+`read_config()` puts each input's `url` (or `path`), `target_file` and
+`archive` where the settings name it, so the settings come out as if the urls
+were typed there. A url or path typed beside `input:` wins (e.g. a project's own
+NBAC). The other columns never reach the pipeline, so editing them reruns
+nothing. The combined table is kept as `cfg$inputs_table`, with a column
+`used_in` saying where in the settings each input is used (blank if nowhere).
+What a file is used for (its years, fields, crosswalk, the file wanted from a
+folder) stays in the YAML.
+
 ### Location sources table: `locations_<project>.csv`
 
 Instead of typing the sources in the YAML, `locations: sources:` can name a CSV

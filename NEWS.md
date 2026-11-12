@@ -1,5 +1,17 @@
 # hsaCEtool 0.0.0.9000
 
+- Input files can be named once in an inputs table (`inputs:
+  inputs_<project>.csv`; `read_inputs_table()`) and referred to by name in the
+  settings (`input: <name>`, or `<what>_input:` for `<what>_url`). Each row has
+  the file's url or path and its title, theme (kind of data), access (`public`
+  or `restricted`), provider, terms and notes, for an input manifest. The
+  package's own table (`inst/extdata/inputs_default.csv`) has the national
+  inputs, which `default.yaml` now names instead of giving their urls; a
+  project's table adds to it and replaces its rows by name. `read_config()`
+  puts the urls back where they were, so the settings, and the targets, are
+  unchanged; the combined table is kept as `cfg$inputs_table`, with where each
+  input is used (`used_in`).
+
 - A disturbance source can take its categories from a crosswalk table
   (`crosswalk: crosswalk_<source>_<project>.csv`) listing every value of the
   fields used, instead of `category` or `rules` in the YAML
