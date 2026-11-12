@@ -54,8 +54,9 @@ upload_models <- function(project = NULL, models = NULL, force = FALSE, config_d
   # on a computer that cannot download the locations
   check <- c('cfg_model', 'season_table', paste0(c('cfg_model_', 'seasons_', 'model_data_'), rep(models, each = 3)),
              fit_nm, paste0('model_coefs_', models), coefs_nm)
-  stale <- targets::tar_outdated(names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
-                                 script = ctx$script, store = ctx$store)
+  stale <- with_tar_project(ctx$tar_project, targets::tar_outdated(
+    names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
+    script = ctx$script, store = ctx$store))
   if (length(stale)) {
     stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   }

@@ -43,8 +43,9 @@ upload_model_land <- function(project = NULL, years = NULL, force = FALSE, confi
   # not the steps before (shortcut), which can look out of date on a computer
   # that cannot download the locations
   check <- c('cfg_model_land', 'model_land_spec', 'model_land_years', 'model_land_layers_file', 'model_land')
-  stale <- targets::tar_outdated(names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
-                                 script = ctx$script, store = ctx$store)
+  stale <- with_tar_project(ctx$tar_project, targets::tar_outdated(
+    names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
+    script = ctx$script, store = ctx$store))
   if (length(stale)) stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   stacks <- model_land_branches(targets::tar_meta(fields = c('data', 'path', 'parent'), store = ctx$store))
   missing <- setdiff(years, stacks$year)

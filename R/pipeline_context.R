@@ -60,3 +60,20 @@ pipeline_context <- function(project = NULL, config_dir = NULL) {
   list(project = name, config_dir = config_dir, tar_project = tar_project, script = script, store = store,
        cfg = read_config(name, config_dir = config_dir))
 }
+
+#' @title Run code with `TAR_PROJECT` set to a targets project
+#' @description Checking a store (e.g. [targets::tar_outdated()]) runs the
+#'   project's `_targets.R`, which reads its settings from `TAR_PROJECT`. The
+#'   helpers run by hand set it to their targets project only for that
+#'   check, and leave it afterwards as it was (or unset).
+#' @param tar_project character. Targets project (`pipeline_context()$tar_project`).
+#' @param code Code to run.
+#' @return The value of `code`.
+#' @keywords internal
+#' @noRd
+with_tar_project <- function(tar_project, code) {
+  old <- Sys.getenv('TAR_PROJECT', unset = NA)
+  on.exit(if (is.na(old)) Sys.unsetenv('TAR_PROJECT') else Sys.setenv(TAR_PROJECT = old), add = TRUE)
+  Sys.setenv(TAR_PROJECT = tar_project)
+  code
+}
