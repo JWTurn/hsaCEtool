@@ -2,7 +2,7 @@
 # Replaces NMC_CEtool scripts/7-SSUDmaps.R (Julie W. Turner). For each year of
 # interest, one GeoTIFF holding every covariate the models use, made from the
 # layers the same way the model tables are (build_model_data()): the same
-# year's raster of each layer, groups combined with combine_columns(), time
+# year's raster of each layer, groups combined as combine_columns() does, time
 # since disturbance (left NA where there was none, for caribou_SSUD to fill in
 # for its forecasts; the model tables use ts_nodata), and distances capped as
 # in model: distance_cap: (as a second layer, <name>_adj). Layers are named as
@@ -13,8 +13,8 @@
 #' @param models named list. `model: models:`.
 #' @param which character. `all`, or model names (`model_land: models:`).
 #' @return character. The formulas.
-#' @keywords internal
-#' @noRd
+#' @author Julie W. Turner
+#' @export
 model_land_formulas <- function(models, which = 'all') {
   which <- unlist(which %||% 'all')
   if (!identical(which, 'all')) {
@@ -116,15 +116,33 @@ layer_file_for_year <- function(files, first_year, last_year, year) {
   files[min(max(year, first_year), last_year) - first_year + 1]
 }
 
+#' @title Combine layers by a rule, cell by cell
+#' @description The raster version of `combine_columns()` (used for the model
+#'   tables), with the same result: missing values are skipped (a sum counts
+#'   them as 0), and a cell is missing only where all layers are. Uses terra's
+#'   own functions, as calling `combine_columns()` through [terra::app()] is
+#'   thousands of times slower.
+#' @param r SpatRaster. The layers to combine.
+#' @param rule character. sum, min, max or mean.
+#' @return SpatRaster, one layer.
+#' @keywords internal
+#' @noRd
+combine_layers <- function(r, rule) {
+  if (!rule %in% c('sum', 'mean', 'min', 'max')) stop('Unknown rule: ', rule, call. = FALSE)
+  # the function by name, which terra runs in its compiled code
+  out <- terra::app(r, rule, na.rm = TRUE)
+  terra::mask(out, terra::allNA(r), maskvalues = 1)
+}
+
 #' @title Make one year's layer stack
 #' @description Writes `model_land_<year>.tif` in `out_dir`: one layer per row
 #'   of `spec`, named by `name`, made as the model tables are made from the
 #'   extracted values:
 #'   - each layer's raster for `year` (years outside a layer's years use its
 #'     first or last raster; layers that do not change, their one raster);
-#'   - groups combined cell by cell with the same function as the model
-#'     tables (missing layers skipped, sum counting them as 0; missing only
-#'     where all are);
+#'   - groups combined cell by cell by the same rules as the model tables
+#'     (`combine_layers()`, which gives what `combine_columns()` gives:
+#'     missing layers skipped, sum counting them as 0; missing only where all are);
 #'   - time since disturbance: `year` minus the raster's value; no disturbance
 #'     (NA or 0), or one after `year`, is left NA (the model tables use
 #'     `ts_nodata` there; caribou_SSUD fills it in, so forecasts from the
@@ -182,11 +200,7 @@ make_model_land <- function(year, index, spec, cap, templates = NULL, out_dir) {
     } else if (is.na(spec$rule[k])) {
       out <- rasts[[cols]]
     } else {
-      rule <- spec$rule[k]
-      out <- terra::app(terra::rast(unname(rasts[cols])), function(m) {
-        if (!is.matrix(m)) m <- matrix(m, nrow = 1)   # terra first tries one cell, as a vector
-        combine_columns(data.table::as.data.table(unname(m)), paste0('V', seq_along(cols)), rule)
-      })
+      out <- combine_layers(terra::rast(unname(rasts[cols])), spec$rule[k])
     }
     if (spec$adj[k]) out <- terra::ifel(out > cap$beyond_km * 1000, cap$set_to_km * 1000, out)
     out

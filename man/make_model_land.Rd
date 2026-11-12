@@ -30,9 +30,9 @@ extracted values:
 \itemize{
 \item each layer's raster for \code{year} (years outside a layer's years use its
 first or last raster; layers that do not change, their one raster);
-\item groups combined cell by cell with the same function as the model
-tables (missing layers skipped, sum counting them as 0; missing only
-where all are);
+\item groups combined cell by cell by the same rules as the model tables
+(\code{combine_layers()}, which gives what \code{combine_columns()} gives:
+missing layers skipped, sum counting them as 0; missing only where all are);
 \item time since disturbance: \code{year} minus the raster's value; no disturbance
 (NA or 0), or one after \code{year}, is left NA (the model tables use
 \code{ts_nodata} there; caribou_SSUD fills it in, so forecasts from the

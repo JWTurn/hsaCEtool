@@ -76,6 +76,16 @@ test_that('the stack has the same values as the model tables at the same points'
   expect_true(all(is.na(ts[91:100])))   # burned after the year
 })
 
+test_that('layers combine as the model-table columns do, for every rule', {
+  r <- terra::rast(nrows = 2, ncols = 3, crs = crs)
+  r <- c(terra::rast(r, vals = c(1, NA, 3, NA, 5, 0.5)), terra::rast(r, vals = c(2, NA, NA, 4, 1, 0.25)))
+  names(r) <- c('a', 'b')
+  DT <- data.table::as.data.table(terra::values(r))
+  for (rule in c('sum', 'mean', 'min', 'max')) {
+    expect_equal(as.vector(terra::values(combine_layers(r, rule))), combine_columns(DT, names(DT), rule), info = rule)
+  }
+})
+
 test_that('the stack is masked to the template of its cell size', {
   dir <- withr::local_tempdir()
   idx <- toy_land(dir)
