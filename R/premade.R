@@ -63,7 +63,7 @@ write_premade <- function(project = NULL, config_dir = NULL) {
 #' @title Upload the premade files to the project's Drive folders
 #' @description Puts each zip from [write_premade()] in a Drive folder of
 #'   `locations: premade_folder:`: one folder for all of them, or file name
-#'   patterns, each with its folder (see [upload_destinations()]), so that, for
+#'   patterns, each with its folder (see `upload_destinations()`), so that, for
 #'   example, the cleaned locations go to a private folder and the study areas to
 #'   one shared with other phases. A file of the same name already in its
 #'   folder is replaced in place, so its link (e.g. in the settings) stays the
