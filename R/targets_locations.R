@@ -55,7 +55,9 @@ targets_config <- function(cfg) {
 #'   but no times help make the study area but are then dropped
 #'   ([drop_date_only()]). `locations` keeps only the columns needed later,
 #'   with `sex` coded and `study`, `herd` and `juris` added ([finish_locations()]); `herd_check`
-#'   counts animals by source, jurisdiction, study and herd.
+#'   counts animals by source, jurisdiction, study and herd; `fix_intervals`
+#'   summarizes the hours between fixes by animal and by each column in
+#'   `locations: fix_intervals: by:` ([summarize_fix_intervals()]).
 #'
 #'   With `locations: premade:` set, a cleaned locations file (saved from
 #'   `locations_clean`) is read instead ([read_premade_locations()]) and the
@@ -259,6 +261,9 @@ targets_locations <- function(cfg) {
                    finish_locations(cfg_finish)),
       # animals by source, jurisdiction, study and herd, to check the names (counts only)
       tar_target(herd_check, locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)]),
+      # hours between fixes, by animal and by each fix_intervals: by column (to choose tracks: rate_hours)
+      tar_target_raw('fix_intervals', substitute(summarize_fix_intervals(locations, BY),
+                                                 list(BY = cfg$locations$fix_intervals$by %||% list('source', 'herd')))),
       # warns if cleaned fixes come within the buffer width of the extended study area's edge
       tar_target(study_area_check,
                  check_extended_area(locations_clean, study_area_extended, cfg_study_area$extended$buffer_m,

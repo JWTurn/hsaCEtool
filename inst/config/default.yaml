@@ -97,6 +97,8 @@ locations:
     # They only help shape the study area, so only steps that use positions apply.
     date_only_steps: [bounds, exclude_points]
     # Available steps:
+    #   local_times     read some fixes clock times in a local time zone, by the value of a column,
+    #                   and convert them to UTC (list first), e.g. {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
     #   bounds          keep fixes inside a longitude/latitude box
     #   exclude_points  drop fixes near known false locations (e.g. a field office)
     #   capture_effect  drop the first days after each collar was put on
@@ -120,7 +122,7 @@ locations:
       bounds: {xmin: -180, ymin: -90, xmax: 180, ymax: 90}
       exclude_points: []  # list of {name:, lon:, lat:, radius_m:}, or a CSV file in config/ with those columns
       capture_effect: {days: 7}
-      dop: {column: gps_dop, max_dop: 10, keep_missing: true}
+      dop: {column: gps_dop, max_dop: 10, keep_missing: true}   # column can be a list, e.g. [DOP, PDOP, HDOP]: first with a value
       duplicates: {gamma_minutes: 15, dop_column: gps_dop}
       fast_steps: {delta: 200000}
       roundtrips: {delta: 100000, epsilon: 10}
@@ -161,6 +163,10 @@ locations:
   # t_, x_, y_ and these columns are kept, so tracks and steps stay small.
   # locations_clean keeps every column. [] keeps every column.
   keep_after_cleaning: [mortality_status, mortality_basis, deployment_end_type, sex, juris, study, herd]
+  # Hours between fixes after cleaning (target fix_intervals), by animal and by each of these
+  # columns of target locations (keep them in keep_after_cleaning), to choose tracks: rate_hours.
+  fix_intervals:
+    by: [source, herd]
   # Study of each fix: from the first of `columns` with a value (as for herd
   # below), otherwise by_source (source name: study; e.g. to join two sources of
   # one study), otherwise the source's name. In CamelCase, then `rename`.

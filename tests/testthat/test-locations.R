@@ -29,6 +29,27 @@ test_that('standardize_locations turns a date and a local hour into UTC', {
   expect_error(standardize_locations(DT[, !'hr'], src, list(keep_columns = list()), crs), 'hr')
 })
 
+test_that('standardize_locations reads clock_time sources in tz, ignoring the zone label', {
+  crs <- 'EPSG:3005'
+  txt <- c('2020-06-01T08:00:00Z', '2020-01-15T23:30:00Z')
+  src <- list(columns = list(id = 'animal', datetime = 'when', x = 'lon', y = 'lat'),
+              input_crs = 'EPSG:4326', tz = 'Etc/GMT+8', clock_time = TRUE)
+  cfg <- list(tz = 'UTC', keep_columns = list())
+  want <- c('2020-06-01 16:00', '2020-01-16 07:30')
+  # as text
+  DT <- data.table::data.table(animal = 'a', lon = -120, lat = 52, when = txt)
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), want)
+  # as date-times already read as UTC (as fread does with the Z)
+  DT[, when := as.POSIXct(txt, format = '%Y-%m-%dT%H:%M:%SZ', tz = 'UTC')]
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), want)
+  # without clock_time the label is kept
+  src$clock_time <- NULL
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), c('2020-06-01 08:00', '2020-01-15 23:30'))
+})
+
 test_that('standardize_locations says which columns are missing', {
   DT <- data.table(a = 1)
   expect_error(standardize_locations(DT, list(), list(columns = list(id = 'id', datetime = 't_', x = 'x_', y = 'y_')), crs),
@@ -39,6 +60,13 @@ test_that('cleaning steps remove what they should', {
   DT <- toy_locations()
   expect_equal(nrow(clean_dop(copy(DT), list(column = 'gps_dop', max_dop = 10, keep_missing = TRUE), crs)), 80)
   expect_equal(nrow(clean_dop(copy(DT), list(column = 'gps_dop', max_dop = 10, keep_missing = FALSE), crs)), 60)
+  # several columns: the first with a value
+  two <- data.table::data.table(id = 'a', t_ = Sys.time() + 1:4, x_ = 0, y_ = 0,
+                                DOP = c(2, NA, NA, 12), PDOP = c(50, 3, NA, 1))
+  expect_equal(dop_values(two, list('DOP', 'PDOP', 'HDOP')), c(2, 3, NA, 12))
+  expect_equal(nrow(clean_dop(copy(two), list(column = list('DOP', 'PDOP'), max_dop = 10, keep_missing = TRUE), crs)), 3)
+  expect_warning(out <- clean_dop(copy(two), list(column = 'HDOP', max_dop = 10, keep_missing = TRUE), crs), 'HDOP')
+  expect_equal(nrow(out), 4)
   # first day (12 fixes at 2 h) of each animal dropped
   expect_equal(nrow(clean_capture_effect(copy(DT), list(days = 1), crs)), 76)
   expect_equal(nrow(clean_min_points(copy(DT)[!(id == 'b' & seq_len(.N) > 52)], list(n = 10), crs)), 50)
@@ -385,4 +413,35 @@ test_that('the study area can add polygons, such as herd ranges, to the buffered
   expect_true(terra::relate(ext, terra::project(rng, crs), 'covers')[1, 1])
   # file wins over add
   expect_equal(terra::expanse(make_study_area(DT, cfg, file = file, crs = crs, add = file)), 1e8, tolerance = 1e-3)
+})
+
+test_that('summarize_fix_intervals summarizes hours between fixes by animal and group', {
+  t0 <- as.POSIXct('2021-06-01', tz = 'UTC')
+  DT <- data.table::data.table(
+    id = c(rep('a', 4), rep('b', 3), 'c'),
+    t_ = t0 + 3600 * c(0, 2, 4, 10, 0, 8, 16, 0),
+    herd = c(rep('H1', 4), rep('H2', 3), 'H2'), source = 'S')
+  out <- summarize_fix_intervals(DT[sample(.N)], list('herd', 'source', 'missing'))
+  expect_equal(unique(out$level), c('id', 'herd', 'source'))
+  expect_equal(out[level == 'id' & group == 'a', c(intervals, mean_h, median_h)], c(3, 10 / 3, 2), tolerance = 0.01)
+  expect_false('c' %in% out[level == 'id', group])   # one fix, no interval
+  expect_equal(out[level == 'herd' & group == 'H2', c(animals, intervals, median_h)], c(1, 2, 8))
+  s <- out[level == 'source']
+  expect_equal(c(s$animals, s$intervals, s$median_h, s$median_of_animals_h), c(2, 5, 6, 5))
+})
+
+test_that('local_times puts some fixes clock times into UTC and must come first', {
+  t0 <- as.POSIXct('2021-01-01 10:00', tz = 'UTC')
+  DT <- data.table::data.table(id = c('a', 'a', 'b'), t_ = t0 + c(0, 3600, 0), x_ = 0, y_ = 0,
+                               src = c('L', 'L', 'U'))
+  cleaning <- list(steps = list('local_times'),
+                   params = list(local_times = list(column = 'src', tz = list(L = 'Etc/GMT+8'))))
+  out <- suppressMessages(clean_locations(DT, cleaning, 'EPSG:3005'))
+  expect_equal(format(out$t_, '%H', tz = 'UTC'), c('18', '19', '10'))
+  expect_equal(attr(out, 'cleaning_log')[step == 'local_times', removed], 0)
+  cleaning$steps <- list('dop', 'local_times')
+  expect_error(clean_locations(DT, cleaning, 'EPSG:3005'), 'first')
+  cleaning$steps <- list('local_times')
+  cleaning$params$local_times$tz <- list(L = 'Etc/GMT+8', Z = 'Etc/GMT+7')
+  expect_warning(suppressMessages(clean_locations(DT, cleaning, 'EPSG:3005')), 'Z')
 })

@@ -4,7 +4,7 @@
 # columns the location sources table may have
 source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 'target_file', 'archive', 'fun',
                        'id_col', 'datetime_col', 'hour_col', 'x_col', 'y_col', 'input_crs', 'tz',
-                       'date_only', 'id_from_deployment', 'refresh',
+                       'date_only', 'clock_time', 'id_from_deployment', 'refresh',
                        'study', 'study_column', 'herd', 'herd_column', 'juris', 'provider', 'terms', 'notes')
 
 #' @title Read the location sources table
@@ -23,7 +23,7 @@ source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 
 #'     \item{id_col, datetime_col, hour_col, x_col, y_col}{the source's `columns`: names of
 #'       its animal ID, date and time, hour, and coordinate columns}
 #'     \item{input_crs, tz}{the source's coordinate system and time zone, if not the defaults}
-#'     \item{date_only, id_from_deployment, refresh}{TRUE or FALSE (blank = FALSE)}
+#'     \item{date_only, clock_time, id_from_deployment, refresh}{TRUE or FALSE (blank = FALSE)}
 #'     \item{study, herd, juris}{the source's study, herd and jurisdiction, for
 #'       fixes that have none from a column (the `by_source` settings)}
 #'     \item{study_column, herd_column}{a column of the data checked first for
@@ -64,7 +64,7 @@ read_location_sources <- function(file) {
   add(tab$type != 'bc' & !is.na(tab$part), 'part is only for type bc')
   add(tab$type == 'bc' & !tab$part %in% c('new', 'old', 'reference'), 'a bc row needs part new, old or reference')
   add(tab$type == 'bc' & duplicated(tab[, .(name, type, part)]), 'a bc part listed twice')
-  for (col in c('date_only', 'id_from_deployment', 'refresh')) {
+  for (col in c('date_only', 'clock_time', 'id_from_deployment', 'refresh')) {
     add(!is.na(tab[[col]]) & !tolower(tab[[col]]) %in% c('true', 'false', 'yes', 'no'),
         paste0(col, ' must be TRUE or FALSE'))
   }
@@ -162,7 +162,7 @@ source_list <- function(tab) {
     if (length(cols)) src$columns <- as.list(cols)
     if (!is.na(r$input_crs)) src$input_crs <- r$input_crs
     if (!is.na(r$tz)) src$tz <- r$tz
-    for (col in c('date_only', 'id_from_deployment')) src[[col]] <- flag(r[[col]])
+    for (col in c('date_only', 'clock_time', 'id_from_deployment')) src[[col]] <- flag(r[[col]])
     out <- c(out, list(src))
   }
   out

@@ -51,7 +51,10 @@ clean_locations <- function(DT, cleaning, crs) {
                     end_clusters = clean_end_clusters, drop_end_clusters = clean_drop_end_clusters,
                     speed = clean_speed, min_points = clean_min_points,
                     captures = clean_captures, mortality_records = clean_mortality_records,
-                    long_gaps = clean_long_gaps)
+                    long_gaps = clean_long_gaps, local_times = clean_local_times)
+  if ('local_times' %in% unlist(cleaning$steps) && unlist(cleaning$steps)[1] != 'local_times') {
+    stop('Cleaning step local_times must be listed first, so later steps see times in UTC.', call. = FALSE)
+  }
   run_steps <- function(DT, steps, suffix = '') {
     for (step in unlist(steps)) {
       fun <- cleaning$custom[[step]] %||% available[[step]] %||%
@@ -486,6 +489,39 @@ clean_exclude_points <- function(DT, params, crs) {
   DT
 }
 
+#' @title Cleaning step: put local clock times into UTC, by a column's value
+#' @description For a file joining sources that wrote times differently,
+#'   e.g. all labelled UTC (a trailing `Z`) but some really local clock time.
+#'   Fixes whose `column` has a value listed in `tz` have their clock time read
+#'   in that time zone and converted to UTC (`local_to_utc()`); other fixes are
+#'   left as they are. Removes no fixes; says how many it shifted. List it
+#'   first, so later steps see times in UTC.
+#' @inheritParams clean_bounds
+#' @param params named list: `column`, and `tz` (named list, value of
+#'   `column`: time zone, e.g. `{CMCRP: Etc/GMT+8}` for UTC-8 with no daylight
+#'   saving).
+#' @return data.table, in order of `id` and `t_`.
+#' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
+clean_local_times <- function(DT, params, crs) {
+  if (!params$column %in% names(DT)) {
+    stop('[clean local_times] no column "', params$column, '"', call. = FALSE)
+  }
+  vals <- as.character(DT[[params$column]])
+  for (v in names(params$tz)) {
+    i <- which(vals %in% v)
+    if (!length(i)) {
+      warning('[clean local_times] no fixes with ', params$column, ' ', v)
+      next
+    }
+    data.table::set(DT, i, 't_', local_to_utc(clock_digits(DT$t_[i]), params$tz[[v]]))
+    message(sprintf('[clean local_times] %s fixes with %s %s read as %s', length(i), params$column, v, params$tz[[v]]))
+  }
+  data.table::setorder(DT, id, t_)
+  DT
+}
+
 #' @title Cleaning step: drop fixes outside deployment dates
 #' @description Uses the `deploy_on_timestamp` and `deploy_off_timestamp`
 #'   columns (as from Movebank) when they exist; fixes with no dates are kept.
@@ -524,7 +560,9 @@ clean_capture_effect <- function(DT, params, crs) {
 #' @title Cleaning step: drop low-quality fixes
 #' @description Drops fixes whose dilution of precision (DOP) is at or above
 #'   `max_dop`. Fixes with no DOP are kept when `keep_missing` is TRUE (many
-#'   collars don't record it).
+#'   collars don't record it). `column` can list several columns (e.g.
+#'   `[DOP, PDOP, HDOP]`, for a file that joins sources recording different
+#'   kinds): each fix's DOP is the first of them with a value.
 #' @inheritParams clean_bounds
 #' @param params named list: `column`, `max_dop`, `keep_missing`.
 #' @return data.table.
@@ -532,12 +570,25 @@ clean_capture_effect <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_dop <- function(DT, params, crs) {
-  if (!params$column %in% names(DT)) {
-    warning('[clean dop] no column "', params$column, '"; step skipped')
+  dop <- dop_values(DT, params$column)
+  if (is.null(dop)) {
+    warning('[clean dop] no column ', paste0('"', unlist(params$column), '"', collapse = ' or '), '; step skipped')
     return(DT)
   }
-  dop <- as.numeric(DT[[params$column]])
   DT[(is.na(dop) & isTRUE(params$keep_missing)) | (!is.na(dop) & dop < params$max_dop)]
+}
+
+#' @title DOP of each fix, from the first of several columns with a value
+#' @param DT data.table of locations.
+#' @param cols character or list. DOP column name(s), in order of preference.
+#' @return numeric vector, NA where none has a value; NULL if no column is found.
+#' @keywords internal
+#' @noRd
+dop_values <- function(DT, cols) {
+  cols <- intersect(unlist(cols), names(DT))
+  if (!length(cols)) return(NULL)
+  vals <- lapply(cols, function(col) suppressWarnings(as.numeric(DT[[col]])))
+  do.call(data.table::fcoalesce, vals)
 }
 
 #' @title Cleaning step: drop near-duplicate fixes
@@ -545,13 +596,14 @@ clean_dop <- function(DT, params, crs) {
 #'   with the best DOP, by the same rules as `amt::flag_duplicates()` (see
 #'   `flag_duplicates_fast()`). Fixes with no DOP are ranked last.
 #' @inheritParams clean_bounds
-#' @param params named list: `gamma_minutes`, `dop_column`.
+#' @param params named list: `gamma_minutes`, `dop_column` (one column, or
+#'   several: the first with a value, as for the `dop` step).
 #' @return data.table.
 #' @author Julie W. Turner
 #' @keywords internal
 #' @noRd
 clean_duplicates <- function(DT, params, crs) {
-  dop <- if (params$dop_column %in% names(DT)) as.numeric(DT[[params$dop_column]]) else rep(1, nrow(DT))
+  dop <- dop_values(DT, params$dop_column) %||% rep(1, nrow(DT))
   DT[, .dop := data.table::fifelse(is.na(dop), 99, dop)]
   DT[, .flag := flag_duplicates_fast(t_, x_, y_, .dop, params$gamma_minutes * 60), by = id]
   DT <- DT[!(.flag)]
@@ -875,6 +927,47 @@ summarize_flags <- function(clean, raw = NULL) {
   out <- data.table::rbindlist(out)
   out <- merge(out, totals, by = 'source', all.x = TRUE, sort = FALSE)
   out[is.na(fixes), fixes := 0L][]
+}
+
+#' @title Time between fixes, by animal and by group
+#' @description For choosing the rate tracks are resampled to
+#'   (`tracks: rate_hours`): the hours between each animal's consecutive
+#'   fixes, summarized for each animal and for each value of each `by`
+#'   column. A group's `animals` are those with at least one interval;
+#'   `median_of_animals_h` is the median of their own medians, so animals with
+#'   many fixes do not outweigh the rest. No positions or times are returned.
+#' @param DT data.table of locations with `id` and `t_` (e.g. target
+#'   `locations`).
+#' @param by character or list. Columns to summarize by besides the animal
+#'   (e.g. `source`, `herd`); those not in `DT` are skipped. An animal with
+#'   fixes in more than one value of a column counts in each.
+#' @return data.table: `level` (`id` or the `by` column), `group` (its
+#'   value), `animals`, `intervals`, and `mean_h`, `median_h`, `p10_h`,
+#'   `p90_h` and `median_of_animals_h` (hours).
+#' @author Julie W. Turner
+#' @export
+summarize_fix_intervals <- function(DT, by = list('source', 'herd')) {
+  by <- intersect(unlist(by), names(DT))
+  DT <- data.table::as.data.table(DT)[, c('id', 't_', by), with = FALSE]
+  data.table::setorder(DT, id, t_)
+  DT[, dt_h := as.numeric(t_ - data.table::shift(t_), units = 'hours'), by = id]
+  DT <- DT[!is.na(dt_h)]
+  per_animal <- DT[, .(med = stats::median(dt_h)), by = id]
+  stats_of <- function(d, meds) {
+    list(animals = data.table::uniqueN(d$id), intervals = length(d$dt_h),
+         mean_h = round(mean(d$dt_h), 2), median_h = round(stats::median(d$dt_h), 2),
+         p10_h = round(unname(stats::quantile(d$dt_h, 0.1)), 2),
+         p90_h = round(unname(stats::quantile(d$dt_h, 0.9)), 2),
+         median_of_animals_h = round(stats::median(meds[id %in% unique(d$id), med]), 2))
+  }
+  out <- lapply(c('id', by), function(col) {
+    g <- DT[, stats_of(.SD, per_animal), by = c(col), .SDcols = c('id', 'dt_h')]
+    data.table::setnames(g, col, 'group')
+    g[, `:=`(level = col, group = as.character(group))]
+  })
+  out <- data.table::rbindlist(out, use.names = TRUE)
+  data.table::setcolorder(out, c('level', 'group'))
+  out[]
 }
 
 #' @title Cleaning step: drop steps faster than a speed limit

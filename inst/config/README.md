@@ -129,7 +129,7 @@ are left out. Columns (only `name` is required; leave out any not used):
 | `url`, `path`, `target_file`, `archive`, `fun` | where the file is, as for any source |
 | `id_col`, `datetime_col`, `hour_col`, `x_col`, `y_col` | the source's `columns`: its animal ID, date and time, hour, and coordinate columns |
 | `input_crs`, `tz` | the source's coordinate system and time zone, if not the defaults |
-| `date_only`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
+| `date_only`, `clock_time`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
 | `study`, `herd`, `juris` | the source's study, herd and jurisdiction, for fixes without one from a column (`by_source`, see "After cleaning") |
 | `study_column`, `herd_column` | a column of the data checked first for each fix's study or herd in this source |
 | `provider`, `terms` | who provided the data and on what terms (e.g. a data-sharing agreement), for the record of where the source came from; not used by the pipeline, so editing them reruns nothing |
@@ -241,6 +241,24 @@ column too; the date column is then `datetime`:
       target_file: fixes.shp
       columns: {id: Collar_ID, datetime: Date_Time, hour: Hour}
       tz: America/Whitehorse   # leave out if the times are already UTC
+```
+
+Some files label local clock times as UTC (e.g. `2020-06-01T08:00:00Z`, which
+is read as 08:00 UTC). Add `clock_time: true` to such a source: the label is
+ignored and the clock time is read in `tz`. Without it, a time already read as
+a date-time keeps its label and `tz` has no effect. A fixed offset with no
+daylight saving is written `Etc/GMT+8` (UTC-8; the sign is reversed).
+
+If only some of a file's fixes are local clock time (e.g. a file joining
+several studies, all labelled UTC), use the cleaning step `local_times`
+instead, listed first. It reads the clock time of each fix whose `column` has
+a listed value in that value's time zone, and leaves the rest as they are:
+
+```yaml
+  cleaning:
+    steps: [local_times, bounds, ...]
+    params:
+      local_times: {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
 ```
 
 Check a source's times before trusting its stated time zone. Two checks
@@ -435,6 +453,15 @@ study area is made. With premade locations, they are dropped from the premade
 file. A listed herd with no fixes stops the run, as its name is probably
 misspelled. The target `herd_selection` counts the fixes and animals of every
 herd and says which were kept. `[]` (the default) keeps every herd.
+
+### Time between fixes
+
+Tracks are resampled to one fix every `tracks: rate_hours`. To choose that
+rate, the target `fix_intervals` summarizes the hours between each animal's
+consecutive fixes after cleaning (mean, median, 10th and 90th percentiles, and
+the median of the animals' own medians), for each animal and for each value of
+each column in `locations: fix_intervals: by:` (default `[source, herd]`).
+A column used here must be kept in `keep_after_cleaning`.
 
 ## Landscape layers: `layers_<project>.csv`
 
