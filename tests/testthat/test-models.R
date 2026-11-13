@@ -33,11 +33,11 @@ toy_extracted <- function(steps, dir) {
 common <- list(seasons = list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31')),
                groups = list(prop_ab = list(sum = list('prop_a', 'prop_b')),
                              dist_x = list(min = list('dist_x', 'harv_dist'))),
-               distance_cap = list(columns = '^dist_', beyond_km = 20, set_to_km = 21))
+               distance_cap = list(beyond_km = 20, set_to_km = 21))
 # season table: the default set as common$seasons, and a second set
 toy_seasons <- data.table(set = c('default', 'default', 'other_set'), season = c('winter', 'summer', 'calving'),
                           start = c('11-01', '04-16', '05-15'), end = c('04-15', '10-31', '06-15'))
-form <- 'case_ ~ -1 + prop_ab_240_end + I(log((dist_x_240_end + 1)/1000)) + (1 | indiv_step_id) + (0 + prop_ab_240_end | id)'
+form <- 'case_ ~ -1 + prop_ab_240_end + I(log((dist_x_240_adj_end + 1)/1000)) + (1 | indiv_step_id) + (0 + prop_ab_240_end | id)'
 
 test_that('seasons follow the start date and can cross the new year', {
   t <- as.POSIXct(c('2020-12-31', '2021-04-15', '2021-04-16', '2021-10-31', '2021-11-01'), tz = 'UTC')
@@ -98,6 +98,14 @@ test_that('model settings are checked', {
   bad$models <- list(m3 = list(formula = form, n_random = 5, random_na = 'drop', export = 'yes'))
   p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('random_na must be', p)))
+  # capped distances are named with _adj; the old columns setting is refused
+  cols <- ok
+  cols$distance_cap$columns <- '^dist_'
+  expect_true(any(grepl('distance_cap: columns is no longer used', check_model_settings(cols, 30, toy_seasons))))
+  nocap <- ok
+  nocap$distance_cap <- NULL
+  expect_true(any(grepl('dist_x_240_adj_end \\(capped distances, _adj\\) need model: distance_cap:',
+                        check_model_settings(nocap, 30, toy_seasons))))
   expect_true(any(grepl('export must be', p)))
   bad$models <- list(m5 = list(formula = form, n_random = 5, upload = 'yes'), m6 = list(formula = form, n_random = 5, upload = TRUE, fit = FALSE))
   p <- check_model_settings(bad, 30, toy_seasons)
@@ -127,7 +135,7 @@ test_that('the model table: groups, distance cap by step start, random steps, co
   expect_equal(d[, .N, by = indiv_step_id][, unique(N)], 4L)
   expect_equal(nrow(d), 3 * 40 * 4)
   # only formula columns, coded IDs, no positions or times
-  expect_setequal(names(d), c('case_', 'indiv_step_id', 'id', 'prop_ab_240_end', 'dist_x_240_end'))
+  expect_setequal(names(d), c('case_', 'indiv_step_id', 'id', 'prop_ab_240_end', 'dist_x_240_adj_end'))
   expect_setequal(unique(d$id), codes$code)
   expect_true(all(startsWith(d$indiv_step_id, paste0(d$id, '_'))))
   # groups: sum, and min (harvest folded in)
@@ -139,10 +147,18 @@ test_that('the model table: groups, distance cap by step start, random steps, co
   # for every row; a step starting nearer keeps its real distances, even beyond 20 km
   start <- pmin(v$dist_x_240_start, v$harv_dist_240_start)
   far <- start > 20000
-  expect_true(all(d$dist_x_240_end[far] == 21000))
-  expect_equal(d$dist_x_240_end[!far], pmin(v$dist_x_240_end, v$harv_dist_240_end)[!far])
-  expect_true(any(d$dist_x_240_end[!far] > 20000))
+  expect_true(all(d$dist_x_240_adj_end[far] == 21000))
+  expect_equal(d$dist_x_240_adj_end[!far], pmin(v$dist_x_240_end, v$harv_dist_240_end)[!far])
+  expect_true(any(d$dist_x_240_adj_end[!far] > 20000))
   expect_equal(r$log[grepl('set to 21 km', what), n], data.table::uniqueN(d$indiv_step_id[far]))
+  expect_true(any(grepl('^dist_x_240_adj_end: steps starting', r$log$what)))
+  # the same distance without _adj is not capped, and both can be in one model
+  both <- list(formula = sub('prop_ab_240_end \\+', 'prop_ab_240_end + I(log(dist_x_240_end + 1)) +', form), n_random = 3)
+  expect_message(d2 <- build_model_data(steps, files, codes, common, both)$data, 'not capped.*dist_x_240_end')
+  expect_equal(d2$dist_x_240_end, pmin(v$dist_x_240_end, v$harv_dist_240_end))
+  expect_equal(d2$dist_x_240_adj_end, d$dist_x_240_adj_end)
+  expect_error(build_model_data(steps, files, codes, list(groups = common$groups, seasons = common$seasons), m),
+               'capped distances \\(dist_x_240_adj_end\\) but model: distance_cap: is null')
 })
 
 test_that('subsets, seasons and missing values in the model table', {
@@ -209,7 +225,7 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   sds <- attr(glmmTMB::VarCorr(fit)$cond$indiv_step_id, 'stddev')
   expect_equal(unname(sds), 1000)
   cf <- suppressWarnings(model_coefficients(fit))
-  expect_setequal(cf$fixed$term, c('prop_ab_240_end', 'I(log((dist_x_240_end + 1)/1000))'))
+  expect_setequal(cf$fixed$term, c('prop_ab_240_end', 'I(log((dist_x_240_adj_end + 1)/1000))'))
   expect_equal(cf$by_group[, unique(group)], 'id')
   expect_setequal(cf$by_group$level, codes$code)
   files_out <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_models'))

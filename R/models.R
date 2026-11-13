@@ -87,6 +87,10 @@ check_model_settings <- function(mcfg, n_made, seasons) {
   if (length(cap) && (!is.numeric(cap$beyond_km) || !is.numeric(cap$set_to_km))) {
     add('distance_cap needs numbers for beyond_km and set_to_km (or distance_cap: null)')
   }
+  if (!is.null(cap$columns)) {
+    add('distance_cap: columns is no longer used: a capped distance is named with _adj in the formula ',
+        '(e.g. dist_paved_240_adj_end), so remove columns and add _adj to the capped distances')
+  }
   for (nm in names(mcfg$models)) {
     m <- mcfg$models[[nm]]
     if (!grepl('^[A-Za-z][A-Za-z0-9_]*$', nm)) {
@@ -99,6 +103,10 @@ check_model_settings <- function(mcfg, n_made, seasons) {
       bars <- model_bars(f)
       if (!any(bars$group == 'indiv_step_id' & bars$intercept_only)) {
         add('models: ', nm, ': the formula needs (1 | indiv_step_id), the intercept of each step')
+      }
+      adj <- grep(adj_pattern, all.vars(f), value = TRUE)
+      if (length(adj) && !length(cap)) {
+        add('models: ', nm, ': ', paste(adj, collapse = ', '), ' (capped distances, _adj) need model: distance_cap:')
       }
       bad <- intersect(all.vars(f), model_private_columns)
       if (length(bad)) {
@@ -225,6 +233,9 @@ select_model_steps <- function(steps, model, seasons, cols) {
   s[]
 }
 
+# a capped distance: a covariate whose name ends in _adj_start or _adj_end
+adj_pattern <- '_adj_(start|end)$'
+
 #' @title Extracted columns each covariate is made from
 #' @description A covariate is either an extracted column (e.g.
 #'   `dist_paved_240_end`) or a group from `model: groups:` with a resolution and
@@ -286,11 +297,13 @@ read_extracted <- function(files, cols, rows) {
 #'      its random steps (`select_model_steps()`);
 #'   2. the covariates in the formula, read from the extracted values; groups
 #'      from `model: groups:` are made here (e.g. `prop_forest_240_end`);
-#'   3. distances far from a disturbance (`model: distance_cap:`): for each
-#'      covariate matching `columns`, a step whose START is more than
-#'      `beyond_km` from that disturbance (its `_start` value) gets `set_to_km`
-#'      for the used step and all its random steps. The start is the same for
-#'      all of them, so this does not depend on where the animal went;
+#'   3. capped distances (`model: distance_cap:`): each covariate named with
+#'      `_adj` (e.g. `dist_paved_240_adj_end`) is a copy of the covariate
+#'      without it (`dist_paved_240_end`), except that a step whose START is
+#'      more than `beyond_km` from that disturbance (`dist_paved_240_start`)
+#'      gets `set_to_km` for the used step and all its random steps. The start
+#'      is the same for all of them, so this does not depend on where the
+#'      animal went. The covariate without `_adj` is not changed;
 #'   4. missing values, with a warning naming the columns: a step whose used
 #'      step has one is dropped. A random step with one is skipped, and the
 #'      next random step is used instead (`random_na: replace`, the default),
@@ -324,11 +337,21 @@ build_model_data <- function(steps, files, codes, common, model) {
   log <- list(data.table::data.table(what = 'steps kept (used)', n = s[case_ == TRUE, .N]),
               data.table::data.table(what = 'rows available (used + all random)', n = nrow(s)))
 
-  # covariates: extracted columns, groups made from them, and the start values the cap uses
+  # covariates: extracted columns, groups made from them, and for capped distances
+  # (_adj) the values they are copied from and the start values the cap uses
   cap <- common$distance_cap
-  capped <- if (length(cap)) cov[grepl(cap$columns %||% '^dist_', cov)] else character()
-  starts <- sub('_end$', '_start', capped)
-  made <- unique(c(cov, starts))
+  capped <- grep(adj_pattern, cov, value = TRUE)
+  if (length(capped) && !length(cap)) {
+    stop('model formula uses capped distances (', paste(capped, collapse = ', '),
+         ') but model: distance_cap: is null', call. = FALSE)
+  }
+  uncapped <- sub(adj_pattern, '_\\1', capped)
+  starts <- sub('_(start|end)$', '_start', uncapped)
+  made <- unique(c(setdiff(cov, capped), uncapped, starts))
+  plain <- grep('^dist_', setdiff(cov, capped), value = TRUE)
+  if (length(cap) && length(plain)) {
+    message('Distances not capped (name them with _adj to cap them): ', paste(plain, collapse = ', '))
+  }
   src <- covariate_sources(made, common$groups %||% list())
   need <- unique(unlist(purrr::map(src, 'cols')))
   have <- nanoparquet::read_parquet_schema(files[1])$name
@@ -352,12 +375,12 @@ build_model_data <- function(steps, files, codes, common, model) {
     data.table::setorder(x, row)
     for (v in names(grouped)) data.table::set(x, j = v, value = combine_columns(x, grouped[[v]]$cols, grouped[[v]]$rule))
 
-    # distance cap, by where each step starts
+    # capped distances (_adj): a copy, capped by where each step starts
     n_far <- purrr::map_int(seq_along(capped), function(i) {
       v <- capped[i]
       st <- x[[starts[i]]]
       far <- unique(x$indiv_step_id[x$case_ & !is.na(st) & st > cap$beyond_km * 1000])
-      data.table::set(x, j = v, value = as.numeric(x[[v]]))
+      data.table::set(x, j = v, value = as.numeric(x[[uncapped[i]]]))
       data.table::set(x, i = which(x$indiv_step_id %in% far), j = v, value = cap$set_to_km * 1000)
       length(far)
     })

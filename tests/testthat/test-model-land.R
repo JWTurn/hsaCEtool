@@ -25,11 +25,11 @@ toy_land <- function(dir) {
 }
 
 groups <- list(ab = list(sum = c('a', 'b')))
-cap <- list(columns = '^dist_', beyond_km = 20, set_to_km = 21)
+cap <- list(beyond_km = 20, set_to_km = 21)
 formula <- 'case_ ~ -1 + I(log(sl_)) + ab_240_end + ab_240_end:ab_1200_end + I(log(ts_fire_240_end + 1)) +
-  I(log(dist_x_240_end + 1)) + (1 | indiv_step_id)'
+  I(log(dist_x_240_end + 1)) + I(log(dist_x_240_adj_end + 1)) + (1 | indiv_step_id)'
 
-test_that('the stack holds each covariate, named without _end, with capped distances after them', {
+test_that('the stack holds each covariate the formulas name, without _end, capped ones with _adj', {
   dir <- withr::local_tempdir()
   idx <- toy_land(dir)
   spec <- make_model_land_spec(formula, groups, cap, idx)
@@ -40,7 +40,12 @@ test_that('the stack holds each covariate, named without _end, with capped dista
   expect_equal(spec$adj, c(FALSE, FALSE, FALSE, FALSE, TRUE))
   expect_equal(spec$resolution, c(240, 1200, 240, 240, 240))
   expect_error(make_model_land_spec('case_ ~ zz_240_end', groups, cap, idx), 'not in the layer table: zz_240')
-  expect_false(any(make_model_land_spec(formula, groups, NULL, idx)$adj))
+  expect_error(make_model_land_spec(formula, groups, NULL, idx), 'capped distances \\(dist_x_240_adj\\)')
+  # a capped distance alone: no uncapped copy
+  only <- make_model_land_spec('case_ ~ ab_240_end + dist_x_240_adj_end', groups, cap, idx)
+  expect_equal(only$name, c('ab_240', 'dist_x_240_adj'))
+  expect_equal(only$cols[[2]], 'dist_x_240')
+  expect_false(any(make_model_land_spec('case_ ~ ab_240_end + dist_x_240_end', groups, NULL, idx)$adj))
 })
 
 test_that('the stack has the same values as the model tables at the same points', {

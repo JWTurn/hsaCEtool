@@ -834,7 +834,11 @@ model:
   `beyond_km` from a disturbance gets `set_to_km` for the used step and all its
   random steps, so it says nothing about that disturbance. It goes by the step's
   start, which the used and random steps share, so it does not depend on where
-  the animal went.
+  the animal went. Name a capped distance with `_adj` in the formula:
+  `dist_paved_240_adj_end` is `dist_paved_240_end` capped by
+  `dist_paved_240_start`; `dist_paved_240_end` is never capped. The `_adj`
+  name stays in the coefficient tables and the model land stacks, so a capped
+  distance is never mistaken for an uncapped one.
 - **Seasons**: by the date a step starts (UTC), from a season table (CSV) named
   in `model: season_table:` (in the project's config folder; `''` uses the
   package's `inst/extdata/seasons_default.csv`). Each row is one season of a **set**, one
@@ -908,9 +912,10 @@ uses the same values the model was fitted to:
   disturbance year. No disturbance, or one after that year, is left NA (the
   model tables use the layer's `ts_nodata` there): caribou_SSUD fills these in,
   so that forecasts from the stack's year can age the disturbances.
-- **Capped distances**: each distance matching `model: distance_cap: columns`
-  is there twice, as it is (`dist_paved_240`) and capped (`dist_paved_240_adj`:
-  more than `beyond_km` set to `set_to_km`, as the model tables do).
+- **Capped distances**: a distance named with `_adj` in a formula (e.g.
+  `dist_paved_240_adj`) is the distance capped: more than `beyond_km` set to
+  `set_to_km`, as the model tables do. The uncapped distance is in the stack
+  only if a formula uses it.
 - **Grid**: the finest cell size used (e.g. 240 m); coarser layers (e.g.
   1200 m) give each fine cell the value of the coarse cell it lies in, as a
   point there would get. Masked to the extended study area's template.

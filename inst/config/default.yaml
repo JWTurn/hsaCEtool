@@ -451,11 +451,12 @@ model:
   # Distances far from a disturbance: a step that STARTS more than beyond_km from
   # it (its _start value) gets set_to_km for the used step and all its random steps,
   # so that step says nothing about that disturbance. The start is the same for the
-  # used and random steps, so this does not depend on where the animal went. Each
-  # covariate in a formula matching `columns` (a regular expression), separately.
-  # null = no adjustment.
+  # used and random steps, so this does not depend on where the animal went. It
+  # applies to each covariate named with _adj in a formula, separately: e.g.
+  # dist_paved_240_adj_end is dist_paved_240_end capped by dist_paved_240_start
+  # (dist_paved_240_end itself is not capped). null = no adjustment (formulas
+  # cannot then use _adj).
   distance_cap:
-    columns: '^dist_'
     beyond_km: 20
     set_to_km: 21
   # Each model:
@@ -492,9 +493,9 @@ model:
 # One GeoTIFF per year, outputs/<project>/model_land/model_land_<year>.tif, with every
 # covariate the models use, made from the layers as the model tables are: groups
 # (model: groups:) combined the same way, time since disturbance (NA where there was
-# none, for caribou_SSUD to fill in), and distances capped as in model: distance_cap: as a second
-# layer, <name>_adj. Layers are named as in the formulas without _start or _end (e.g.
-# prop_forest_240, dist_paved_240, dist_paved_240_adj), on the finest grid used, so a
+# none, for caribou_SSUD to fill in), and distances named with _adj capped as in
+# model: distance_cap:. Layers are named as in the formulas without _start or _end (e.g.
+# prop_forest_240, dist_paved_240_adj), on the finest grid used, so a
 # model can be mapped for that year from its stack alone (e.g. in caribou_SSUD). Layers
 # that do not change are in every stack; years past a layer's last year use its last
 # raster. outputs/<project>/model_land/model_land_layers.csv says what each layer is.

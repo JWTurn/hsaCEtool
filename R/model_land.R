@@ -4,8 +4,8 @@
 # layers the same way the model tables are (build_model_data()): the same
 # year's raster of each layer, groups combined as combine_columns() does, time
 # since disturbance (left NA where there was none, for caribou_SSUD to fill in
-# for its forecasts; the model tables use ts_nodata), and distances capped as
-# in model: distance_cap: (as a second layer, <name>_adj). Layers are named as
+# for its forecasts; the model tables use ts_nodata), and distances named
+# with _adj capped as in model: distance_cap:. Layers are named as
 # in the formulas without _start or _end (e.g. prop_forest_240), so a model
 # can be mapped for that year from the stack alone (as in caribou_SSUD).
 
@@ -34,8 +34,9 @@ model_land_formulas <- function(models, which = 'all') {
 #'     combined by its rule as in the model tables;
 #'   - time since disturbance (e.g. `ts_fire_240`): the year minus the layer
 #'     `fire_240`, for a layer with `time_since` in the layer table.
-#'   A covariate matching `distance_cap: columns` also gets a capped copy,
-#'   `<name>_adj`, right after it.
+#'   A covariate named with `_adj` (e.g. `dist_paved_240_adj`) is made as the
+#'   covariate without `_adj`, then capped as in `model: distance_cap:`. Only
+#'   the covariates the formulas name are made.
 #' @param formulas character. Model formulas.
 #' @param groups named list. `model: groups:`.
 #' @param cap named list or NULL. `model: distance_cap:`.
@@ -50,26 +51,23 @@ make_model_land_spec <- function(formulas, groups, cap, index) {
   vars <- unique(unlist(purrr::map(formulas, function(f) all.vars(model_formula(f)))))
   cov <- unique(sub('_(start|end)$', '', vars[grepl('_(start|end)$', vars)]))
   if (!length(cov)) stop('The model formulas use no layers (names ending in _start or _end)', call. = FALSE)
-  src <- covariate_sources(cov, groups %||% list())
+  adj <- grepl('_adj$', cov)
+  base <- sub('_adj$', '', cov)
+  if (any(adj) && !length(cap)) {
+    stop('The model formulas use capped distances (', paste(cov[adj], collapse = ', '),
+         ') but model: distance_cap: is null', call. = FALSE)
+  }
+  src <- covariate_sources(base, groups %||% list())
   ts_layers <- index$name[index$time_since %in% TRUE]
-  spec <- data.table::rbindlist(purrr::imap(src, function(s, nm) {
+  spec <- data.table::rbindlist(purrr::map(seq_along(cov), function(i) {
+    s <- src[[i]]
+    nm <- base[i]
     ts <- is.null(s$rule) && !nm %in% index$name && startsWith(nm, 'ts_') && sub('^ts_', '', nm) %in% ts_layers
     cols <- if (ts) sub('^ts_', '', nm) else s$cols
-    data.table::data.table(name = nm, cols = list(cols), rule = s$rule %||% NA_character_, ts = ts, adj = FALSE)
+    data.table::data.table(name = cov[i], cols = list(cols), rule = s$rule %||% NA_character_, ts = ts, adj = adj[i])
   }))
   miss <- setdiff(unlist(spec$cols), index$name)
   if (length(miss)) stop('The model formulas use layers not in the layer table: ', paste(miss, collapse = ', '), call. = FALSE)
-  if (length(cap)) {
-    capped <- spec[grepl(cap$columns %||% '^dist_', name)]
-    if (nrow(capped)) {
-      capped[, `:=`(name = paste0(name, '_adj'), adj = TRUE)]
-      spec[, .o := .I]
-      capped[, .o := match(sub('_adj$', '', name), spec$name) + 0.5]
-      spec <- data.table::rbindlist(list(spec, capped))
-      data.table::setorder(spec, .o)
-      spec[, .o := NULL]
-    }
-  }
   spec[, resolution := purrr::map_dbl(cols, function(cl) {
     r <- suppressWarnings(as.numeric(sub('.*_([0-9]+)$', '\\1', cl)))
     if (all(is.na(r))) NA_real_ else min(r, na.rm = TRUE)

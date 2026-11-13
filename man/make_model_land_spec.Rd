@@ -31,8 +31,9 @@ what it is made from:
 combined by its rule as in the model tables;
 \item time since disturbance (e.g. \code{ts_fire_240}): the year minus the layer
 \code{fire_240}, for a layer with \code{time_since} in the layer table.
-A covariate matching \code{distance_cap: columns} also gets a capped copy,
-\verb{<name>_adj}, right after it.
+A covariate named with \verb{_adj} (e.g. \code{dist_paved_240_adj}) is made as the
+covariate without \verb{_adj}, then capped as in \verb{model: distance_cap:}. Only
+the covariates the formulas name are made.
 }
 }
 \author{

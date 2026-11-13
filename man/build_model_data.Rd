@@ -30,11 +30,13 @@ formula uses:
 its random steps (\code{select_model_steps()});
 \item the covariates in the formula, read from the extracted values; groups
 from \verb{model: groups:} are made here (e.g. \code{prop_forest_240_end});
-\item distances far from a disturbance (\verb{model: distance_cap:}): for each
-covariate matching \code{columns}, a step whose START is more than
-\code{beyond_km} from that disturbance (its \verb{_start} value) gets \code{set_to_km}
-for the used step and all its random steps. The start is the same for
-all of them, so this does not depend on where the animal went;
+\item capped distances (\verb{model: distance_cap:}): each covariate named with
+\verb{_adj} (e.g. \code{dist_paved_240_adj_end}) is a copy of the covariate
+without it (\code{dist_paved_240_end}), except that a step whose START is
+more than \code{beyond_km} from that disturbance (\code{dist_paved_240_start})
+gets \code{set_to_km} for the used step and all its random steps. The start
+is the same for all of them, so this does not depend on where the
+animal went. The covariate without \verb{_adj} is not changed;
 \item missing values, with a warning naming the columns: a step whose used
 step has one is dropped. A random step with one is skipped, and the
 next random step is used instead (\code{random_na: replace}, the default),

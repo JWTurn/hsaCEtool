@@ -8,6 +8,13 @@
   every resolution took the most recent year of any of its 30 m cells. The
   layers are now saved as decimals (FLT4S). Rebuild these layers, the model
   tables and model land, and refit.
+- Capped distances are named with `_adj`: in a formula, `dist_paved_240_adj_end`
+  is `dist_paved_240_end` capped by `dist_paved_240_start` (as in
+  `model: distance_cap:`), and the name stays `_adj` in the coefficient tables
+  and in model land. A distance without `_adj` is never capped. Before, the
+  distances matching `distance_cap: columns` were capped under their own
+  names; `columns` is now refused: add `_adj` to the capped distances in the
+  formulas. Model land now holds only the layers the formulas name.
 
 - Local times labelled UTC: a source with `clock_time: true` has its times read
   as clock time in its `tz`, whatever zone they are labelled with (e.g. a
