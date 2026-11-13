@@ -4,16 +4,18 @@
 \alias{write_model_table}
 \title{Save a model's table, to fit it away from the pipeline}
 \usage{
-write_model_table(data, model, name, out_dir)
+write_model_table(data, model, name, out_dir, seasons = NULL)
 }
 \arguments{
 \item{data}{list from \code{\link[=build_model_data]{build_model_data()}}.}
 
-\item{model}{named list. This model's settings (formula, step_sd).}
+\item{model}{named list. This model's settings (formula, step_sd, seasons).}
 
 \item{name}{character. The model's name (its key under \verb{model: models:}).}
 
 \item{out_dir}{character. Folder to write to.}
+
+\item{seasons}{named list or NULL. The model's seasons (\code{\link[=season_dates]{season_dates()}}).}
 }
 \value{
 character. The file written, <out_dir>/\if{html}{\out{<name>}}_table.rds.
@@ -21,8 +23,9 @@ character. The file written, <out_dir>/\if{html}{\out{<name>}}_table.rds.
 \description{
 Saves what \code{\link[=fit_model_file]{fit_model_file()}} needs, e.g. to fit a large model
 on an HPC cluster: the table and its log from \code{\link[=build_model_data]{build_model_data()}}, the
-formula and \code{step_sd}. The table holds only the formula's columns, coded
-animal IDs and no positions or times, so it may be copied to the cluster;
+formula, \code{step_sd} and the model's seasons. The table holds only the
+formula's columns, coded animal IDs and no positions or times, so it may
+be copied to the cluster;
 the animal codes (\code{\link[=write_animal_codes]{write_animal_codes()}}) stay in restricted storage.
 }
 \author{

@@ -30,7 +30,8 @@ and puts them in the Drive folder \verb{model: upload_folder:}:
 \item{\if{html}{\out{<project>}}\emph{model_fit}\if{html}{\out{<name>}}.zip}{\verb{<project>_model_fit_<name>.rds},
 the glmmTMB fit (target \verb{model_fit_<name>})}
 \item{\if{html}{\out{<project>}}\emph{model}\if{html}{\out{<name>}}.zip}{the coefficient tables as CSV
-(\verb{<name>_fixed.csv}, \verb{_random.csv}, \verb{_by_group.csv}, \verb{_data_log.csv})}
+(\verb{<name>_fixed.csv}, \verb{_random.csv}, \verb{_by_group.csv}, \verb{_data_log.csv})
+and the model's season table (\verb{_seasons.csv}, \code{\link[=model_season_table]{model_season_table()}})}
 }
 A file of the same name already in the folder is replaced in place, so
 its link stays the same. The folder may be shared widely (e.g. with

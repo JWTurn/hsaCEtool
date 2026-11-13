@@ -87,6 +87,10 @@ check_model_settings <- function(mcfg, n_made, seasons) {
   if (length(cap) && (!is.numeric(cap$beyond_km) || !is.numeric(cap$set_to_km))) {
     add('distance_cap needs numbers for beyond_km and set_to_km (or distance_cap: null)')
   }
+  if (!is.null(cap$columns)) {
+    add('distance_cap: columns is no longer used: a capped distance is named with _adj in the formula ',
+        '(e.g. dist_paved_240_adj_end), so remove columns and add _adj to the capped distances')
+  }
   for (nm in names(mcfg$models)) {
     m <- mcfg$models[[nm]]
     if (!grepl('^[A-Za-z][A-Za-z0-9_]*$', nm)) {
@@ -99,6 +103,10 @@ check_model_settings <- function(mcfg, n_made, seasons) {
       bars <- model_bars(f)
       if (!any(bars$group == 'indiv_step_id' & bars$intercept_only)) {
         add('models: ', nm, ': the formula needs (1 | indiv_step_id), the intercept of each step')
+      }
+      adj <- grep(adj_pattern, all.vars(f), value = TRUE)
+      if (length(adj) && !length(cap)) {
+        add('models: ', nm, ': ', paste(adj, collapse = ', '), ' (capped distances, _adj) need model: distance_cap:')
       }
       bad <- intersect(all.vars(f), model_private_columns)
       if (length(bad)) {
@@ -225,6 +233,9 @@ select_model_steps <- function(steps, model, seasons, cols) {
   s[]
 }
 
+# a capped distance: a covariate whose name ends in _adj_start or _adj_end
+adj_pattern <- '_adj_(start|end)$'
+
 #' @title Extracted columns each covariate is made from
 #' @description A covariate is either an extracted column (e.g.
 #'   `dist_paved_240_end`) or a group from `model: groups:` with a resolution and
@@ -286,11 +297,13 @@ read_extracted <- function(files, cols, rows) {
 #'      its random steps (`select_model_steps()`);
 #'   2. the covariates in the formula, read from the extracted values; groups
 #'      from `model: groups:` are made here (e.g. `prop_forest_240_end`);
-#'   3. distances far from a disturbance (`model: distance_cap:`): for each
-#'      covariate matching `columns`, a step whose START is more than
-#'      `beyond_km` from that disturbance (its `_start` value) gets `set_to_km`
-#'      for the used step and all its random steps. The start is the same for
-#'      all of them, so this does not depend on where the animal went;
+#'   3. capped distances (`model: distance_cap:`): each covariate named with
+#'      `_adj` (e.g. `dist_paved_240_adj_end`) is a copy of the covariate
+#'      without it (`dist_paved_240_end`), except that a step whose START is
+#'      more than `beyond_km` from that disturbance (`dist_paved_240_start`)
+#'      gets `set_to_km` for the used step and all its random steps. The start
+#'      is the same for all of them, so this does not depend on where the
+#'      animal went. The covariate without `_adj` is not changed;
 #'   4. missing values, with a warning naming the columns: a step whose used
 #'      step has one is dropped. A random step with one is skipped, and the
 #'      next random step is used instead (`random_na: replace`, the default),
@@ -324,11 +337,21 @@ build_model_data <- function(steps, files, codes, common, model) {
   log <- list(data.table::data.table(what = 'steps kept (used)', n = s[case_ == TRUE, .N]),
               data.table::data.table(what = 'rows available (used + all random)', n = nrow(s)))
 
-  # covariates: extracted columns, groups made from them, and the start values the cap uses
+  # covariates: extracted columns, groups made from them, and for capped distances
+  # (_adj) the values they are copied from and the start values the cap uses
   cap <- common$distance_cap
-  capped <- if (length(cap)) cov[grepl(cap$columns %||% '^dist_', cov)] else character()
-  starts <- sub('_end$', '_start', capped)
-  made <- unique(c(cov, starts))
+  capped <- grep(adj_pattern, cov, value = TRUE)
+  if (length(capped) && !length(cap)) {
+    stop('model formula uses capped distances (', paste(capped, collapse = ', '),
+         ') but model: distance_cap: is null', call. = FALSE)
+  }
+  uncapped <- sub(adj_pattern, '_\\1', capped)
+  starts <- sub('_(start|end)$', '_start', uncapped)
+  made <- unique(c(setdiff(cov, capped), uncapped, starts))
+  plain <- grep('^dist_', setdiff(cov, capped), value = TRUE)
+  if (length(cap) && length(plain)) {
+    message('Distances not capped (name them with _adj to cap them): ', paste(plain, collapse = ', '))
+  }
   src <- covariate_sources(made, common$groups %||% list())
   need <- unique(unlist(purrr::map(src, 'cols')))
   have <- nanoparquet::read_parquet_schema(files[1])$name
@@ -352,12 +375,12 @@ build_model_data <- function(steps, files, codes, common, model) {
     data.table::setorder(x, row)
     for (v in names(grouped)) data.table::set(x, j = v, value = combine_columns(x, grouped[[v]]$cols, grouped[[v]]$rule))
 
-    # distance cap, by where each step starts
+    # capped distances (_adj): a copy, capped by where each step starts
     n_far <- purrr::map_int(seq_along(capped), function(i) {
       v <- capped[i]
       st <- x[[starts[i]]]
       far <- unique(x$indiv_step_id[x$case_ & !is.na(st) & st > cap$beyond_km * 1000])
-      data.table::set(x, j = v, value = as.numeric(x[[v]]))
+      data.table::set(x, j = v, value = as.numeric(x[[uncapped[i]]]))
       data.table::set(x, i = which(x$indiv_step_id %in% far), j = v, value = cap$set_to_km * 1000)
       length(far)
     })
@@ -553,39 +576,79 @@ group_coefficients <- function(by_group, fixed) {
 }
 
 #' @title Save a model's coefficient tables and table log as CSV
+#' @description With `seasons`, also saves the season table the model used
+#'   ([model_season_table()]), e.g. so seasonal maps can be weighted by
+#'   season length.
 #' @param coefs list from [model_coefficients()].
 #' @param log data.table. `log` from [build_model_data()].
 #' @param name character. The model's name (its key under `model: models:`).
 #' @param out_dir character. Folder to write to.
+#' @param seasons named list or NULL. The model's seasons ([season_dates()]).
+#' @param used character. The model's `seasons` setting: `all` or season names.
 #' @return character. The files written: <name>_fixed.csv, <name>_random.csv,
-#'   <name>_by_group.csv and <name>_data_log.csv.
+#'   <name>_by_group.csv, <name>_data_log.csv and, with `seasons`,
+#'   <name>_seasons.csv.
 #' @author Julie W. Turner
 #' @export
-write_model_coefficients <- function(coefs, log, name, out_dir) {
+write_model_coefficients <- function(coefs, log, name, out_dir, seasons = NULL, used = 'all') {
   reproducible::checkPath(out_dir, create = TRUE)
   tabs <- c(coefs, list(data_log = log))
+  if (length(seasons)) tabs$seasons <- model_season_table(seasons, used)
   files <- file.path(out_dir, paste0(name, '_', names(tabs), '.csv'))
   purrr::walk2(tabs, files, function(x, f) data.table::fwrite(x, f))
   files
 }
 
+#' @title A model's season table, with the days in each season
+#' @description One row per season, in the order steps are given seasons
+#'   (the first season listed that holds a date wins): its
+#'   first and last day, `days` (days in a year, 365, that fall in it, so
+#'   overlaps are counted once) and `used` (`TRUE` if the model kept that
+#'   season's steps). Days in no season are a last row, `other`.
+#' @param seasons named list. The model's seasons ([season_dates()]).
+#' @param used character. `all` or the season names the model kept.
+#' @return data.table: `season`, `start_month`, `start_day`, `end_month`,
+#'   `end_day`, `days`, `used`.
+#' @author Julie W. Turner
+#' @export
+model_season_table <- function(seasons, used = 'all') {
+  used <- unlist(used %||% 'all')
+  # every day of a year without 29 February, given its season as steps are
+  day <- as.POSIXct(seq(as.Date('2021-01-01'), as.Date('2021-12-31'), by = 'day'), tz = 'UTC')
+  n <- table(factor(season_of(day, seasons), levels = c(names(seasons), 'other')))
+  md <- function(x, i) as.integer(purrr::map_chr(x, function(s) strsplit(s, '-')[[1]][i]))
+  first <- purrr::map_chr(seasons, 1)
+  last <- purrr::map_chr(seasons, 2)
+  out <- data.table::data.table(season = names(seasons), start_month = md(first, 1), start_day = md(first, 2),
+                                end_month = md(last, 1), end_day = md(last, 2),
+                                days = as.integer(n[names(seasons)]))
+  if (n[['other']] > 0) {
+    out <- rbind(out, data.table::data.table(season = 'other', start_month = NA_integer_, start_day = NA_integer_,
+                                             end_month = NA_integer_, end_day = NA_integer_, days = as.integer(n[['other']])))
+  }
+  out[, used := identical(used, 'all') | season %in% used]
+  out[]
+}
+
 #' @title Save a model's table, to fit it away from the pipeline
 #' @description Saves what [fit_model_file()] needs, e.g. to fit a large model
 #'   on an HPC cluster: the table and its log from [build_model_data()], the
-#'   formula and `step_sd`. The table holds only the formula's columns, coded
-#'   animal IDs and no positions or times, so it may be copied to the cluster;
+#'   formula, `step_sd` and the model's seasons. The table holds only the
+#'   formula's columns, coded animal IDs and no positions or times, so it may
+#'   be copied to the cluster;
 #'   the animal codes ([write_animal_codes()]) stay in restricted storage.
 #' @param data list from [build_model_data()].
-#' @param model named list. This model's settings (formula, step_sd).
+#' @param model named list. This model's settings (formula, step_sd, seasons).
 #' @inheritParams write_model_coefficients
 #' @return character. The file written, <out_dir>/<name>_table.rds.
 #' @author Julie W. Turner
 #' @export
-write_model_table <- function(data, model, name, out_dir) {
+write_model_table <- function(data, model, name, out_dir, seasons = NULL) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, paste0(name, '_table.rds'))
   saveRDS(list(name = name, formula = model$formula, step_sd = model$step_sd %||% 1000,
-               control = model$control, data = data$data, log = data$log), file)
+               control = model$control, data = data$data, log = data$log,
+               seasons = seasons, seasons_used = model$seasons %||% 'all'), file)
   file
 }
 
@@ -616,6 +679,7 @@ fit_model_file <- function(file, out_dir, threads = 1L) {
   reproducible::checkPath(out_dir, create = TRUE)
   fit_file <- file.path(out_dir, paste0(x$name, '_fit.rds'))
   saveRDS(fit, fit_file)
-  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir)
+  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir,
+                                    x$seasons, x$seasons_used %||% 'all')
   invisible(c(fit_file, files))
 }

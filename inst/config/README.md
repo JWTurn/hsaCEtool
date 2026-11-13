@@ -560,7 +560,7 @@ that year included (default 2). A `harvest_pa`, `harvest_dens` or
 
 | `build` | Each cell holds |
 |---|---|
-| `harvest_year` | The most recent harvest year up to that year, in any of its 30 m cells (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
+| `harvest_year` | Year of harvest, averaged in steps: each 30 m cell's most recent harvest up to that year; at the finest resolution, the mean of its harvested 30 m cells; at each coarser one, the mean of the next finer resolution's cells (e.g. 1200 m = mean of its 240 m cells). Cells never harvested are left out of the means (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
 | `harvest_pa` | 1 if any of its 30 m cells had recent harvest, otherwise 0 |
 | `harvest_dens` | The proportion of its 30 m cells with recent harvest |
 | `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell (including those in the margin) |
@@ -578,7 +578,7 @@ year. Settings are under `landscape: fire:`.
 
 | `build` | Each cell holds |
 |---|---|
-| `fire_year` | The most recent fire year up to that year, in any of its 30 m cells (blank = never burned). Use with `time_since: TRUE` and `ts_nodata` (e.g. 200) for years since fire |
+| `fire_year` | Year of fire, averaged in steps as `harvest_year`: each 30 m cell's most recent fire up to that year; at the finest resolution, the mean of its burned 30 m cells; at each coarser one, the mean of the next finer resolution's cells (e.g. 1200 m = mean of its 240 m cells). Unburned cells are left out of the means (blank = never burned). Use with `time_since: TRUE` and `ts_nodata` (e.g. 200) for years since fire |
 | `fire_pa` | 1 if any of its 30 m cells burned in the past n years, otherwise 0 |
 | `fire_dens` | The proportion of its 30 m cells burned in the past n years (that year included) |
 | `fire_dist` | The mean distance (m) from its 30 m cells to the nearest 30 m cell burned in the past n years |
@@ -834,7 +834,11 @@ model:
   `beyond_km` from a disturbance gets `set_to_km` for the used step and all its
   random steps, so it says nothing about that disturbance. It goes by the step's
   start, which the used and random steps share, so it does not depend on where
-  the animal went.
+  the animal went. Name a capped distance with `_adj` in the formula:
+  `dist_paved_240_adj_end` is `dist_paved_240_end` capped by
+  `dist_paved_240_start`; `dist_paved_240_end` is never capped. The `_adj`
+  name stays in the coefficient tables and the model land stacks, so a capped
+  distance is never mistaken for an uncapped one.
 - **Seasons**: by the date a step starts (UTC), from a season table (CSV) named
   in `model: season_table:` (in the project's config folder; `''` uses the
   package's `inst/extdata/seasons_default.csv`). Each row is one season of a **set**, one
@@ -908,9 +912,10 @@ uses the same values the model was fitted to:
   disturbance year. No disturbance, or one after that year, is left NA (the
   model tables use the layer's `ts_nodata` there): caribou_SSUD fills these in,
   so that forecasts from the stack's year can age the disturbances.
-- **Capped distances**: each distance matching `model: distance_cap: columns`
-  is there twice, as it is (`dist_paved_240`) and capped (`dist_paved_240_adj`:
-  more than `beyond_km` set to `set_to_km`, as the model tables do).
+- **Capped distances**: a distance named with `_adj` in a formula (e.g.
+  `dist_paved_240_adj`) is the distance capped: more than `beyond_km` set to
+  `set_to_km`, as the model tables do. The uncapped distance is in the stack
+  only if a formula uses it.
 - **Grid**: the finest cell size used (e.g. 240 m); coarser layers (e.g.
   1200 m) give each fine cell the value of the coarse cell it lies in, as a
   point there would get. Masked to the extended study area's template.

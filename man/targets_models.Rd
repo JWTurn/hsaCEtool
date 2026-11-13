@@ -30,7 +30,8 @@ to fit elsewhere with \code{\link[=fit_model_file]{fit_model_file()}} (e.g. on a
 a model's \verb{control:} goes to \code{\link[glmmTMB:glmmTMBControl]{glmmTMB::glmmTMBControl()}}, on top of
 \code{rank_check = 'adjust'};
 \item \verb{model_coefs_<name>} and \verb{model_coefs_<name>_files}: coefficient tables
-(\code{\link[=model_coefficients]{model_coefficients()}}) saved as CSV with the table's log.
+(\code{\link[=model_coefficients]{model_coefficients()}}) saved as CSV with the table's log and the
+model's season table (\code{\link[=model_season_table]{model_season_table()}}).
 Shared by all models: \code{cfg_model} (groups, distance cap), \code{season_table}
 (the season table, \code{\link[=read_seasons]{read_seasons()}}),
 \code{animal_codes} and \code{animal_codes_file} (the confidential table linking

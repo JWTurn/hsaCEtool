@@ -1,5 +1,25 @@
 # hsaCEtool 0.0.0.9000
 
+- Fire and harvest year (`build: fire_year`, `harvest_year`) are now averaged
+  up the resolutions in steps: each 30 m cell's most recent year; at the
+  finest resolution, the mean of its burned (harvested) 30 m cells; at each
+  coarser one, the mean of the next finer resolution's cells (e.g. 1200 m =
+  mean of its 240 m cells). Unburned cells are left out of the means. Before,
+  every resolution took the most recent year of any of its 30 m cells. The
+  layers are now saved as decimals (FLT4S). Rebuild these layers, the model
+  tables and model land, and refit.
+- Capped distances are named with `_adj`: in a formula, `dist_paved_240_adj_end`
+  is `dist_paved_240_end` capped by `dist_paved_240_start` (as in
+  `model: distance_cap:`), and the name stays `_adj` in the coefficient tables
+  and in model land. A distance without `_adj` is never capped. Before, the
+  distances matching `distance_cap: columns` were capped under their own
+  names; `columns` is now refused: add `_adj` to the capped distances in the
+  formulas. Model land now holds only the layers the formulas name.
+- Each model's coefficient tables (and its upload zip) include
+  `<name>_seasons.csv` (`model_season_table()`): the model's seasons, their
+  dates, the days in each (`other` = days in no season) and whether the model
+  used them.
+
 - Local times labelled UTC: a source with `clock_time: true` has its times read
   as clock time in its `tz`, whatever zone they are labelled with (e.g. a
   trailing `Z`, which `fread()` reads as UTC). Before, `tz` had no effect on
