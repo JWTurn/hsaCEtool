@@ -332,7 +332,9 @@ landscape:
 
   # Fire: National Burned Area Composite (NBAC, 1972 on) plus older fires from the
   # National Fire Database (NFDB). Each fire year of every 30 m cell is kept
-  # (build: fire_year = most recent fire up to that year, for years since fire;
+  # (build: fire_year = year of fire, for years since fire: each 30 m cell's most
+  # recent fire up to that year, averaged over the burned 30 m cells at the finest
+  # resolution, then over those cells at each coarser one, e.g. 1200 m = mean of 240 m;
   # fire_pa, fire_dens, fire_dist = burned in the past n years, with n the
   # layer's class, e.g. 2 or 60, or recent_years below).
   fire:

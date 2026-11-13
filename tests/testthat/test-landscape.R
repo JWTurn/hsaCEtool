@@ -107,6 +107,30 @@ test_that('build_harvest_layers: year keeps the most recent harvest up to each y
   expect_equal(v18, c(2018, 2016, NA, NA))
 })
 
+test_that('build_harvest_layers: year is averaged up the resolutions in steps, unharvested cells left out', {
+  dir <- withr::local_tempdir()
+  fine <- terra::rast(xmin = 0, xmax = 240, ymin = 0, ymax = 240, res = 30, crs = 'EPSG:3154', vals = 1)
+  f <- file.path(dir, 'mine.tif'); terra::writeRaster(fine, f)
+  # 30 m (8 x 8), 60 m (4 x 4) and 120 m (2 x 2)
+  tf <- make_templates(NULL, list(source = list(path = f), base_res = 30, factors = list(2, 4)),
+                       'EPSG:3154', list(), file.path(dir, 'templates'))
+  # top-left 60 m cell: 30 m cell 1 harvested 2000 and 2010, cell 2 in 2004;
+  # the 60 m cell to its right: cell 3 in 2001; top-right 30 m cell (8) in 2016
+  hist <- data.table(cell = c(1, 1, 2, 3, 8), year = c(2000L, 2010L, 2004L, 2001L, 2016L))
+  files <- build_harvest_layers(hist, 'year', c(60, 120), c(2008, 2018), 2, tf, file.path(dir, 'out'))
+  expect_equal(basename(files), c('harvest_year_60m_2008.tif', 'harvest_year_120m_2008.tif',
+                                  'harvest_year_60m_2018.tif', 'harvest_year_120m_2018.tif'))
+  v <- purrr::map(files, function(x) terra::values(terra::rast(x))[, 1])
+  # 2008: 60 m = mean of harvested 30 m cells' most recent years (2000, 2004 -> 2002)
+  expect_equal(v[[1]][1:4], c(2002, 2001, NA, NA))
+  expect_true(all(is.na(v[[1]][5:16])))
+  # 120 m = mean of its 60 m cells (2002, 2001), not of the 30 m cells
+  expect_equal(v[[2]], c(2001.5, NA, NA, NA))
+  # 2018: (2010 + 2004) / 2 = 2007 and 2001; 120 m = 2004, not 2005 (30 m mean) or 2010 (max)
+  expect_equal(v[[3]][1:4], c(2007, 2001, NA, 2016))
+  expect_equal(v[[4]], c(2004, 2016, NA, NA))
+})
+
 test_that('build_harvest_layers: pa and dens count only recent harvest', {
   dir <- withr::local_tempdir()
   tf <- toy_grid(dir)

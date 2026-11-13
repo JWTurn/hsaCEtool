@@ -10,8 +10,13 @@
 #' @title Build yearly harvest layers
 #' @description For each year in `years` and each resolution, writes one raster:
 #'   \describe{
-#'     \item{year}{most recent harvest year up to that year, in any of the cell's
-#'       30 m cells (NA = no harvest). Gives time since harvest at extraction.}
+#'     \item{year}{year of harvest, averaged up the resolutions in steps: each
+#'       30 m cell's most recent harvest year up to that year; at the finest
+#'       resolution asked for, the mean of its harvested 30 m cells; at each
+#'       coarser one, the mean of the cells of the next finer resolution (e.g.
+#'       1200 m = mean of its 240 m cells). Cells with no harvest are left out of
+#'       the means (NA, not 0); NA = no harvest in the cell. Gives time since
+#'       harvest at extraction. Fire year is built the same way.}
 #'     \item{pa}{1 if any of the cell's 30 m cells was harvested in the last
 #'       `recent_years` years (that year included), otherwise 0.}
 #'     \item{dens}{proportion of the cell's 30 m cells harvested in the last
@@ -67,11 +72,13 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
     list(res = res, f = f, id = id, rast = tr, n = terra::values(tr, mat = FALSE))
   })
   gdal_opts <- c('COMPRESS=DEFLATE', 'TILED=YES')
-  type <- switch(metric, year = 'INT2U', pa = 'INT1U', 'FLT4S')
+  # year: means of years, so not whole numbers
+  type <- switch(metric, pa = 'INT1U', 'FLT4S')
 
   files <- character()
   for (yr in years) {
     recent <- h[year <= yr & year > yr - recent_years]
+    if (metric == 'year') year_means <- harvest_year_means(h[year <= yr], coarse)
     if (metric == 'dist') {
       dist <- harvest_distance(h_all[year <= yr & year > yr - recent_years]$cell, fine, grid)
       # mean at the finest resolution asked for; coarser ones from those means,
@@ -95,8 +102,8 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
       } else {
         v <- if (metric == 'year') rep(NA_real_, length(cc$n)) else ifelse(is.na(cc$n), NA_real_, 0)
         if (metric == 'year') {
-          a <- h[year <= yr, .(v = max(year)), by = c(cc$id)]
-          v[a[[1]]] <- a$v
+          a <- year_means[[as.character(cc$res)]]
+          v[a$cell] <- a$v
         } else if (metric == 'pa') {
           v[unique(recent[[cc$id]])] <- 1
         } else {
@@ -112,6 +119,46 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
     }
   }
   files
+}
+
+#' @title Mean year of harvest at each resolution, in steps
+#' @description Each 30 m cell's most recent year; at the first (finest)
+#'   resolution, the mean of its 30 m cells' years; at each next resolution,
+#'   the mean of the previous resolution's cells. Only cells with a year count.
+#' @param h data.table. Harvest history up to the year, with `cell` and the
+#'   coarse cell columns (`c<res>`) made in [build_harvest_layers()].
+#' @param coarse list. One element per resolution, finest first (`res`, `f`,
+#'   `id`, `rast`), as in [build_harvest_layers()].
+#' @return named list (by resolution): data.table with `cell` (cell number at
+#'   that resolution) and `v` (mean year), one row per cell with a year.
+#' @keywords internal
+#' @noRd
+harvest_year_means <- function(h, coarse) {
+  out <- list()
+  if (!nrow(h)) {
+    for (cc in coarse) out[[as.character(cc$res)]] <- data.table::data.table(cell = numeric(), v = numeric())
+    return(out)
+  }
+  # each 30 m cell's most recent year, then the mean of those at the finest resolution
+  first <- coarse[[1]]
+  last <- h[, .(y = max(year)), by = c('cell', first$id)]
+  prev <- last[, .(v = mean(y)), by = c(first$id)]
+  data.table::setnames(prev, first$id, 'cell')
+  out[[as.character(first$res)]] <- prev
+  # each coarser resolution: the mean of the next finer resolution's cells
+  for (k in seq_along(coarse)[-1]) {
+    fr <- coarse[[k - 1]]
+    cc <- coarse[[k]]
+    step <- round(cc$res / fr$res)
+    if (abs(cc$res / fr$res - step) > 1e-8) {
+      stop('harvest and fire year: ', cc$res, ' m is not a whole multiple of ', fr$res, ' m', call. = FALSE)
+    }
+    nc <- terra::ncol(fr$rast)
+    prev <- prev[, .(cell = ((cell - 1) %/% nc %/% step) * terra::ncol(cc$rast) + (cell - 1) %% nc %/% step + 1, v)]
+    prev <- prev[, .(v = mean(v)), by = cell]
+    out[[as.character(cc$res)]] <- prev
+  }
+  out
 }
 
 #' @title Distance to harvested cells on the finest template

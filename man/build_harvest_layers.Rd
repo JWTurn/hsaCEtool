@@ -43,8 +43,13 @@ character. The files written, named \verb{<prefix>_<metric>_<res>m_<year>.tif}.
 \description{
 For each year in \code{years} and each resolution, writes one raster:
 \describe{
-\item{year}{most recent harvest year up to that year, in any of the cell's
-30 m cells (NA = no harvest). Gives time since harvest at extraction.}
+\item{year}{year of harvest, averaged up the resolutions in steps: each
+30 m cell's most recent harvest year up to that year; at the finest
+resolution asked for, the mean of its harvested 30 m cells; at each
+coarser one, the mean of the cells of the next finer resolution (e.g.
+1200 m = mean of its 240 m cells). Cells with no harvest are left out of
+the means (NA, not 0); NA = no harvest in the cell. Gives time since
+harvest at extraction. Fire year is built the same way.}
 \item{pa}{1 if any of the cell's 30 m cells was harvested in the last
 \code{recent_years} years (that year included), otherwise 0.}
 \item{dens}{proportion of the cell's 30 m cells harvested in the last

@@ -560,7 +560,7 @@ that year included (default 2). A `harvest_pa`, `harvest_dens` or
 
 | `build` | Each cell holds |
 |---|---|
-| `harvest_year` | The most recent harvest year up to that year, in any of its 30 m cells (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
+| `harvest_year` | Year of harvest, averaged in steps: each 30 m cell's most recent harvest up to that year; at the finest resolution, the mean of its harvested 30 m cells; at each coarser one, the mean of the next finer resolution's cells (e.g. 1200 m = mean of its 240 m cells). Cells never harvested are left out of the means (blank = never harvested). Use with `time_since: TRUE` for years since harvest |
 | `harvest_pa` | 1 if any of its 30 m cells had recent harvest, otherwise 0 |
 | `harvest_dens` | The proportion of its 30 m cells with recent harvest |
 | `harvest_dist` | The mean distance (m) from its 30 m cells to the nearest recently harvested 30 m cell (including those in the margin) |
@@ -578,7 +578,7 @@ year. Settings are under `landscape: fire:`.
 
 | `build` | Each cell holds |
 |---|---|
-| `fire_year` | The most recent fire year up to that year, in any of its 30 m cells (blank = never burned). Use with `time_since: TRUE` and `ts_nodata` (e.g. 200) for years since fire |
+| `fire_year` | Year of fire, averaged in steps as `harvest_year`: each 30 m cell's most recent fire up to that year; at the finest resolution, the mean of its burned 30 m cells; at each coarser one, the mean of the next finer resolution's cells (e.g. 1200 m = mean of its 240 m cells). Unburned cells are left out of the means (blank = never burned). Use with `time_since: TRUE` and `ts_nodata` (e.g. 200) for years since fire |
 | `fire_pa` | 1 if any of its 30 m cells burned in the past n years, otherwise 0 |
 | `fire_dens` | The proportion of its 30 m cells burned in the past n years (that year included) |
 | `fire_dist` | The mean distance (m) from its 30 m cells to the nearest 30 m cell burned in the past n years |

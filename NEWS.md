@@ -1,5 +1,14 @@
 # hsaCEtool 0.0.0.9000
 
+- Fire and harvest year (`build: fire_year`, `harvest_year`) are now averaged
+  up the resolutions in steps: each 30 m cell's most recent year; at the
+  finest resolution, the mean of its burned (harvested) 30 m cells; at each
+  coarser one, the mean of the next finer resolution's cells (e.g. 1200 m =
+  mean of its 240 m cells). Unburned cells are left out of the means. Before,
+  every resolution took the most recent year of any of its 30 m cells. The
+  layers are now saved as decimals (FLT4S). Rebuild these layers, the model
+  tables and model land, and refit.
+
 - Local times labelled UTC: a source with `clock_time: true` has its times read
   as clock time in its `tz`, whatever zone they are labelled with (e.g. a
   trailing `Z`, which `fread()` reads as UTC). Before, `tz` had no effect on
