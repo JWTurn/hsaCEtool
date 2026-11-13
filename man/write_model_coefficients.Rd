@@ -4,7 +4,14 @@
 \alias{write_model_coefficients}
 \title{Save a model's coefficient tables and table log as CSV}
 \usage{
-write_model_coefficients(coefs, log, name, out_dir)
+write_model_coefficients(
+  coefs,
+  log,
+  name,
+  out_dir,
+  seasons = NULL,
+  used = "all"
+)
 }
 \arguments{
 \item{coefs}{list from \code{\link[=model_coefficients]{model_coefficients()}}.}
@@ -14,13 +21,20 @@ write_model_coefficients(coefs, log, name, out_dir)
 \item{name}{character. The model's name (its key under \verb{model: models:}).}
 
 \item{out_dir}{character. Folder to write to.}
+
+\item{seasons}{named list or NULL. The model's seasons (\code{\link[=season_dates]{season_dates()}}).}
+
+\item{used}{character. The model's \code{seasons} setting: \code{all} or season names.}
 }
 \value{
 character. The files written: \if{html}{\out{<name>}}_fixed.csv, \if{html}{\out{<name>}}_random.csv,
-\if{html}{\out{<name>}}_by_group.csv and \if{html}{\out{<name>}}_data_log.csv.
+\if{html}{\out{<name>}}_by_group.csv, \if{html}{\out{<name>}}_data_log.csv and, with \code{seasons},
+\if{html}{\out{<name>}}_seasons.csv.
 }
 \description{
-Save a model's coefficient tables and table log as CSV
+With \code{seasons}, also saves the season table the model used
+(\code{\link[=model_season_table]{model_season_table()}}), e.g. so seasonal maps can be weighted by
+season length.
 }
 \author{
 Julie W. Turner

@@ -39,6 +39,15 @@ toy_seasons <- data.table(set = c('default', 'default', 'other_set'), season = c
                           start = c('11-01', '04-16', '05-15'), end = c('04-15', '10-31', '06-15'))
 form <- 'case_ ~ -1 + prop_ab_240_end + I(log((dist_x_240_adj_end + 1)/1000)) + (1 | indiv_step_id) + (0 + prop_ab_240_end | id)'
 
+test_that('the season table counts each day once, in the first season that holds it', {
+  st <- model_season_table(list(a = list('01-01', '01-10'), b = list('01-05', '01-20')), list('b'))
+  expect_equal(st$season, c('a', 'b', 'other'))
+  expect_equal(st$days, c(10L, 10L, 345L))
+  expect_equal(st$used, c(FALSE, TRUE, FALSE))
+  expect_equal(st$start_month[1:2], c(1L, 1L))
+  expect_equal(st$end_day[1:2], c(10L, 20L))
+})
+
 test_that('seasons follow the start date and can cross the new year', {
   t <- as.POSIXct(c('2020-12-31', '2021-04-15', '2021-04-16', '2021-10-31', '2021-11-01'), tz = 'UTC')
   expect_equal(season_of(t, common$seasons), c('winter', 'winter', 'summer', 'summer', 'winter'))
@@ -230,12 +239,20 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   expect_setequal(cf$by_group$level, codes$code)
   files_out <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_models'))
   expect_true(all(file.exists(files_out)))
-  # a saved table fits the same away from the pipeline
+  expect_false(any(grepl('_seasons.csv$', files_out)))
+  # with the model's seasons, their table goes with the coefficients
+  files_s <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_models_s'), common$seasons, 'winter')
+  st <- data.table::fread(files_s[grepl('toy_seasons.csv$', files_s)])
+  expect_equal(st$season, c('winter', 'summer'))
+  expect_equal(st$days, c(166L, 199L))
+  expect_equal(st$used, c(TRUE, FALSE))
+  # a saved table fits the same away from the pipeline, with its season table
   out_dir <- file.path(tempdir(), 'toy_models_file')
-  tab <- write_model_table(r, list(formula = form), 'toy', out_dir)
-  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'control', 'data', 'log'))
+  tab <- write_model_table(r, list(formula = form), 'toy', out_dir, common$seasons)
+  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'control', 'data', 'log', 'seasons', 'seasons_used'))
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_true(all(file.exists(got)))
+  expect_true(any(grepl('toy_seasons.csv$', got)))
   expect_equal(glmmTMB::fixef(readRDS(got[1]))$cond, glmmTMB::fixef(fit)$cond)
 })
 

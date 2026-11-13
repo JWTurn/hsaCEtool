@@ -576,39 +576,79 @@ group_coefficients <- function(by_group, fixed) {
 }
 
 #' @title Save a model's coefficient tables and table log as CSV
+#' @description With `seasons`, also saves the season table the model used
+#'   ([model_season_table()]), e.g. so seasonal maps can be weighted by
+#'   season length.
 #' @param coefs list from [model_coefficients()].
 #' @param log data.table. `log` from [build_model_data()].
 #' @param name character. The model's name (its key under `model: models:`).
 #' @param out_dir character. Folder to write to.
+#' @param seasons named list or NULL. The model's seasons ([season_dates()]).
+#' @param used character. The model's `seasons` setting: `all` or season names.
 #' @return character. The files written: <name>_fixed.csv, <name>_random.csv,
-#'   <name>_by_group.csv and <name>_data_log.csv.
+#'   <name>_by_group.csv, <name>_data_log.csv and, with `seasons`,
+#'   <name>_seasons.csv.
 #' @author Julie W. Turner
 #' @export
-write_model_coefficients <- function(coefs, log, name, out_dir) {
+write_model_coefficients <- function(coefs, log, name, out_dir, seasons = NULL, used = 'all') {
   reproducible::checkPath(out_dir, create = TRUE)
   tabs <- c(coefs, list(data_log = log))
+  if (length(seasons)) tabs$seasons <- model_season_table(seasons, used)
   files <- file.path(out_dir, paste0(name, '_', names(tabs), '.csv'))
   purrr::walk2(tabs, files, function(x, f) data.table::fwrite(x, f))
   files
 }
 
+#' @title A model's season table, with the days in each season
+#' @description One row per season, in the order steps are given seasons
+#'   (the first season listed that holds a date wins): its
+#'   first and last day, `days` (days in a year, 365, that fall in it, so
+#'   overlaps are counted once) and `used` (`TRUE` if the model kept that
+#'   season's steps). Days in no season are a last row, `other`.
+#' @param seasons named list. The model's seasons ([season_dates()]).
+#' @param used character. `all` or the season names the model kept.
+#' @return data.table: `season`, `start_month`, `start_day`, `end_month`,
+#'   `end_day`, `days`, `used`.
+#' @author Julie W. Turner
+#' @export
+model_season_table <- function(seasons, used = 'all') {
+  used <- unlist(used %||% 'all')
+  # every day of a year without 29 February, given its season as steps are
+  day <- as.POSIXct(seq(as.Date('2021-01-01'), as.Date('2021-12-31'), by = 'day'), tz = 'UTC')
+  n <- table(factor(season_of(day, seasons), levels = c(names(seasons), 'other')))
+  md <- function(x, i) as.integer(purrr::map_chr(x, function(s) strsplit(s, '-')[[1]][i]))
+  first <- purrr::map_chr(seasons, 1)
+  last <- purrr::map_chr(seasons, 2)
+  out <- data.table::data.table(season = names(seasons), start_month = md(first, 1), start_day = md(first, 2),
+                                end_month = md(last, 1), end_day = md(last, 2),
+                                days = as.integer(n[names(seasons)]))
+  if (n[['other']] > 0) {
+    out <- rbind(out, data.table::data.table(season = 'other', start_month = NA_integer_, start_day = NA_integer_,
+                                             end_month = NA_integer_, end_day = NA_integer_, days = as.integer(n[['other']])))
+  }
+  out[, used := identical(used, 'all') | season %in% used]
+  out[]
+}
+
 #' @title Save a model's table, to fit it away from the pipeline
 #' @description Saves what [fit_model_file()] needs, e.g. to fit a large model
 #'   on an HPC cluster: the table and its log from [build_model_data()], the
-#'   formula and `step_sd`. The table holds only the formula's columns, coded
-#'   animal IDs and no positions or times, so it may be copied to the cluster;
+#'   formula, `step_sd` and the model's seasons. The table holds only the
+#'   formula's columns, coded animal IDs and no positions or times, so it may
+#'   be copied to the cluster;
 #'   the animal codes ([write_animal_codes()]) stay in restricted storage.
 #' @param data list from [build_model_data()].
-#' @param model named list. This model's settings (formula, step_sd).
+#' @param model named list. This model's settings (formula, step_sd, seasons).
 #' @inheritParams write_model_coefficients
 #' @return character. The file written, <out_dir>/<name>_table.rds.
 #' @author Julie W. Turner
 #' @export
-write_model_table <- function(data, model, name, out_dir) {
+write_model_table <- function(data, model, name, out_dir, seasons = NULL) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, paste0(name, '_table.rds'))
   saveRDS(list(name = name, formula = model$formula, step_sd = model$step_sd %||% 1000,
-               control = model$control, data = data$data, log = data$log), file)
+               control = model$control, data = data$data, log = data$log,
+               seasons = seasons, seasons_used = model$seasons %||% 'all'), file)
   file
 }
 
@@ -639,6 +679,7 @@ fit_model_file <- function(file, out_dir, threads = 1L) {
   reproducible::checkPath(out_dir, create = TRUE)
   fit_file <- file.path(out_dir, paste0(x$name, '_fit.rds'))
   saveRDS(fit, fit_file)
-  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir)
+  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir,
+                                    x$seasons, x$seasons_used %||% 'all')
   invisible(c(fit_file, files))
 }

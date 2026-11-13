@@ -15,6 +15,10 @@
   distances matching `distance_cap: columns` were capped under their own
   names; `columns` is now refused: add `_adj` to the capped distances in the
   formulas. Model land now holds only the layers the formulas name.
+- Each model's coefficient tables (and its upload zip) include
+  `<name>_seasons.csv` (`model_season_table()`): the model's seasons, their
+  dates, the days in each (`other` = days in no season) and whether the model
+  used them.
 
 - Local times labelled UTC: a source with `clock_time: true` has its times read
   as clock time in its `tz`, whatever zone they are labelled with (e.g. a

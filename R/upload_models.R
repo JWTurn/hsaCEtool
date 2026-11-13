@@ -14,7 +14,8 @@
 #'     \item{<project>_model_fit_<name>.zip}{`<project>_model_fit_<name>.rds`,
 #'       the glmmTMB fit (target `model_fit_<name>`)}
 #'     \item{<project>_model_<name>.zip}{the coefficient tables as CSV
-#'       (`<name>_fixed.csv`, `_random.csv`, `_by_group.csv`, `_data_log.csv`)}
+#'       (`<name>_fixed.csv`, `_random.csv`, `_by_group.csv`, `_data_log.csv`)
+#'       and the model's season table (`_seasons.csv`, [model_season_table()])}
 #'   }
 #'   A file of the same name already in the folder is replaced in place, so
 #'   its link stays the same. The folder may be shared widely (e.g. with

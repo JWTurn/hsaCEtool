@@ -21,7 +21,8 @@
 #'     a model's `control:` goes to [glmmTMB::glmmTMBControl()], on top of
 #'     `rank_check = 'adjust'`;
 #'   - `model_coefs_<name>` and `model_coefs_<name>_files`: coefficient tables
-#'     ([model_coefficients()]) saved as CSV with the table's log.
+#'     ([model_coefficients()]) saved as CSV with the table's log and the
+#'     model's season table ([model_season_table()]).
 #'   Shared by all models: `cfg_model` (groups, distance cap), `season_table`
 #'   (the season table, [read_seasons()]),
 #'   `animal_codes` and `animal_codes_file` (the confidential table linking
@@ -62,7 +63,8 @@ targets_models <- function(cfg) {
     ))
     if (isTRUE(models[[nm]]$export)) {
       out <- c(out, list(tar_target_raw(paste0('model_table_', nm, '_file'), substitute(
-        write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables')), list(DATA = data_nm, CFG = cfg_nm, NM = nm)),
+        write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables'), SEASONS),
+        list(DATA = data_nm, CFG = cfg_nm, NM = nm, SEASONS = seasons_nm)),
         format = 'file')))
     }
     # fit: false builds the table only (e.g. to check it before a long fit)
@@ -80,8 +82,9 @@ targets_models <- function(cfg) {
       tar_target_raw(as.character(fit_nm), fit_cmd),
       tar_target_raw(as.character(coefs_nm), substitute(model_coefficients(FIT), list(FIT = fit_nm))),
       tar_target_raw(paste0(coefs_nm, '_files'), substitute(
-        write_model_coefficients(COEFS, LOG, NM, model_dir),
-        list(COEFS = coefs_nm, LOG = as.symbol(paste0('model_log_', nm)), NM = nm)),
+        write_model_coefficients(COEFS, LOG, NM, model_dir, SEASONS, CFG$seasons %||% 'all'),
+        list(COEFS = coefs_nm, LOG = as.symbol(paste0('model_log_', nm)), NM = nm,
+             SEASONS = seasons_nm, CFG = cfg_nm)),
         format = 'file')
     ))
   }
