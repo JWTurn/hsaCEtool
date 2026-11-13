@@ -64,6 +64,38 @@ test_that('a default.yaml in the project folder is not read, with a warning', {
   expect_equal(cfg$tracks$n_random, 30)
 })
 
+test_that('shared settings files come between the defaults and the project file', {
+  dir <- withr::local_tempdir()
+  shared1 <- file.path(dir, 'shared1.yaml')
+  shared2 <- file.path(dir, 'shared2.yaml')
+  yaml::write_yaml(list(project = list(crs = 'EPSG:3005'), tracks = list(n_random = 8, min_steps = 9)), shared1)
+  yaml::write_yaml(list(tracks = list(n_random = 6)), shared2)
+  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+                        tracks = list(min_steps = 4)),
+                   file.path(dir, 'TEST.yaml'))
+  cfg <- read_config('TEST', config_dir = dir, shared = c(shared1, shared2))
+  expect_equal(cfg$project$crs, 'EPSG:3005')   # shared over the defaults
+  expect_equal(cfg$tracks$n_random, 6)         # later shared file wins
+  expect_equal(cfg$tracks$min_steps, 4)        # project file wins over shared
+  expect_equal(cfg$tracks$rate_hours, 11)      # still from the defaults
+  expect_error(read_config('TEST', config_dir = dir, shared = file.path(dir, 'none.yaml')), 'not found')
+})
+
+test_that('a default.yaml read as the project file or as shared settings gives no warning', {
+  dir <- withr::local_tempdir()
+  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+                        tracks = list(n_random = 12, min_steps = 5)),
+                   file.path(dir, 'default.yaml'))
+  yaml::write_yaml(list(tracks = list(min_steps = 3)), file.path(dir, 'local.yaml'))
+  expect_no_warning(cfg <- read_config('TEST', config_dir = dir, project_file = file.path(dir, 'default.yaml')))
+  expect_equal(cfg$tracks$n_random, 12)
+  expect_equal(cfg$tracks$min_steps, 3)        # local.yaml still wins
+  expect_equal(cfg$project$name, 'TEST')
+  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds')))), file.path(dir, 'TEST.yaml'))
+  expect_no_warning(cfg <- read_config('TEST', config_dir = dir, shared = file.path(dir, 'default.yaml')))
+  expect_equal(cfg$tracks$n_random, 12)
+})
+
 test_that('a key named y stays a name, not TRUE', {
   file <- withr::local_tempfile(fileext = '.yaml')
   writeLines(c('columns: {x: lon, y: lat}', 'keep: yes'), file)

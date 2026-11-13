@@ -6,6 +6,8 @@
 #'   `config/<project>.yaml`,
 #'   `config/local.yaml` (settings for this computer only, e.g. folder paths) and
 #'   the optional `config/<project>.R`, in that order, later ones winning.
+#'   Files in `shared` (e.g. settings several pipelines of one study share) come
+#'   between the package's defaults and the project file.
 #'   Inputs named in the package's inputs table (`inst/extdata/inputs_default.csv`)
 #'   and the project's (`inputs: inputs_<project>.csv`, read with
 #'   [read_inputs_table()]) are put where the settings name them (`input: <name>`).
@@ -20,25 +22,39 @@
 #' @param project character. Project name, matching `config/<project>.yaml` (e.g. "NMC").
 #' @param config_dir character. Folder holding the project's settings files.
 #' @param defaults character. The default settings file; normally the one in this package.
+#' @param shared character or NULL. Settings files read after `defaults` and
+#'   before the project file, in order, later ones winning. NULL (the default)
+#'   = none.
+#' @param project_file character or NULL. The project's settings file, if not
+#'   `<config_dir>/<project>.yaml` (e.g. a pipeline's `default.yaml`). NULL (the
+#'   default) = `<config_dir>/<project>.yaml`.
 #' @return Named list of settings.
 #' @author Julie W. Turner
 #' @export
-read_config <- function(project, config_dir = 'config', defaults = system.file('config', 'default.yaml', package = 'hsaCEtool')) {
+read_config <- function(project, config_dir = 'config', defaults = system.file('config', 'default.yaml', package = 'hsaCEtool'),
+                        shared = NULL, project_file = NULL) {
   if (!nzchar(project)) {
     stop('No project chosen. Set one first, e.g. Sys.setenv(TAR_PROJECT = "NMC")')
   }
-  project_file <- file.path(config_dir, paste0(project, '.yaml'))
+  project_file <- project_file %||% file.path(config_dir, paste0(project, '.yaml'))
   local_file <- file.path(config_dir, 'local.yaml')
   override_file <- file.path(config_dir, paste0(project, '.R'))
   if (!file.exists(project_file)) {
     stop('No settings file for project "', project, '": expected ', project_file)
   }
 
-  if (file.exists(file.path(config_dir, 'default.yaml'))) {
+  # a default.yaml in config_dir is fine if it is read as shared or project settings
+  dflt <- file.path(config_dir, 'default.yaml')
+  used <- normalizePath(c(project_file, shared), mustWork = FALSE)
+  if (file.exists(dflt) && !normalizePath(dflt) %in% used) {
     warning(file.path(config_dir, 'default.yaml'), ' is not read: the defaults come from the hsaCEtool package. ',
             'Put settings that differ in ', project_file, call. = FALSE)
   }
   cfg <- read_settings_file(defaults)
+  for (f in shared) {
+    if (!file.exists(f)) stop('Shared settings file not found: ', f, call. = FALSE)
+    cfg <- merge_config(cfg, read_settings_file(f))
+  }
   cfg <- merge_config(cfg, read_settings_file(project_file))
   if (file.exists(local_file)) {
     cfg <- merge_config(cfg, read_settings_file(local_file))

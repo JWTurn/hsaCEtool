@@ -1,5 +1,12 @@
 # hsaCEtool 0.0.0.9000
 
+- `read_config()` has two optional arguments, for studies that run several
+  pipelines from one set of settings: `shared`, settings files read between the
+  package defaults and the project file (e.g. settings every pipeline shares),
+  and `project_file`, a project settings file other than
+  `<config_dir>/<project>.yaml` (e.g. a pipeline's `default.yaml`). A
+  `default.yaml` in `config_dir` read either way no longer gives a warning.
+  Without them, settings are read as before.
 - Layer stacks for maps (`model_land:`; targets `model_land_spec`,
   `model_land_layers_file` and `model_land`, in `targets_maps()`): for each year
   in `model_land: years:`, one GeoTIFF,
