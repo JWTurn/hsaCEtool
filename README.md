@@ -35,9 +35,11 @@ change to its code reruns the affected steps.
 
 ## Caribou locations are confidential
 
-This package holds code and made-up test data only. Caribou locations, and
-anything derived from them that still holds coordinates or animal IDs with
-times, must stay in each project's restricted storage. See `AGENTS.md`.
+This package holds code and made-up test data only. Raw caribou locations, and
+anything that still holds them (such as the used steps of an iSSA table, or
+mortality sites), must stay in each project's restricted storage. Derived
+features on their own, such as iSSA random steps or home ranges, are not
+restricted. See `AGENTS.md`.
 
 ---
 

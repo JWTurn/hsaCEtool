@@ -69,10 +69,13 @@ become public: not through git, GitHub (issues, PRs, comments, releases, Actions
 logs), published artifacts or web pages, or anything shared outside the projects'
 restricted storage. Data-sharing agreements depend on this.
 
-- **Counts as location data:** any table or file with coordinates or animal IDs with
-  times, and anything derived from them row by row; fitted models whose data still
-  hold coordinates or exact dates or times; study-area polygons drawn tightly around
-  fixes; maps or plots showing individual fixes or tracks.
+- **Restricted:** raw collar locations (fixes), and anything that still holds
+  them: e.g. the used (observed) steps in an iSSA table, used points in an RSF
+  table, fitted models whose data still hold them, and maps or plots showing
+  individual fixes or tracks. Mortality sites are restricted too.
+- **Not restricted on their own:** derived features such as available points,
+  iSSA random steps (even though they start at observed fixes) and home ranges.
+  A table that combines them with the used steps or points is restricted.
 - **This repo holds none of it.** No data files, no printed rows (`head()` output
   with coordinates or IDs plus times) in code, comments, docs, commit messages,
   issues or PRs. Summaries without coordinates are fine.
