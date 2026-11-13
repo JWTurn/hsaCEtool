@@ -7,7 +7,9 @@
 read_config(
   project,
   config_dir = "config",
-  defaults = system.file("config", "default.yaml", package = "hsaCEtool")
+  defaults = system.file("config", "default.yaml", package = "hsaCEtool"),
+  shared = NULL,
+  project_file = NULL
 )
 }
 \arguments{
@@ -16,6 +18,14 @@ read_config(
 \item{config_dir}{character. Folder holding the project's settings files.}
 
 \item{defaults}{character. The default settings file; normally the one in this package.}
+
+\item{shared}{character or NULL. Settings files read after \code{defaults} and
+before the project file, in order, later ones winning. NULL (the default)
+= none.}
+
+\item{project_file}{character or NULL. The project's settings file, if not
+\verb{<config_dir>/<project>.yaml} (e.g. a pipeline's \code{default.yaml}). NULL (the
+default) = \verb{<config_dir>/<project>.yaml}.}
 }
 \value{
 Named list of settings.
@@ -25,6 +35,8 @@ Combines the package's default settings (\code{inst/config/default.yaml}),
 \verb{config/<project>.yaml},
 \code{config/local.yaml} (settings for this computer only, e.g. folder paths) and
 the optional \verb{config/<project>.R}, in that order, later ones winning.
+Files in \code{shared} (e.g. settings several pipelines of one study share) come
+between the package's defaults and the project file.
 Inputs named in the package's inputs table (\code{inst/extdata/inputs_default.csv})
 and the project's (\verb{inputs: inputs_<project>.csv}, read with
 \code{\link[=read_inputs_table]{read_inputs_table()}}) are put where the settings name them (\verb{input: <name>}).
