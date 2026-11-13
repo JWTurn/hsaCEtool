@@ -111,3 +111,25 @@ test_that('premade locations can replace the sources', {
   yaml::write_yaml(list(locations = list(premade = list(target_file = 'clean.rds'))), file.path(dir, 'BAD.yaml'))
   expect_error(read_config('BAD', config_dir = dir), 'premade: give a path or a url')
 })
+
+test_that('study_area: add needs a path or url, and is not used with study_area: source', {
+  dir <- withr::local_tempdir()
+  src <- list(list(type = 'file', path = 'x.rds'))
+  yaml::write_yaml(list(locations = list(sources = src, study_area = list(add = list(path = 'r.gpkg')))),
+                   file.path(dir, 'OK.yaml'))
+  expect_equal(read_config('OK', config_dir = dir)$locations$study_area$add$path, 'r.gpkg')
+  yaml::write_yaml(list(locations = list(sources = src,
+                                         study_area = list(source = list(path = 's.gpkg'),
+                                                           add = list(target_file = 'r.gpkg')))),
+                   file.path(dir, 'BAD.yaml'))
+  err <- tryCatch(read_config('BAD', config_dir = dir), error = conditionMessage)
+  expect_match(err, 'study_area: add: give one of a path, a url or a target')
+  expect_match(err, 'not with study_area: source:')
+  yaml::write_yaml(list(locations = list(sources = src, study_area = list(add = list(target = 'herd ranges')))),
+                   file.path(dir, 'BAD2.yaml'))
+  expect_error(read_config('BAD2', config_dir = dir), 'target must be the name of one target')
+  yaml::write_yaml(list(locations = list(sources = src,
+                                         study_area = list(add = list(target = 'r', path = 'r.gpkg')))),
+                   file.path(dir, 'BAD3.yaml'))
+  expect_error(read_config('BAD3', config_dir = dir), 'give one of a path, a url or a target')
+})

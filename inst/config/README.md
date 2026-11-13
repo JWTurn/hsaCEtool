@@ -180,6 +180,12 @@ Each stage can start from files made earlier instead of being remade:
   file of the same name in `inputs/` is not mistaken for it.
 - `locations: study_area: source:` and `study_area: extended: source:` existing
   study area polygons (a zipped shapefile from a url needs `archive:` too).
+  Or, to build the study area from the fixes and also cover places they do not
+  reach, `locations: study_area: add:` names polygons (e.g. herd ranges) that
+  are joined to the buffered fixes; the extended study area is then built
+  around both. Give a source (path or url), or `{target: <name>}` when a
+  target in the project's own `_targets.R` makes the file (it must return the
+  file's path, with `format = "file"`), so the study area waits for it.
 - `landscape: template: source:` and the layer table's `path`/`url` columns:
   existing template and layer rasters.
 
@@ -418,6 +424,17 @@ keeps every column. Before that:
   `PinkMountain`). `herd: rename:` (`old: new`, both in CamelCase) then gives a
   herd the same name in every source. The target `herd_check` counts animals by
   source, jurisdiction, study and herd, to check the names.
+
+### Keeping only some herds
+
+To use only the herds a project studies, list them in `locations: herd: keep:`,
+with their final names (CamelCase, after `herd: rename:`). Each fix's herd is
+found as described above, and the other herds' fixes are dropped as soon as the
+sources are combined (target `locations_raw`), before cleaning and before the
+study area is made. With premade locations, they are dropped from the premade
+file. A listed herd with no fixes stops the run, as its name is probably
+misspelled. The target `herd_selection` counts the fixes and animals of every
+herd and says which were kept. `[]` (the default) keeps every herd.
 
 ## Landscape layers: `layers_<project>.csv`
 

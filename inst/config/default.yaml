@@ -144,6 +144,9 @@ locations:
     source: null          # an existing polygon (a source: path or url) instead of building one
     buffer_m: 20000       # otherwise, buffer this far around every location ...
     convex_hull: false    # ... and optionally wrap the buffer in a convex hull
+    add: null             # optional polygons (e.g. herd ranges) joined to the buffered locations, so the
+                          # study area also covers places the fixes do not reach: a source (path or url),
+                          # or {target: <name>}, a target of the project's pipeline that makes the file
     # One continuous area the landscape layers cover (target study_area_extended):
     # the study area wrapped in a convex hull, then buffered, or an existing
     # polygon (source: path or url).
@@ -170,7 +173,10 @@ locations:
   # otherwise from by_source (source name: herd). Names are put in CamelCase
   # (Pink Mountain -> PinkMountain), then renamed with `rename` (old: new) so a
   # herd has one name in every source. Target herd_check counts animals by herd.
+  # Optional: keep only these herds (final names, after rename), before cleaning;
+  # target herd_selection counts fixes and animals kept and dropped. [] keeps all.
   herd:
+    keep: []
     columns: [herd]
     by_source: {}
     rename: {}

@@ -343,3 +343,46 @@ test_that('check_extended_area warns about fixes near the edge and says how to r
   expect_no_warning(ok <- check_extended_area(DT[1], area, 20000, 'NMC', 'EPSG:3154'))
   expect_equal(nrow(ok), 0)
 })
+
+test_that('keep_herds keeps the listed herds by their final names, and counts what it drops', {
+  DT <- toy_locations(3)[, `:=`(source = 's1', herd = c('Frisby-Boulder', 'Frisby-Boulder', 'Frisby-Boulder',
+                                                       'Pink Mountain', 'Pink Mountain', NA))]
+  herd_cfg <- list(columns = list('herd'), rename = list(PinkMountain = 'PinkMtn'))
+  # no keep: unchanged, no counts
+  expect_identical(keep_herds(DT, herd_cfg), DT)
+  expect_null(attr(keep_herds(DT, c(herd_cfg, list(keep = list()))), 'herd_selection'))
+  out <- keep_herds(DT, c(herd_cfg, list(keep = list('FrisbyBoulder'))))
+  expect_equal(nrow(out), 3)
+  expect_equal(out$herd, rep('Frisby-Boulder', 3))   # the herd column itself is not changed
+  sel <- attr(out, 'herd_selection')
+  expect_equal(sel$herd, c(NA, 'FrisbyBoulder', 'PinkMtn'))
+  expect_equal(sel$fixes, c(1L, 3L, 2L))
+  expect_equal(sel$animals, c(1L, 1L, 1L))
+  expect_equal(sel$kept, c(FALSE, TRUE, FALSE))
+  # names after rename; several herds
+  expect_equal(nrow(keep_herds(DT, c(herd_cfg, list(keep = list('FrisbyBoulder', 'PinkMtn'))))), 5)
+  # a name with no fixes (e.g. before rename) is an error
+  expect_error(keep_herds(DT, c(herd_cfg, list(keep = list('PinkMountain')))), 'no fixes for herd\\(s\\) PinkMountain')
+  expect_equal(nrow(DT), 6)   # input unchanged
+})
+
+test_that('the study area can add polygons, such as herd ranges, to the buffered fixes', {
+  DT <- toy_locations()
+  cfg <- list(buffer_m = 1000, convex_hull = FALSE)
+  sa <- make_study_area(DT, cfg, crs = crs)
+  # a made-up range away from the fixes, with attributes
+  rng <- terra::vect('POLYGON ((700000 6700000, 710000 6700000, 710000 6710000, 700000 6710000, 700000 6700000))',
+                     crs = crs)
+  rng$herd <- 'A'
+  file <- withr::local_tempfile(fileext = '.gpkg')
+  terra::writeVector(terra::project(rng, 'EPSG:4326'), file)   # projected to the project crs
+  out <- make_study_area(DT, cfg, crs = crs, add = file)
+  expect_equal(nrow(out), 1)
+  expect_equal(terra::expanse(out), terra::expanse(sa) + 1e8, tolerance = 1e-3)
+  expect_true(terra::relate(out, sa, 'covers')[1, 1])
+  # the extended study area is built around both
+  ext <- make_study_area_extended(out, list(buffer_m = 5000, convex_hull = TRUE))
+  expect_true(terra::relate(ext, terra::project(rng, crs), 'covers')[1, 1])
+  # file wins over add
+  expect_equal(terra::expanse(make_study_area(DT, cfg, file = file, crs = crs, add = file)), 1e8, tolerance = 1e-3)
+})

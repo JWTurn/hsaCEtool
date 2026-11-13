@@ -1,5 +1,16 @@
 # hsaCEtool 0.0.0.9000
 
+- Optional herd selection: `locations: herd: keep:` lists the herds to use
+  (final names, after `herd: rename:`); other herds' fixes are dropped right
+  after the sources are combined, before cleaning (`keep_herds()`). Target
+  `herd_selection` counts fixes and animals by herd and says which were kept.
+  Empty (the default), every herd is kept, as before.
+- `locations: study_area: add:` (optional) names polygons, such as herd ranges,
+  joined to the buffered fixes in `make_study_area()` (new argument `add`), so
+  the study area also covers places the fixes do not reach. A source (path or
+  url), or `{target: <name>}` for a file made by a target of the project's own
+  pipeline. The extended study area is built around both. Not set (the default), the study area is as before.
+
 - `read_config()` has two optional arguments, for studies that run several
   pipelines from one set of settings: `shared`, settings files read between the
   package defaults and the project file (e.g. settings every pipeline shares),

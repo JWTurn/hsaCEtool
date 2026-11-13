@@ -208,6 +208,39 @@ make_herd <- function(DT, herd_cfg) {
   rename_names(to_camel(herd), herd_cfg$rename)
 }
 
+#' @title Keep only some herds
+#' @description Optional: keeps the fixes of the herds in `herd_cfg$keep`, and
+#'   drops the rest, so a project can use only the herds it studies. Run on the
+#'   combined locations, before cleaning (or on premade cleaned locations).
+#'   Each fix's herd is found as in `make_herd()` (columns, then `by_source`,
+#'   then CamelCase and `rename`), so `keep` uses those final names. An empty
+#'   `keep` keeps every fix. A herd in `keep` that has no fixes is an error, as
+#'   its name is probably misspelled.
+#' @param DT data.table of locations with `source`.
+#' @param herd_cfg named list. The `locations: herd:` settings: `keep`,
+#'   `columns`, `by_source` and `rename`.
+#' @return data.table. With `keep`, it has the attribute `herd_selection`: the
+#'   fixes and animals of each herd in `DT` (counts only) and whether the herd
+#'   was kept.
+#' @author Julie W. Turner
+#' @export
+keep_herds <- function(DT, herd_cfg) {
+  keep <- unlist(herd_cfg$keep)
+  if (!length(keep)) return(DT)
+  herds <- make_herd(DT, herd_cfg)
+  absent <- setdiff(keep, herds)
+  if (length(absent)) {
+    stop('locations: herd: keep: no fixes for herd(s) ', paste(absent, collapse = ', '),
+         ' (herd names are in CamelCase, after herd: rename)', call. = FALSE)
+  }
+  counts <- data.table::data.table(herd = herds, id = DT$id)[
+    , .(fixes = .N, animals = data.table::uniqueN(id)), keyby = herd][, kept := herd %in% keep][]
+  rows <- herds %in% keep
+  out <- DT[rows]
+  data.table::setattr(out, 'herd_selection', counts)
+  out
+}
+
 #' @title Jurisdiction each fix's data come from
 #' @description Taken from the first of `juris_cfg$columns` that has a value
 #'   (as in `make_herd()`), otherwise from `juris_cfg$by_source` (source name:

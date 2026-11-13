@@ -149,11 +149,22 @@ targets_locations <- function(cfg) {
                                MORT = if (length(mort_names)) as.call(c(quote(list), purrr::map(mort_names, as.symbol))) else NULL,
                                CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id'))
 
+  # optional: only the herds in locations: herd: keep:, before cleaning
+  herd_keep <- length(unlist(cfg$locations$herd$keep)) > 0
+  keep_herds_call <- function(expr) {
+    if (herd_keep) substitute(keep_herds(X, HERD), list(X = expr, HERD = cfg$locations$herd)) else expr
+  }
+  herd_targets <- if (herd_keep) {
+    # fixes and animals of each herd, and whether kept (counts only)
+    list(tar_target(herd_selection, attr(locations_raw, 'herd_selection')))
+  }
+
   clean_targets <- if (is.null(premade)) {
     combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs, KEEP),
                           list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol))),
                                KEEP = unlist(cfg$locations$keep_spaces)))
-    c(rec_targets, list(
+    combine <- keep_herds_call(combine)
+    c(rec_targets, herd_targets, list(
       tar_target_raw('locations_raw', combine),
       tar_target_raw('locations_clean',
                      substitute(clean_locations(locations_raw, CFG, cfg_project$crs), list(CFG = clean_cfg))),
@@ -179,14 +190,29 @@ targets_locations <- function(cfg) {
     list(
       tar_target_raw('locations_premade_file', substitute(get_source(SRC, cfg_paths), list(SRC = premade)),
                      format = 'file', cue = tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')),
-      tar_target_raw('locations_clean', substitute(read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
-                                                   list(SRC = premade))),
+      tar_target_raw('locations_clean',
+                     keep_herds_call(substitute(read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
+                                                list(SRC = premade)))),
       tar_target(flag_summary, summarize_flags(locations_clean))
     )
   }
 
   sa_src <- cfg$locations$study_area$source
-  sa_targets <- if (is.null(sa_src)) {
+  sa_add <- cfg$locations$study_area$add
+  sa_targets <- if (is.null(sa_src) && !is.null(sa_add)) {
+    # buffered fixes joined with other polygons (e.g. herd ranges): a source, or
+    # the file made by another target of the project's pipeline (add: {target: name})
+    add_cmd <- if (!is.null(sa_add[['target']])) {
+      as.symbol(sa_add[['target']])
+    } else {
+      substitute(get_source(SRC, cfg_paths), list(SRC = sa_add))
+    }
+    list(
+      tar_target_raw('study_area_add_file', add_cmd, format = 'file'),
+      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area, file = NULL,
+                                                 crs = cfg_project$crs, add = study_area_add_file))
+    )
+  } else if (is.null(sa_src)) {
     list(
       tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area,
                                                  file = NULL, crs = cfg_project$crs))

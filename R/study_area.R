@@ -1,17 +1,21 @@
 #' @title Make the study area
 #' @description Reads an existing study-area polygon, or buffers every location
 #'   by `buffer_m` metres and joins the buffers into one polygon, optionally
-#'   wrapped in a convex hull.
+#'   wrapped in a convex hull. With `add` (from `study_area: add:`), polygons
+#'   such as herd ranges are then joined to it, so the study area also covers
+#'   places the fixes do not reach.
 #' @param DT data.table of standard locations.
 #' @param sa_cfg named list. The `locations: study_area:` settings.
 #' @param file character or NULL. Path to an existing polygon from [get_source()].
 #' @param crs character. Project coordinate system.
+#' @param add character or NULL. Path to polygons to join to the buffered
+#'   locations, from [get_source()]. Not used with `file`.
 #' @return SpatVector polygon in the project coordinate system.
 #' @details Adapted from NMC_CEtool `scripts/2-clean-data.R` (20 km buffer) and
 #'   caribouLocPrep `studyareaFullextent()`.
 #' @author Julie W. Turner
 #' @export
-make_study_area <- function(DT, sa_cfg, file = NULL, crs) {
+make_study_area <- function(DT, sa_cfg, file = NULL, crs, add = NULL) {
   if (length(file)) {
     sa <- terra::vect(file[1])
     return(terra::aggregate(terra::project(sa, crs)))
@@ -19,7 +23,12 @@ make_study_area <- function(DT, sa_cfg, file = NULL, crs) {
   pts <- sf::st_as_sf(DT[, .(x_, y_)], coords = c('x_', 'y_'), crs = sf::st_crs(crs))
   sa <- sf::st_union(sf::st_buffer(pts, dist = sa_cfg$buffer_m))
   if (isTRUE(sa_cfg$convex_hull)) sa <- sf::st_convex_hull(sa)
-  terra::vect(sa)
+  sa <- terra::vect(sa)
+  if (length(add)) {
+    extra <- terra::project(terra::vect(add[1]), crs)
+    sa <- terra::aggregate(rbind(sa, extra[, 0]))
+  }
+  sa
 }
 
 #' @title Make the extended study area for the landscape layers

@@ -209,6 +209,21 @@ check_config <- function(cfg) {
     add('locations: cleaning step mortality_records needs locations: mortality_records')
   }
 
+  sa_add <- cfg$locations$study_area$add
+  if (!is.null(sa_add)) {
+    if (sum(!is.null(sa_add$path), !is.null(sa_add$url), !is.null(sa_add[['target']])) != 1) {
+      add('locations: study_area: add: give one of a path, a url or a target')
+    } else if (!is.null(sa_add[['target']]) &&
+               !(is.character(sa_add[['target']]) && length(sa_add[['target']]) == 1 &&
+                 make.names(sa_add[['target']]) == sa_add[['target']])) {
+      add('locations: study_area: add: target must be the name of one target')
+    }
+    if (!is.null(cfg$locations$study_area$source)) {
+      add('locations: study_area: add: is used only when the study area is built from the fixes, ',
+          'not with study_area: source:')
+    }
+  }
+
   if (!cfg$locations$crop_method %in% c('bbox', 'within')) {
     add('locations: crop_method must be "bbox" or "within"')
   }

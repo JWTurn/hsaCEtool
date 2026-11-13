@@ -4,7 +4,7 @@
 \alias{make_study_area}
 \title{Make the study area}
 \usage{
-make_study_area(DT, sa_cfg, file = NULL, crs)
+make_study_area(DT, sa_cfg, file = NULL, crs, add = NULL)
 }
 \arguments{
 \item{DT}{data.table of standard locations.}
@@ -14,6 +14,9 @@ make_study_area(DT, sa_cfg, file = NULL, crs)
 \item{file}{character or NULL. Path to an existing polygon from \code{\link[=get_source]{get_source()}}.}
 
 \item{crs}{character. Project coordinate system.}
+
+\item{add}{character or NULL. Path to polygons to join to the buffered
+locations, from \code{\link[=get_source]{get_source()}}. Not used with \code{file}.}
 }
 \value{
 SpatVector polygon in the project coordinate system.
@@ -21,7 +24,9 @@ SpatVector polygon in the project coordinate system.
 \description{
 Reads an existing study-area polygon, or buffers every location
 by \code{buffer_m} metres and joins the buffers into one polygon, optionally
-wrapped in a convex hull.
+wrapped in a convex hull. With \code{add} (from \verb{study_area: add:}), polygons
+such as herd ranges are then joined to it, so the study area also covers
+places the fixes do not reach.
 }
 \details{
 Adapted from NMC_CEtool \code{scripts/2-clean-data.R} (20 km buffer) and

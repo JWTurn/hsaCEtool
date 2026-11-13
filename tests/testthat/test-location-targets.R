@@ -58,3 +58,28 @@ test_that('source names must be unique', {
     list(type = 'file', name = 'A_b', path = 'y.rds')))), file.path(dir, 'DUP.yaml'))
   expect_error(read_config('DUP', config_dir = dir), 'same name.*A_b')
 })
+
+test_that('herd keep and study area add change the targets only when set', {
+  tl <- source_targets(made_up)
+  expect_no_match(cmd_text(tl$locations_raw), 'keep_herds')
+  expect_false(any(c('herd_selection', 'study_area_add_file') %in% names(tl)))
+  expect_no_match(cmd_text(tl$study_area), 'add')
+  tl <- source_targets(made_up, herd = list(keep = list('HerdA')),
+                       study_area = list(add = list(path = 'ranges.gpkg')))
+  expect_match(cmd_text(tl$locations_raw), 'keep_herds(combine_locations(', fixed = TRUE)
+  expect_true('herd_selection' %in% names(tl))
+  expect_match(cmd_text(tl$study_area_add_file), 'ranges.gpkg', fixed = TRUE)
+  expect_match(cmd_text(tl$study_area), 'add = study_area_add_file', fixed = TRUE)
+  # or the file another target makes (e.g. herd ranges built in the project's pipeline)
+  tl <- source_targets(made_up, study_area = list(add = list(target = 'herd_ranges_file')))
+  expect_match(cmd_text(tl$study_area_add_file), "herd_ranges_file", fixed = TRUE)
+  expect_no_match(cmd_text(tl$study_area_add_file), "get_source", fixed = TRUE)
+  expect_equal(tl$study_area_add_file$settings$format, 'file')
+  # premade locations are filtered too
+  dir <- withr::local_tempdir()
+  yaml::write_yaml(list(locations = list(premade = list(path = 'clean.rds'), herd = list(keep = list('HerdA')))),
+                   file.path(dir, 'PRE.yaml'))
+  tl <- targets_locations(read_config('PRE', config_dir = dir))
+  tl <- stats::setNames(tl, purrr::map_chr(tl, function(t) t$settings$name))
+  expect_match(cmd_text(tl$locations_clean), 'keep_herds(read_premade_locations(', fixed = TRUE)
+})
