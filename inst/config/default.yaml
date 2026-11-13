@@ -120,7 +120,7 @@ locations:
       bounds: {xmin: -180, ymin: -90, xmax: 180, ymax: 90}
       exclude_points: []  # list of {name:, lon:, lat:, radius_m:}, or a CSV file in config/ with those columns
       capture_effect: {days: 7}
-      dop: {column: gps_dop, max_dop: 10, keep_missing: true}
+      dop: {column: gps_dop, max_dop: 10, keep_missing: true}   # column can be a list, e.g. [DOP, PDOP, HDOP]: first with a value
       duplicates: {gamma_minutes: 15, dop_column: gps_dop}
       fast_steps: {delta: 200000}
       roundtrips: {delta: 100000, epsilon: 10}

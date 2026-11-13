@@ -60,6 +60,13 @@ test_that('cleaning steps remove what they should', {
   DT <- toy_locations()
   expect_equal(nrow(clean_dop(copy(DT), list(column = 'gps_dop', max_dop = 10, keep_missing = TRUE), crs)), 80)
   expect_equal(nrow(clean_dop(copy(DT), list(column = 'gps_dop', max_dop = 10, keep_missing = FALSE), crs)), 60)
+  # several columns: the first with a value
+  two <- data.table::data.table(id = 'a', t_ = Sys.time() + 1:4, x_ = 0, y_ = 0,
+                                DOP = c(2, NA, NA, 12), PDOP = c(50, 3, NA, 1))
+  expect_equal(dop_values(two, list('DOP', 'PDOP', 'HDOP')), c(2, 3, NA, 12))
+  expect_equal(nrow(clean_dop(copy(two), list(column = list('DOP', 'PDOP'), max_dop = 10, keep_missing = TRUE), crs)), 3)
+  expect_warning(out <- clean_dop(copy(two), list(column = 'HDOP', max_dop = 10, keep_missing = TRUE), crs), 'HDOP')
+  expect_equal(nrow(out), 4)
   # first day (12 fixes at 2 h) of each animal dropped
   expect_equal(nrow(clean_capture_effect(copy(DT), list(days = 1), crs)), 76)
   expect_equal(nrow(clean_min_points(copy(DT)[!(id == 'b' & seq_len(.N) > 52)], list(n = 10), crs)), 50)

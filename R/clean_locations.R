@@ -524,7 +524,9 @@ clean_capture_effect <- function(DT, params, crs) {
 #' @title Cleaning step: drop low-quality fixes
 #' @description Drops fixes whose dilution of precision (DOP) is at or above
 #'   `max_dop`. Fixes with no DOP are kept when `keep_missing` is TRUE (many
-#'   collars don't record it).
+#'   collars don't record it). `column` can list several columns (e.g.
+#'   `[DOP, PDOP, HDOP]`, for a file that joins sources recording different
+#'   kinds): each fix's DOP is the first of them with a value.
 #' @inheritParams clean_bounds
 #' @param params named list: `column`, `max_dop`, `keep_missing`.
 #' @return data.table.
@@ -532,12 +534,25 @@ clean_capture_effect <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_dop <- function(DT, params, crs) {
-  if (!params$column %in% names(DT)) {
-    warning('[clean dop] no column "', params$column, '"; step skipped')
+  dop <- dop_values(DT, params$column)
+  if (is.null(dop)) {
+    warning('[clean dop] no column ', paste0('"', unlist(params$column), '"', collapse = ' or '), '; step skipped')
     return(DT)
   }
-  dop <- as.numeric(DT[[params$column]])
   DT[(is.na(dop) & isTRUE(params$keep_missing)) | (!is.na(dop) & dop < params$max_dop)]
+}
+
+#' @title DOP of each fix, from the first of several columns with a value
+#' @param DT data.table of locations.
+#' @param cols character or list. DOP column name(s), in order of preference.
+#' @return numeric vector, NA where none has a value; NULL if no column is found.
+#' @keywords internal
+#' @noRd
+dop_values <- function(DT, cols) {
+  cols <- intersect(unlist(cols), names(DT))
+  if (!length(cols)) return(NULL)
+  vals <- lapply(cols, function(col) suppressWarnings(as.numeric(DT[[col]])))
+  do.call(data.table::fcoalesce, vals)
 }
 
 #' @title Cleaning step: drop near-duplicate fixes
@@ -545,13 +560,14 @@ clean_dop <- function(DT, params, crs) {
 #'   with the best DOP, by the same rules as `amt::flag_duplicates()` (see
 #'   `flag_duplicates_fast()`). Fixes with no DOP are ranked last.
 #' @inheritParams clean_bounds
-#' @param params named list: `gamma_minutes`, `dop_column`.
+#' @param params named list: `gamma_minutes`, `dop_column` (one column, or
+#'   several: the first with a value, as for the `dop` step).
 #' @return data.table.
 #' @author Julie W. Turner
 #' @keywords internal
 #' @noRd
 clean_duplicates <- function(DT, params, crs) {
-  dop <- if (params$dop_column %in% names(DT)) as.numeric(DT[[params$dop_column]]) else rep(1, nrow(DT))
+  dop <- dop_values(DT, params$dop_column) %||% rep(1, nrow(DT))
   DT[, .dop := data.table::fifelse(is.na(dop), 99, dop)]
   DT[, .flag := flag_duplicates_fast(t_, x_, y_, .dop, params$gamma_minutes * 60), by = id]
   DT <- DT[!(.flag)]
