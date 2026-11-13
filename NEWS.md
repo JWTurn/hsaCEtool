@@ -1,5 +1,22 @@
 # hsaCEtool 0.0.0.9000
 
+- Local times labelled UTC: a source with `clock_time: true` has its times read
+  as clock time in its `tz`, whatever zone they are labelled with (e.g. a
+  trailing `Z`, which `fread()` reads as UTC). Before, `tz` had no effect on
+  times already read as date-times. Not set (the default), times are read as before.
+- New cleaning step `local_times` (list it first): for a file whose sources
+  wrote times differently, reads the clock time of fixes with listed values of
+  a column (e.g. `{column: DataSource, tz: {CMCRP: Etc/GMT+8}}`) in that time
+  zone and converts them to UTC; other fixes are left as they are.
+- The `dop` step's `column` and the `duplicates` step's `dop_column` can list
+  several columns (e.g. `[DOP, PDOP, HDOP]`): each fix's DOP is the first with
+  a value. One column works as before.
+- Target `fix_intervals` (`summarize_fix_intervals()`): hours between each
+  animal's consecutive fixes after cleaning (mean, median, 10th and 90th
+  percentiles, median of animals' medians), by animal and by each column in
+  `locations: fix_intervals: by:` (default `[source, herd]`), to choose
+  `tracks: rate_hours`.
+
 - Optional herd selection: `locations: herd: keep:` lists the herds to use
   (final names, after `herd: rename:`); other herds' fixes are dropped right
   after the sources are combined, before cleaning (`keep_herds()`). Target
