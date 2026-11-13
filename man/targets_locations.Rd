@@ -25,7 +25,9 @@ make the study area, and keep the locations inside it. Fixes with dates
 but no times help make the study area but are then dropped
 (\code{\link[=drop_date_only]{drop_date_only()}}). \code{locations} keeps only the columns needed later,
 with \code{sex} coded and \code{study}, \code{herd} and \code{juris} added (\code{\link[=finish_locations]{finish_locations()}}); \code{herd_check}
-counts animals by source, jurisdiction, study and herd.
+counts animals by source, jurisdiction, study and herd; \code{fix_intervals}
+summarizes the hours between fixes by animal and by each column in
+\verb{locations: fix_intervals: by:} (\code{\link[=summarize_fix_intervals]{summarize_fix_intervals()}}).
 
 With \verb{locations: premade:} set, a cleaned locations file (saved from
 \code{locations_clean}) is read instead (\code{\link[=read_premade_locations]{read_premade_locations()}}) and the

@@ -414,3 +414,18 @@ test_that('the study area can add polygons, such as herd ranges, to the buffered
   # file wins over add
   expect_equal(terra::expanse(make_study_area(DT, cfg, file = file, crs = crs, add = file)), 1e8, tolerance = 1e-3)
 })
+
+test_that('summarize_fix_intervals summarizes hours between fixes by animal and group', {
+  t0 <- as.POSIXct('2021-06-01', tz = 'UTC')
+  DT <- data.table::data.table(
+    id = c(rep('a', 4), rep('b', 3), 'c'),
+    t_ = t0 + 3600 * c(0, 2, 4, 10, 0, 8, 16, 0),
+    herd = c(rep('H1', 4), rep('H2', 3), 'H2'), source = 'S')
+  out <- summarize_fix_intervals(DT[sample(.N)], list('herd', 'source', 'missing'))
+  expect_equal(unique(out$level), c('id', 'herd', 'source'))
+  expect_equal(out[level == 'id' & group == 'a', c(intervals, mean_h, median_h)], c(3, 10 / 3, 2), tolerance = 0.01)
+  expect_false('c' %in% out[level == 'id', group])   # one fix, no interval
+  expect_equal(out[level == 'herd' & group == 'H2', c(animals, intervals, median_h)], c(1, 2, 8))
+  s <- out[level == 'source']
+  expect_equal(c(s$animals, s$intervals, s$median_h, s$median_of_animals_h), c(2, 5, 6, 5))
+})

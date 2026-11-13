@@ -442,6 +442,15 @@ file. A listed herd with no fixes stops the run, as its name is probably
 misspelled. The target `herd_selection` counts the fixes and animals of every
 herd and says which were kept. `[]` (the default) keeps every herd.
 
+### Time between fixes
+
+Tracks are resampled to one fix every `tracks: rate_hours`. To choose that
+rate, the target `fix_intervals` summarizes the hours between each animal's
+consecutive fixes after cleaning (mean, median, 10th and 90th percentiles, and
+the median of the animals' own medians), for each animal and for each value of
+each column in `locations: fix_intervals: by:` (default `[source, herd]`).
+A column used here must be kept in `keep_after_cleaning`.
+
 ## Landscape layers: `layers_<project>.csv`
 
 Each landscape layer is one row of a table named in `landscape: layers:`. To add

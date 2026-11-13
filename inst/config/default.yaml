@@ -161,6 +161,10 @@ locations:
   # t_, x_, y_ and these columns are kept, so tracks and steps stay small.
   # locations_clean keeps every column. [] keeps every column.
   keep_after_cleaning: [mortality_status, mortality_basis, deployment_end_type, sex, juris, study, herd]
+  # Hours between fixes after cleaning (target fix_intervals), by animal and by each of these
+  # columns of target locations (keep them in keep_after_cleaning), to choose tracks: rate_hours.
+  fix_intervals:
+    by: [source, herd]
   # Study of each fix: from the first of `columns` with a value (as for herd
   # below), otherwise by_source (source name: study; e.g. to join two sources of
   # one study), otherwise the source's name. In CamelCase, then `rename`.

@@ -893,6 +893,47 @@ summarize_flags <- function(clean, raw = NULL) {
   out[is.na(fixes), fixes := 0L][]
 }
 
+#' @title Time between fixes, by animal and by group
+#' @description For choosing the rate tracks are resampled to
+#'   (`tracks: rate_hours`): the hours between each animal's consecutive
+#'   fixes, summarized for each animal and for each value of each `by`
+#'   column. A group's `animals` are those with at least one interval;
+#'   `median_of_animals_h` is the median of their own medians, so animals with
+#'   many fixes do not outweigh the rest. No positions or times are returned.
+#' @param DT data.table of locations with `id` and `t_` (e.g. target
+#'   `locations`).
+#' @param by character or list. Columns to summarize by besides the animal
+#'   (e.g. `source`, `herd`); those not in `DT` are skipped. An animal with
+#'   fixes in more than one value of a column counts in each.
+#' @return data.table: `level` (`id` or the `by` column), `group` (its
+#'   value), `animals`, `intervals`, and `mean_h`, `median_h`, `p10_h`,
+#'   `p90_h` and `median_of_animals_h` (hours).
+#' @author Julie W. Turner
+#' @export
+summarize_fix_intervals <- function(DT, by = list('source', 'herd')) {
+  by <- intersect(unlist(by), names(DT))
+  DT <- data.table::as.data.table(DT)[, c('id', 't_', by), with = FALSE]
+  data.table::setorder(DT, id, t_)
+  DT[, dt_h := as.numeric(t_ - data.table::shift(t_), units = 'hours'), by = id]
+  DT <- DT[!is.na(dt_h)]
+  per_animal <- DT[, .(med = stats::median(dt_h)), by = id]
+  stats_of <- function(d, meds) {
+    list(animals = data.table::uniqueN(d$id), intervals = length(d$dt_h),
+         mean_h = round(mean(d$dt_h), 2), median_h = round(stats::median(d$dt_h), 2),
+         p10_h = round(unname(stats::quantile(d$dt_h, 0.1)), 2),
+         p90_h = round(unname(stats::quantile(d$dt_h, 0.9)), 2),
+         median_of_animals_h = round(stats::median(meds[id %in% unique(d$id), med]), 2))
+  }
+  out <- lapply(c('id', by), function(col) {
+    g <- DT[, stats_of(.SD, per_animal), by = c(col), .SDcols = c('id', 'dt_h')]
+    data.table::setnames(g, col, 'group')
+    g[, `:=`(level = col, group = as.character(group))]
+  })
+  out <- data.table::rbindlist(out, use.names = TRUE)
+  data.table::setcolorder(out, c('level', 'group'))
+  out[]
+}
+
 #' @title Cleaning step: drop steps faster than a speed limit
 #' @description Quick alternative to `fast_steps`: drops fixes reached at more
 #'   than `max_m_per_hr` metres per hour.
