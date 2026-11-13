@@ -429,3 +429,19 @@ test_that('summarize_fix_intervals summarizes hours between fixes by animal and 
   s <- out[level == 'source']
   expect_equal(c(s$animals, s$intervals, s$median_h, s$median_of_animals_h), c(2, 5, 6, 5))
 })
+
+test_that('local_times puts some fixes clock times into UTC and must come first', {
+  t0 <- as.POSIXct('2021-01-01 10:00', tz = 'UTC')
+  DT <- data.table::data.table(id = c('a', 'a', 'b'), t_ = t0 + c(0, 3600, 0), x_ = 0, y_ = 0,
+                               src = c('L', 'L', 'U'))
+  cleaning <- list(steps = list('local_times'),
+                   params = list(local_times = list(column = 'src', tz = list(L = 'Etc/GMT+8'))))
+  out <- suppressMessages(clean_locations(DT, cleaning, 'EPSG:3005'))
+  expect_equal(format(out$t_, '%H', tz = 'UTC'), c('18', '19', '10'))
+  expect_equal(attr(out, 'cleaning_log')[step == 'local_times', removed], 0)
+  cleaning$steps <- list('dop', 'local_times')
+  expect_error(clean_locations(DT, cleaning, 'EPSG:3005'), 'first')
+  cleaning$steps <- list('local_times')
+  cleaning$params$local_times$tz <- list(L = 'Etc/GMT+8', Z = 'Etc/GMT+7')
+  expect_warning(suppressMessages(clean_locations(DT, cleaning, 'EPSG:3005')), 'Z')
+})

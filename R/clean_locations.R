@@ -51,7 +51,10 @@ clean_locations <- function(DT, cleaning, crs) {
                     end_clusters = clean_end_clusters, drop_end_clusters = clean_drop_end_clusters,
                     speed = clean_speed, min_points = clean_min_points,
                     captures = clean_captures, mortality_records = clean_mortality_records,
-                    long_gaps = clean_long_gaps)
+                    long_gaps = clean_long_gaps, local_times = clean_local_times)
+  if ('local_times' %in% unlist(cleaning$steps) && unlist(cleaning$steps)[1] != 'local_times') {
+    stop('Cleaning step local_times must be listed first, so later steps see times in UTC.', call. = FALSE)
+  }
   run_steps <- function(DT, steps, suffix = '') {
     for (step in unlist(steps)) {
       fun <- cleaning$custom[[step]] %||% available[[step]] %||%
@@ -483,6 +486,39 @@ clean_exclude_points <- function(DT, params, crs) {
     xy <- sf::sf_project(sf::st_crs('EPSG:4326'), sf::st_crs(crs), matrix(c(pt$lon, pt$lat), ncol = 2))
     DT <- DT[sqrt((x_ - xy[1, 1])^2 + (y_ - xy[1, 2])^2) > pt$radius_m]
   }
+  DT
+}
+
+#' @title Cleaning step: put local clock times into UTC, by a column's value
+#' @description For a file joining sources that wrote times differently,
+#'   e.g. all labelled UTC (a trailing `Z`) but some really local clock time.
+#'   Fixes whose `column` has a value listed in `tz` have their clock time read
+#'   in that time zone and converted to UTC (`local_to_utc()`); other fixes are
+#'   left as they are. Removes no fixes; says how many it shifted. List it
+#'   first, so later steps see times in UTC.
+#' @inheritParams clean_bounds
+#' @param params named list: `column`, and `tz` (named list, value of
+#'   `column`: time zone, e.g. `{CMCRP: Etc/GMT+8}` for UTC-8 with no daylight
+#'   saving).
+#' @return data.table, in order of `id` and `t_`.
+#' @author Julie W. Turner
+#' @keywords internal
+#' @noRd
+clean_local_times <- function(DT, params, crs) {
+  if (!params$column %in% names(DT)) {
+    stop('[clean local_times] no column "', params$column, '"', call. = FALSE)
+  }
+  vals <- as.character(DT[[params$column]])
+  for (v in names(params$tz)) {
+    i <- which(vals %in% v)
+    if (!length(i)) {
+      warning('[clean local_times] no fixes with ', params$column, ' ', v)
+      next
+    }
+    data.table::set(DT, i, 't_', local_to_utc(clock_digits(DT$t_[i]), params$tz[[v]]))
+    message(sprintf('[clean local_times] %s fixes with %s %s read as %s', length(i), params$column, v, params$tz[[v]]))
+  }
+  data.table::setorder(DT, id, t_)
   DT
 }
 

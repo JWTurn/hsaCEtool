@@ -97,6 +97,8 @@ locations:
     # They only help shape the study area, so only steps that use positions apply.
     date_only_steps: [bounds, exclude_points]
     # Available steps:
+    #   local_times     read some fixes clock times in a local time zone, by the value of a column,
+    #                   and convert them to UTC (list first), e.g. {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
     #   bounds          keep fixes inside a longitude/latitude box
     #   exclude_points  drop fixes near known false locations (e.g. a field office)
     #   capture_effect  drop the first days after each collar was put on

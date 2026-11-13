@@ -249,6 +249,18 @@ ignored and the clock time is read in `tz`. Without it, a time already read as
 a date-time keeps its label and `tz` has no effect. A fixed offset with no
 daylight saving is written `Etc/GMT+8` (UTC-8; the sign is reversed).
 
+If only some of a file's fixes are local clock time (e.g. a file joining
+several studies, all labelled UTC), use the cleaning step `local_times`
+instead, listed first. It reads the clock time of each fix whose `column` has
+a listed value in that value's time zone, and leaves the rest as they are:
+
+```yaml
+  cleaning:
+    steps: [local_times, bounds, ...]
+    params:
+      local_times: {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
+```
+
 Check a source's times before trusting its stated time zone. Two checks
 have helped: collar temperature (warmest mid-afternoon, about 22-23 h UTC in
 this region) and, for collars on a fixed schedule, the gap between fixes
