@@ -129,7 +129,7 @@ are left out. Columns (only `name` is required; leave out any not used):
 | `url`, `path`, `target_file`, `archive`, `fun` | where the file is, as for any source |
 | `id_col`, `datetime_col`, `hour_col`, `x_col`, `y_col` | the source's `columns`: its animal ID, date and time, hour, and coordinate columns |
 | `input_crs`, `tz` | the source's coordinate system and time zone, if not the defaults |
-| `date_only`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
+| `date_only`, `clock_time`, `id_from_deployment`, `refresh` | `TRUE` or `FALSE` (blank = `FALSE`) |
 | `study`, `herd`, `juris` | the source's study, herd and jurisdiction, for fixes without one from a column (`by_source`, see "After cleaning") |
 | `study_column`, `herd_column` | a column of the data checked first for each fix's study or herd in this source |
 | `provider`, `terms` | who provided the data and on what terms (e.g. a data-sharing agreement), for the record of where the source came from; not used by the pipeline, so editing them reruns nothing |
@@ -242,6 +242,12 @@ column too; the date column is then `datetime`:
       columns: {id: Collar_ID, datetime: Date_Time, hour: Hour}
       tz: America/Whitehorse   # leave out if the times are already UTC
 ```
+
+Some files label local clock times as UTC (e.g. `2020-06-01T08:00:00Z`, which
+is read as 08:00 UTC). Add `clock_time: true` to such a source: the label is
+ignored and the clock time is read in `tz`. Without it, a time already read as
+a date-time keeps its label and `tz` has no effect. A fixed offset with no
+daylight saving is written `Etc/GMT+8` (UTC-8; the sign is reversed).
 
 Check a source's times before trusting its stated time zone. Two checks
 have helped: collar temperature (warmest mid-afternoon, about 22-23 h UTC in

@@ -29,6 +29,27 @@ test_that('standardize_locations turns a date and a local hour into UTC', {
   expect_error(standardize_locations(DT[, !'hr'], src, list(keep_columns = list()), crs), 'hr')
 })
 
+test_that('standardize_locations reads clock_time sources in tz, ignoring the zone label', {
+  crs <- 'EPSG:3005'
+  txt <- c('2020-06-01T08:00:00Z', '2020-01-15T23:30:00Z')
+  src <- list(columns = list(id = 'animal', datetime = 'when', x = 'lon', y = 'lat'),
+              input_crs = 'EPSG:4326', tz = 'Etc/GMT+8', clock_time = TRUE)
+  cfg <- list(tz = 'UTC', keep_columns = list())
+  want <- c('2020-06-01 16:00', '2020-01-16 07:30')
+  # as text
+  DT <- data.table::data.table(animal = 'a', lon = -120, lat = 52, when = txt)
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), want)
+  # as date-times already read as UTC (as fread does with the Z)
+  DT[, when := as.POSIXct(txt, format = '%Y-%m-%dT%H:%M:%SZ', tz = 'UTC')]
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), want)
+  # without clock_time the label is kept
+  src$clock_time <- NULL
+  out <- standardize_locations(DT, src, cfg, crs)
+  expect_equal(format(out$t_, '%Y-%m-%d %H:%M', tz = 'UTC'), c('2020-06-01 08:00', '2020-01-15 23:30'))
+})
+
 test_that('standardize_locations says which columns are missing', {
   DT <- data.table(a = 1)
   expect_error(standardize_locations(DT, list(), list(columns = list(id = 'id', datetime = 't_', x = 'x_', y = 'y_')), crs),

@@ -196,6 +196,12 @@ read_premade_locations <- function(file, src, crs) {
 #'   which follows daylight saving until November 2020), and converted to UTC
 #'   with `local_to_utc()`.
 #'
+#'   A source with `clock_time: true` has times that are clock time in `tz`
+#'   whatever zone they are labelled with (e.g. local times written with a
+#'   trailing `Z`, which `data.table::fread()` reads as UTC). The label is
+#'   ignored and the clock time converted from `tz` to UTC with
+#'   `local_to_utc()`.
+#'
 #'   A source with `date_only: true` has dates but no times of day (e.g. the
 #'   Chisana and Redstone files). Its fixes are given noon UTC on their date
 #'   and a `date_only` column (TRUE): they are cleaned with
@@ -235,6 +241,10 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
     # a date column plus a whole-hour column, as clock time in tz
     DT[, t_ := as.POSIXct(format(as.Date(t_)), tz = 'UTC') + as.numeric(DT[[cols$hour]]) * 3600]
     if (tz != 'UTC') DT[, t_ := local_to_utc(t_, tz)]
+  } else if (isTRUE(src$clock_time)) {
+    # clock time in tz, whatever zone the text or date-time is labelled with
+    DT[, t_ := clock_digits(t_)]
+    if (tz != 'UTC') DT[, t_ := local_to_utc(t_, tz)]
   } else if (!inherits(DT$t_, 'POSIXct')) {
     DT[, t_ := as.POSIXct(t_, tz = tz)]
   }
@@ -249,6 +259,20 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
   DT[, source := src$name %||% NA_character_]
   if (isTRUE(src$date_only)) DT[, date_only := TRUE]
   DT[]
+}
+
+#' @title Clock time of date-times or text, stored as UTC
+#' @description Drops any zone label (a trailing `Z` or UTC offset in text,
+#'   the time zone of a date-time) and keeps the clock time, stored as UTC,
+#'   ready for `local_to_utc()`.
+#' @param x POSIXct or character (e.g. `2020-06-01T08:00:00Z`).
+#' @return POSIXct in UTC.
+#' @keywords internal
+#' @noRd
+clock_digits <- function(x) {
+  if (inherits(x, 'POSIXct')) return(as.POSIXct(format(x, '%Y-%m-%d %H:%M:%OS6'), tz = 'UTC'))
+  x <- sub('(Z|[+-][0-9]{2}:?[0-9]{2})$', '', trimws(as.character(x)))
+  as.POSIXct(sub('T', ' ', x, fixed = TRUE), tz = 'UTC', tryFormats = c('%Y-%m-%d %H:%M:%OS', '%Y-%m-%d %H:%M', '%Y-%m-%d'))
 }
 
 #' @title Convert local clock times to UTC

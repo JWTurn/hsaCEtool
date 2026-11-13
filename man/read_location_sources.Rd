@@ -28,7 +28,7 @@ column of the locations}
 \item{id_col, datetime_col, hour_col, x_col, y_col}{the source's \code{columns}: names of
 its animal ID, date and time, hour, and coordinate columns}
 \item{input_crs, tz}{the source's coordinate system and time zone, if not the defaults}
-\item{date_only, id_from_deployment, refresh}{TRUE or FALSE (blank = FALSE)}
+\item{date_only, clock_time, id_from_deployment, refresh}{TRUE or FALSE (blank = FALSE)}
 \item{study, herd, juris}{the source's study, herd and jurisdiction, for
 fixes that have none from a column (the \code{by_source} settings)}
 \item{study_column, herd_column}{a column of the data checked first for
