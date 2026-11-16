@@ -9,7 +9,8 @@ add_record_tables(
   captures = NULL,
   mortality = NULL,
   capture_source = NULL,
-  collar_column = "collar_id"
+  collar_column = "collar_id",
+  herd_cfg = NULL
 )
 }
 \arguments{
@@ -22,6 +23,11 @@ add_record_tables(
 \item{capture_source}{character. Source the capture log belongs to.}
 
 \item{collar_column}{character. Collar column for the captures step.}
+
+\item{herd_cfg}{named list. The \verb{locations: herd:} settings. With \code{keep}
+set, mortality records whose \code{herd} (in CamelCase, after \code{rename}) is not
+kept are dropped (records with no herd are kept); their number is logged
+by the step.}
 }
 \value{
 \code{cleaning}, with \code{params$captures} and \code{params$mortality_records} filled in.

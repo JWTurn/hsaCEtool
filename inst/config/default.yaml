@@ -133,6 +133,9 @@ locations:
       speed: {max_m_per_hr: 12000}
       min_points: {n: 3}
       mortality_records: {after_days: 1}          # drop fixes more than this many days after a recorded death
+      #   optional: tz (zone of the recorded dates; default UTC), dead (outcome values that mean a death,
+      #   e.g. [Mortality]), qa: {max_fixes_after: 2, max_path_m: 500, max_step_m: 250, skip: [moves_after]}
+      #   to check each record against the fixes and hold back doubtful ones (see config/README.md)
       long_gaps: {max_gap_days: 365, min_fixes: 3}
 
   # Records kept outside the location data, used by the cleaning steps captures
@@ -141,7 +144,7 @@ locations:
   captures: null          # a capture log: {source, url or path, target_file, archive, collar_column,
                           #   date_order (dmy or mdy, for dates with slashes; default dmy),
                           #   columns: {id, capture_id, date, collar, sex, recapture, herd}}
-  mortality_records: []   # list of {source, url or path, target_file, archive, date_order, columns: {id, date, cause}}
+  mortality_records: []   # list of {source, url or path, target_file, archive, sheet, date_order, columns: {id, date, cause, outcome, herd}}
 
   # Study area: the area landscape layers are prepared for.
   study_area:

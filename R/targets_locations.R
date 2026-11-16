@@ -139,17 +139,17 @@ targets_locations <- function(cfg) {
     rec_targets <- c(rec_targets, list(
       tar_target_raw(paste0(nm, '_file'), substitute(get_source(SRC, cfg_paths), list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), mr)))),
                      format = 'file', cue = download_cue(mr$refresh, freeze)),
-      tar_target_raw(nm, substitute(read_mortality_records(FILE, COLS, SOURCE, ORDER),
+      tar_target_raw(nm, substitute(read_mortality_records(FILE, COLS, SOURCE, ORDER, SHEET),
                                     list(FILE = as.symbol(paste0(nm, '_file')), COLS = mr$columns, SOURCE = mr$source,
-                                         ORDER = mr$date_order %||% 'dmy')))
+                                         ORDER = mr$date_order %||% 'dmy', SHEET = mr$sheet)))
     ))
     mort_names <- c(mort_names, nm)
   }
   # the cleaning settings, with the record tables for the steps that use them
-  clean_cfg <- substitute(add_record_tables(cfg_cleaning, CAP, MORT, CAPSRC, CAPCOL),
+  clean_cfg <- substitute(add_record_tables(cfg_cleaning, CAP, MORT, CAPSRC, CAPCOL, HERD),
                           list(CAP = if (!is.null(cap)) quote(capture_log) else NULL,
                                MORT = if (length(mort_names)) as.call(c(quote(list), purrr::map(mort_names, as.symbol))) else NULL,
-                               CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id'))
+                               CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id', HERD = cfg$locations$herd))
 
   # optional: only the herds in locations: herd: keep:, before cleaning
   herd_keep <- length(unlist(cfg$locations$herd$keep)) > 0
