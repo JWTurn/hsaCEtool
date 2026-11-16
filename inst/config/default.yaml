@@ -99,6 +99,8 @@ locations:
     # Available steps:
     #   local_times     read some fixes clock times in a local time zone, by the value of a column,
     #                   and convert them to UTC (list first), e.g. {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
+    #                   add dst: {zone: America/Vancouver} to find, per animal and period, collars whose clock
+    #                   followed daylight saving (logged in target animal_decisions; see config/README.md)
     #   bounds          keep fixes inside a longitude/latitude box
     #   exclude_points  drop fixes near known false locations (e.g. a field office)
     #   capture_effect  drop the first days after each collar was put on

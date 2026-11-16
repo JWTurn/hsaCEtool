@@ -28,6 +28,13 @@
   wrote times differently, reads the clock time of fixes with listed values of
   a column (e.g. `{column: DataSource, tz: {CMCRP: Etc/GMT+8}}`) in that time
   zone and converts them to UTC; other fixes are left as they are.
+- `local_times` can find which collars' clocks followed daylight saving
+  (`dst: {zone: America/Vancouver}`), per animal and period, from the shift of
+  each collar's fix schedule at daylight saving changes (dates from the time
+  zone database, so B.C.'s 2007 rule change is followed). Animals with no
+  readable change borrow the answer of others with the same value; `overrides`
+  replace any answer. Each period, its evidence and how it was decided are
+  logged in `animal_decisions`. Without `dst`, nothing changes.
 - The `dop` step's `column` and the `duplicates` step's `dop_column` can list
   several columns (e.g. `[DOP, PDOP, HDOP]`): each fix's DOP is the first with
   a value. One column works as before.

@@ -261,6 +261,42 @@ a listed value in that value's time zone, and leaves the rest as they are:
       local_times: {column: DataSource, tz: {CMCRP: Etc/GMT+8}}
 ```
 
+Collars of one source can differ: some clocks follow daylight saving and some
+do not, and a replaced collar can differ from the one before it. Add `dst:` to
+find out per animal and period:
+
+```yaml
+      local_times:
+        column: DataSource
+        tz: {CMCRP: Etc/GMT+8}          # standard time (no daylight saving)
+        dst:
+          zone: America/Vancouver       # same standard time, with daylight saving
+          # values: [CMCRP]             # which values to check (default: all in tz)
+          # window_days: 14             # days compared before and after each change
+          # min_fixes: 5                # fixes needed on each side of a change
+          # borrow_days: 365            # see below
+          # overrides: [{id: A1, from: 2003-01-01, to: 2004-06-30, dst: true}]
+```
+
+Most collars fix on a set schedule (e.g. every 4 h). For each animal and each
+daylight saving change, the step compares the most common clock time of fixes
+(modulo the schedule's interval) in the two weeks before and after. Read in
+standard time, a clock that follows daylight saving moves the schedule 1 h
+later when clocks go forward and 1 h earlier when they go back: those fixes
+are read in `zone`. No shift means no daylight saving. The opposite shift
+(1 h earlier in spring, later in fall) is a collar that fixes by local daylight
+time but writes correct times, so it is left as standard time. Where an
+animal's answer changes between two changes, the new period starts after the
+longest gap in its fixes in between (often a collar being replaced). Animals
+that span no readable change take the majority answer of other animals with
+the same value at the nearest change (within `borrow_days`); with none, standard
+time. `overrides` (dates included) replace what was found; keep them in local
+settings if animal IDs are not public. Each animal's periods, the evidence and
+how each was decided are in the target `animal_decisions` (step `local_times`).
+The test cannot see a collar that both fixes and writes times by local daylight
+time (no shift, but times 1 h off in summer); compare sources by time of day of
+movement or collar temperature for that.
+
 Check a source's times before trusting its stated time zone. Two checks
 have helped: collar temperature (warmest mid-afternoon, about 22-23 h UTC in
 this region) and, for collars on a fixed schedule, the gap between fixes
