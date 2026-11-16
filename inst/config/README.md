@@ -439,6 +439,34 @@ restricted storage that is not in git, to report back to the data owners.
   `mortality_status` becomes `dead` (the first rule in `mortality_rules`) and
   fixes more than `after_days` (default 1) after the death are dropped.
   Records for animals not in the data are skipped with a warning.
+
+  Recorded dates can be wrong. Optional settings check each record and log
+  what was done in `animal_decisions` (one row per record, with its `flag`):
+
+  ```yaml
+      mortality_records:
+        after_days: 1
+        tz: America/Vancouver   # the dates are local days
+        dead: [Mortality]       # outcome values that mean a death (columns: outcome)
+        qa: {max_fixes_after: 2, max_path_m: 500, max_step_m: 250, skip: [moves_after]}
+  ```
+
+  With `dead`, records with another outcome (e.g. Censored) are not applied,
+  and those that have a date anyway are listed (`not_a_death`). An animal with
+  more than one record is listed (`duplicate_records`; the first is used).
+  With `qa`, each record is compared with the animal's fixes after the date:
+  `ends_before` (last fix before the date, e.g. a collar that dropped or
+  failed first), `ends_on_date`, `moves_after` (path among the fixes after
+  the date over `max_path_m`, or one of its steps over `max_step_m`; the step
+  into the first fix after the date is logged as `step_into_m` but not
+  counted, as it can be the animal's last move), `few_fixes_after` (at most
+  `max_fixes_after`) or `many_fixes_no_move` (a collar lying still). Records
+  with a flag in `skip`
+  are not applied: their fixes are kept and the animal is not marked dead by
+  the record, for review. A mortality source can name a `sheet` of a
+  spreadsheet (default: the first), and `columns: herd`: with
+  `locations: herd: keep` set, records for other herds are dropped before the
+  step and only counted (`other_herds`).
 - `long_gaps` splits a track at a silence of more than `max_gap_days`
   (default 365) into separate animals (`id`, `id_2`, ...), as it usually joins
   two deployments, and drops pieces of `min_fixes` (default 3) fixes or fewer

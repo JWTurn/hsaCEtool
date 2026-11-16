@@ -35,6 +35,18 @@
   readable change borrow the answer of others with the same value; `overrides`
   replace any answer. Each period, its evidence and how it was decided are
   logged in `animal_decisions`. Without `dst`, nothing changes.
+- Mortality records can be checked before they are applied. `mortality_records`
+  settings `dead` (outcome values that mean a death; new column `outcome`),
+  `tz` (dates are local days) and `qa` (each record compared with the fixes
+  after its date: `ends_before`, `ends_on_date`, `moves_after`,
+  `few_fixes_after`, `many_fixes_no_move`; flags in `skip`, by default
+  `moves_after`, are not applied). Non-deaths with a date and animals with
+  more than one record are listed. Every record's flag and action are in
+  `animal_decisions`. A mortality source can name a `sheet` and a `herd`
+  column: with `locations: herd: keep`, records for other herds are dropped
+  and counted. `moves_after` uses movement among the fixes after the date
+  (the step into the first is logged as `step_into_m`). Without the new
+  settings, nothing changes.
 - The `dop` step's `column` and the `duplicates` step's `dop_column` can list
   several columns (e.g. `[DOP, PDOP, HDOP]`): each fix's DOP is the first with
   a value. One column works as before.
