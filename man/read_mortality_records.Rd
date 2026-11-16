@@ -4,22 +4,24 @@
 \alias{read_mortality_records}
 \title{Read mortality records}
 \usage{
-read_mortality_records(file, cols, source, date_order = "dmy")
+read_mortality_records(file, cols, source, date_order = "dmy", sheet = NULL)
 }
 \arguments{
 \item{file}{character. The spreadsheet (xlsx) or CSV.}
 
 \item{cols}{named list. Column names in the file for \code{id}, \code{date} and
-optionally \code{cause}.}
+optionally \code{cause}, \code{outcome} (e.g. Mortality, Censored) and \code{herd}.}
 
 \item{source}{character. The location source the records belong to.}
 
 \item{date_order}{character. Order of day, month and year in dates written
 with slashes: "dmy" (e.g. 25/3/2019) or "mdy" (3/25/2019).}
+
+\item{sheet}{character or integer. Sheet of a spreadsheet; NULL for the first.}
 }
 \value{
 data.table with \code{source}, \code{id}, \code{mortality_date} (POSIXct, UTC
-midnight) and \code{mortality_cause}.
+midnight), \code{mortality_cause}, \code{mortality_outcome} and \code{herd}.
 }
 \description{
 Read mortality records

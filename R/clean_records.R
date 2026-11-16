@@ -38,18 +38,19 @@ read_capture_log <- function(file, cols, source, date_order = 'dmy') {
 #' @title Read mortality records
 #' @param file character. The spreadsheet (xlsx) or CSV.
 #' @param cols named list. Column names in the file for `id`, `date` and
-#'   optionally `cause`.
+#'   optionally `cause`, `outcome` (e.g. Mortality, Censored) and `herd`.
 #' @param source character. The location source the records belong to.
 #' @inheritParams read_capture_log
 #' @return data.table with `source`, `id`, `mortality_date` (POSIXct, UTC
-#'   midnight) and `mortality_cause`.
+#'   midnight), `mortality_cause`, `mortality_outcome` and `herd`.
+#' @param sheet character or integer. Sheet of a spreadsheet; NULL for the first.
 #' @author Julie W. Turner
 #' @export
-read_mortality_records <- function(file, cols, source, date_order = 'dmy') {
-  x <- read_table_file(file)
+read_mortality_records <- function(file, cols, source, date_order = 'dmy', sheet = NULL) {
+  x <- read_table_file(file, sheet)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
   out <- data.table::data.table(source = source, id = tidy_id(get('id')), mortality_date = parse_record_dates(get('date'), date_order),
-                                mortality_cause = get('cause'))
+                                mortality_cause = get('cause'), mortality_outcome = get('outcome'), herd = get('herd'))
   out[!is.na(id) & nzchar(id)]
 }
 
@@ -78,17 +79,18 @@ tidy_id <- function(x) {
   x
 }
 
-#' @title Read the first sheet of a spreadsheet, or a CSV
+#' @title Read a sheet of a spreadsheet (the first, by default), or a CSV
 #' @param file character. One or more files; the first xlsx, xls or csv is read.
+#' @param sheet character or integer. Sheet of a spreadsheet; NULL for the first.
 #' @return data.table, all columns as read.
 #' @keywords internal
 #' @noRd
-read_table_file <- function(file) {
+read_table_file <- function(file, sheet = NULL) {
   f <- file[grepl('[.](xlsx|xls|csv)$', file, ignore.case = TRUE)][1]
   if (is.na(f)) stop('No xlsx, xls or csv file in: ', paste(basename(file), collapse = ', '), call. = FALSE)
   if (grepl('csv$', f, ignore.case = TRUE)) return(data.table::fread(f, colClasses = 'character'))
   rlang::check_installed('readxl', reason = 'to read xlsx tables.')
-  data.table::as.data.table(readxl::read_excel(f, col_types = 'text'))
+  data.table::as.data.table(readxl::read_excel(f, sheet = sheet %||% 1, col_types = 'text'))
 }
 
 #' @title Dates written in different ways

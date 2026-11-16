@@ -141,7 +141,7 @@ locations:
   captures: null          # a capture log: {source, url or path, target_file, archive, collar_column,
                           #   date_order (dmy or mdy, for dates with slashes; default dmy),
                           #   columns: {id, capture_id, date, collar, sex, recapture, herd}}
-  mortality_records: []   # list of {source, url or path, target_file, archive, date_order, columns: {id, date, cause}}
+  mortality_records: []   # list of {source, url or path, target_file, archive, sheet, date_order, columns: {id, date, cause, outcome, herd}}
 
   # Study area: the area landscape layers are prepared for.
   study_area:
