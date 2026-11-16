@@ -496,11 +496,24 @@ clean_exclude_points <- function(DT, params, crs) {
 #'   in that time zone and converted to UTC (`local_to_utc()`); other fixes are
 #'   left as they are. Removes no fixes; says how many it shifted. List it
 #'   first, so later steps see times in UTC.
+#'
+#'   Collars of one source may differ: some clocks follow daylight saving and
+#'   some do not. With `dst:` set, the step finds out per animal and period,
+#'   from each collar's fix schedule around the daylight saving changes (see
+#'   `dst_switch_shifts()` and `dst_periods()`), and reads the clock in
+#'   `dst$zone` where it follows daylight saving and in `tz` where it does not.
+#'   Each animal's periods, the evidence and how each was decided are returned
+#'   as decisions (target `animal_decisions`).
 #' @inheritParams clean_bounds
 #' @param params named list: `column`, and `tz` (named list, value of
 #'   `column`: time zone, e.g. `{CMCRP: Etc/GMT+8}` for UTC-8 with no daylight
-#'   saving).
-#' @return data.table, in order of `id` and `t_`.
+#'   saving). Optional `dst`: `zone` (time zone with daylight saving and the
+#'   same standard time, e.g. `America/Vancouver`), `values` (values of
+#'   `column` to check; default all in `tz`), `window_days` (14), `min_fixes`
+#'   (5), `borrow_days` (365), and `overrides` (list of `{id, from, to, dst}`,
+#'   dates as `YYYY-MM-DD`, both included; replaces what was found).
+#' @return data.table, in order of `id` and `t_`, with attribute `decisions`
+#'   when `dst` is set.
 #' @author Julie W. Turner
 #' @keywords internal
 #' @noRd
@@ -509,16 +522,80 @@ clean_local_times <- function(DT, params, crs) {
     stop('[clean local_times] no column "', params$column, '"', call. = FALSE)
   }
   vals <- as.character(DT[[params$column]])
+  ds <- params$dst
+  scope <- character()
+  if (!is.null(ds)) {
+    if (is.null(ds$zone)) stop('[clean local_times] dst: needs a zone, e.g. America/Vancouver', call. = FALSE)
+    scope <- unlist(ds$values) %||% names(params$tz)
+    bad <- setdiff(scope, names(params$tz))
+    if (length(bad)) stop('[clean local_times] dst: values not in tz: ', paste(bad, collapse = ', '), call. = FALSE)
+    for (v in scope) {
+      if (std_offset(params$tz[[v]]) != std_offset(ds$zone)) {
+        stop(sprintf('[clean local_times] standard time of %s (%s) differs from %s', v, params$tz[[v]], ds$zone),
+             call. = FALSE)
+      }
+    }
+  }
   for (v in names(params$tz)) {
     i <- which(vals %in% v)
     if (!length(i)) {
       warning('[clean local_times] no fixes with ', params$column, ' ', v)
       next
     }
+    if (v %in% scope) next
     data.table::set(DT, i, 't_', local_to_utc(clock_digits(DT$t_[i]), params$tz[[v]]))
     message(sprintf('[clean local_times] %s fixes with %s %s read as %s', length(i), params$column, v, params$tz[[v]]))
   }
+
+  i <- which(vals %in% scope)
+  if (length(i)) {
+    d <- data.table::data.table(.i = i, id = DT$id[i], value = vals[i], clk = clock_digits(DT$t_[i]))
+    data.table::setorder(d, id, clk)
+    sw <- dst_switches(ds$zone, min(d$clk), max(d$clk))
+    sh <- dst_switch_shifts(d, sw, ds$window_days %||% 14, ds$min_fixes %||% 5)
+    per <- dst_periods(d, sh, ds$borrow_days %||% 365)
+    d[, `:=`(dst = FALSE, method = 'no evidence')]
+    d[per, on = .(id, clk >= from, clk < to), `:=`(dst = i.dst, method = i.method)]
+    for (o in ds$overrides) {
+      from <- clock_digits(as.character(o$from))
+      to <- clock_digits(as.character(o$to)) + 86400
+      d[id == o$id & clk >= from & clk < to, `:=`(dst = isTRUE(o$dst), method = 'override')]
+    }
+    std <- unlist(params$tz)
+    d[, tz := data.table::fifelse(dst, ds$zone, std[value])]
+    d[, utc := local_to_utc(clk, tz[1]), by = tz]
+    ## daylight clock times that occur twice, when clocks go back; read as the first
+    d[, repeated := dst & format(utc + 3600, '%Y-%m-%d %H:%M:%S', tz = ds$zone) ==
+        format(clk, '%Y-%m-%d %H:%M:%S', tz = 'UTC')]
+    data.table::set(DT, d$.i, 't_', d$utc)
+
+    src <- if ('source' %in% names(DT)) as.character(DT$source[d$.i]) else NA_character_
+    d[, source := src]
+    d[, run := data.table::rleid(id, dst, method)]
+    dec <- d[, .(source = source[1], value = value[1], tz = tz[1], dst = dst[1], method = method[1],
+                 from = min(clk), to = max(clk), fixes = .N, repeated_hour = sum(repeated)), by = .(id, run)]
+    counts <- unique(per[, .(id, switches, dst_clock, same, local_schedule, unclear)])
+    dec <- counts[dec, on = 'id']
+    for (j in c('switches', 'dst_clock', 'same', 'local_schedule', 'unclear')) {
+      data.table::set(dec, which(is.na(dec[[j]])), j, 0L)
+    }
+    dec[, action := data.table::fifelse(dst, 'clock read with daylight saving', 'clock read as standard time')]
+    dec[, detail := sprintf(
+      '%s, %s to %s (clock); %s; changes spanned %d: daylight saving %d, no shift %d, local schedule %d, unclear %d',
+      method, format(from, '%Y-%m-%d'), format(to, '%Y-%m-%d'), tz, switches, dst_clock, same, local_schedule, unclear
+    )]
+    dec <- dec[, .(source, id, action, fixes, detail, value, tz, dst, method, from, to, switches, dst_clock, same,
+                   local_schedule, unclear, repeated_hour)]
+    for (v in scope) {
+      k <- d[value == v]
+      if (!nrow(k)) next
+      message(sprintf('[clean local_times] %s fixes with %s %s: %s read as %s, %s as %s (%s animals with daylight saving)',
+                      nrow(k), params$column, v, sum(k$dst), ds$zone, sum(!k$dst), params$tz[[v]],
+                      data.table::uniqueN(k[(dst), id])))
+    }
+  }
   data.table::setorder(DT, id, t_)
+  if (length(i)) data.table::setattr(DT, 'decisions', dec)
   DT
 }
 
