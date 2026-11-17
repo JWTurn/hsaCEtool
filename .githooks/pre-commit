@@ -35,4 +35,24 @@ if [ $status -ne 0 ]; then
   echo "Caribou location data must not be committed (see AGENTS.md)."
   echo "Unstage with: git restore --staged <file>"
 fi
+
+# 4. ASCII only in R code and tests (write other characters as \uXXXX escapes)
+ascii=0
+for f in $files; do
+  case "$f" in
+    R/* | tests/*) ;;
+    *) continue ;;
+  esac
+  hits=$(git show ":$f" | LC_ALL=C grep -n -E '[^[:print:][:space:]]')
+  if [ -n "$hits" ]; then
+    echo "BLOCKED (non-ASCII characters): $f"
+    echo "$hits" | sed 's/^/  /'
+    ascii=1
+  fi
+done
+if [ $ascii -ne 0 ]; then
+  echo ""
+  echo "Use ASCII in R/ and tests/: -- for a dash, \\uXXXX escapes in strings."
+  status=1
+fi
 exit $status

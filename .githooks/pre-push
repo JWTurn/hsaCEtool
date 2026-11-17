@@ -1,0 +1,6 @@
+#!/bin/sh
+# Refuse to push host names, IPv4 addresses or restricted terms (see AGENTS.md and
+# check-restricted-names). Turn on once per clone:
+#   git config core.hooksPath .githooks
+# The lists are gitignored and live in this clone or a folder above it.
+exec bash "$(git rev-parse --show-toplevel)/.githooks/check-restricted-names" "$@"

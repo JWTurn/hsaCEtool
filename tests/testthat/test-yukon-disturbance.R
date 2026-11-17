@@ -15,7 +15,7 @@ mapped <- function(last_year = 2012L) {
 }
 
 test_that('yukon_norm matches types written differently', {
-  expect_equal(yukon_norm(c(' Developed – dense ', 'Survey /  Cutline', 'UNKNOWN')),
+  expect_equal(yukon_norm(c(' Developed \u2013 dense ', 'Survey /  Cutline', 'UNKNOWN')),
                c('developed - dense', 'survey / cutline', 'unknown'))
 })
 

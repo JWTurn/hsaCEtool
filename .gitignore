@@ -45,3 +45,7 @@ data/
 *.sqlite
 *.tif
 *.tiff
+
+# restricted-term lists for .githooks/check-restricted-names (normally in a folder above)
+_restricted_terms.txt
+.claude/r-project-policy.json

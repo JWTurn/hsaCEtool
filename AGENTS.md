@@ -11,7 +11,7 @@ and landscape layers for habitat selection analysis (iSSA) behind the caribou
 cumulative effects (CE) tool. `targets` runs a workflow as named steps ("targets"),
 keeps each result, and reruns only steps whose code or inputs changed.
 
-- Repo: `JWTurn/hsaCEtool`, default branch `main`. Private for now; will become public.
+- Repo: `JWTurn/hsaCEtool`, default branch `main`. Public.
 - Code came from `JWTurn/caribou_CEtool_dataPrep` (history of `R/` and `tests/` kept).
 - The package holds **code only**. Projects (study areas) keep their own
   `_targets.R`, `config/<project>.yaml` and data store. The main user is the
@@ -64,10 +64,11 @@ keeps each result, and reruns only steps whose code or inputs changed.
 
 ### Caribou location data are confidential
 
-This repo will become public. Caribou GPS locations, raw or cleaned, must never
-become public: not through git, GitHub (issues, PRs, comments, releases, Actions
-logs), published artifacts or web pages, or anything shared outside the projects'
-restricted storage. Data-sharing agreements depend on this.
+The package (this repo) is public; the data it processes are not. Caribou GPS
+locations, raw or cleaned, are confidential and must never become public: not
+through git, GitHub (issues, PRs, comments, releases, Actions logs), published
+artifacts or web pages, or anything shared outside the projects' restricted
+storage. Data-sharing agreements depend on this.
 
 - **Restricted:** raw collar locations (fixes), and anything that still holds
   them: e.g. the used (observed) steps in an iSSA table, used points in an RSF
@@ -80,11 +81,20 @@ restricted storage. Data-sharing agreements depend on this.
   with coordinates or IDs plus times) in code, comments, docs, commit messages,
   issues or PRs. Summaries without coordinates are fine.
 - **Tests and examples** use made-up locations only (see `tests/testthat/helper-source.R`).
-- **Guard:** `.githooks/pre-commit` blocks data file types and tables with
-  coordinate-like columns. Turn it on once per clone with
-  `git config core.hooksPath .githooks`. Never bypass it with `--no-verify`; if it
-  blocks something that is not location data, ask the user.
-- **Before the repo goes public:** check the whole git history, not just current files.
+- **Guard:** `.githooks/pre-commit` blocks data file types, tables with
+  coordinate-like columns, and non-ASCII characters in `R/` and `tests/` (write them
+  as `\uXXXX` escapes). `.githooks/pre-push` runs `check-restricted-names`, which
+  blocks host names, IPv4 addresses and other restricted terms in what a push
+  publishes (added lines, file names, commit messages); its lists
+  (`_restricted_terms.txt`, `.claude/r-project-policy.json`) are gitignored and kept
+  in the clone or a folder above it. `bash .githooks/check-restricted-names --tree`
+  scans the whole tree. Turn the hooks on once per clone with
+  `git config core.hooksPath .githooks`. Never bypass them with `--no-verify`; if
+  one blocks something harmless, ask the user.
+- **If restricted data are ever pushed.** If restricted content turns up in a commit
+  that has been pushed (or in an issue or PR), tell the user at once: removing it
+  means rewriting history and asking GitHub to purge cached copies, which is the
+  user's call.
 
 ---
 
