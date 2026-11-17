@@ -1,5 +1,16 @@
 # hsaCEtool 0.0.0.9000
 
+- The hand-off of premade files between phases can run in the pipeline
+  instead of by hand. In the phase that cleans the locations,
+  `locations: premade_write: true` adds target `premade_files`
+  (`write_premade_files()`), which writes the zips whenever the cleaned
+  locations or study areas change, and `premade_upload: true` adds target
+  `premade_upload` (`upload_premade_files()`), which uploads them to
+  `premade_folder`. In the phase that reads them, `premade_check: true`
+  checks each Google Drive link in `premade:` and the study area sources
+  every run (`drive_file_version()`) and downloads a file again only when it
+  changed, so `refresh: true` is no longer set by hand. All default to
+  `false`; `write_premade()` and `upload_premade()` work as before.
 - New setting `tracks: keep:` (`keep_track_fixes()`): keep only fixes whose
   columns hold the listed values for tracks and steps, e.g. `{GPS_VHF: [GPS,
   GPS-VHF]}` so a VHF relocation never forms a step. The dropped fixes still

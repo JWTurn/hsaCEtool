@@ -331,21 +331,23 @@ targets_locations <- function(cfg) {
   } else {
     # premade cleaned locations, downloaded apart from any older file of the same name
     premade <- utils::modifyList(list(subfolder = 'premade'), premade)
-    list(
-      tar_target_raw(
+    c(
+      premade_file_targets(
         'locations_premade_file',
-        substitute(get_source(SRC, cfg_paths), list(SRC = premade)),
-        format = 'file',
-        cue = tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')
+        premade,
+        cfg,
+        tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')
       ),
-      tar_target_raw(
-        'locations_clean',
-        keep_herds_call(substitute(
-          read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
-          list(SRC = premade)
-        ))
-      ),
-      tar_target(flag_summary, summarize_flags(locations_clean))
+      list(
+        tar_target_raw(
+          'locations_clean',
+          keep_herds_call(substitute(
+            read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
+            list(SRC = premade)
+          ))
+        ),
+        tar_target(flag_summary, summarize_flags(locations_clean))
+      )
     )
   }
 
@@ -380,12 +382,8 @@ targets_locations <- function(cfg) {
       )
     )
   } else {
-    list(
-      tar_target_raw(
-        'study_area_file',
-        substitute(get_source(SRC, cfg_paths), list(SRC = sa_src)),
-        format = 'file'
-      ),
+    c(
+      premade_file_targets('study_area_file', sa_src, cfg),
       tar_terra_vect(
         study_area,
         make_study_area(
@@ -414,13 +412,8 @@ targets_locations <- function(cfg) {
       )
     )
   } else {
-    list(
-      tar_target_raw(
-        'study_area_extended_file',
-        substitute(get_source(SRC, cfg_paths), list(SRC = ext_src)),
-        format = 'file',
-        cue = ext_cue
-      ),
+    c(
+      premade_file_targets('study_area_extended_file', ext_src, cfg, ext_cue),
       tar_terra_vect(
         study_area_extended,
         make_study_area_extended(
@@ -433,6 +426,40 @@ targets_locations <- function(cfg) {
     )
   }
 
+  # locations: premade_write: and premade_upload: the premade files (cleaned locations and
+  # study areas, zipped) for a later phase, rewritten and uploaded whenever they change
+  write_targets <- if (is.null(premade) && isTRUE(cfg$locations$premade_write)) {
+    c(
+      list(
+        tar_target_raw(
+          'premade_files',
+          quote(
+            write_premade_files(
+              locations_clean,
+              study_area,
+              study_area_extended,
+              cfg_project$name,
+              cfg_study_area$buffer_m,
+              file.path(cfg_paths$outputs, cfg_project$name, 'premade')
+            )
+          ),
+          format = 'file'
+        )
+      ),
+      if (isTRUE(cfg$locations$premade_upload)) {
+        list(
+          tar_target_raw(
+            'premade_upload',
+            substitute(
+              upload_premade_files(premade_files, FOLDERS, cfg_project$name, EMAIL),
+              list(FOLDERS = cfg$locations$premade_folder, EMAIL = cfg$run$google_email)
+            )
+          )
+        )
+      }
+    )
+  }
+
   c(
     src_targets,
     clean_targets,
@@ -442,6 +469,7 @@ targets_locations <- function(cfg) {
     ),
     sa_targets,
     ext_targets,
+    write_targets,
     list(
       tar_target(
         locations,
@@ -524,4 +552,53 @@ download_cue <- function(refresh, freeze) {
   } else {
     tar_cue()
   }
+}
+
+#' @title Targets for a premade file
+#' @description The file's target (`get_source()`, `format = "file"`) and, with
+#'   `locations: premade_check: true` and a Google Drive link, a target
+#'   `<name>_drive` that checks the file's checksum on Drive every run
+#'   ([drive_file_version()]). The file target depends on it, so the file is
+#'   downloaded again (afresh) only when it changed on Drive. Not with a cue
+#'   that never reruns (a frozen extended study area).
+#' @param name character. The file target's name.
+#' @param src named list. The source (`path`, or `url` with `target_file`, ...).
+#' @param cfg named list. The settings.
+#' @param cue a `tar_cue()`, or NULL for the default.
+#' @return list of targets.
+#' @keywords internal
+#' @noRd
+premade_file_targets <- function(name, src, cfg, cue = NULL) {
+  check <- isTRUE(cfg$locations$premade_check) &&
+    is_drive_url(src$url %||% NA_character_) &&
+    !identical(cue$mode, 'never')
+  cue <- cue %||% targets::tar_option_get('cue')
+  if (!check) {
+    return(list(tar_target_raw(
+      name,
+      substitute(get_source(SRC, cfg_paths), list(SRC = src)),
+      format = 'file',
+      cue = cue
+    )))
+  }
+  drive <- paste0(name, '_drive')
+  list(
+    tar_target_raw(
+      drive,
+      substitute(drive_file_version(URL, EMAIL), list(URL = src$url, EMAIL = cfg$run$google_email)),
+      cue = tar_cue(mode = 'always')
+    ),
+    tar_target_raw(
+      name,
+      substitute(
+        {
+          DRIVE
+          get_source(SRC, cfg_paths)
+        },
+        list(DRIVE = as.symbol(drive), SRC = utils::modifyList(src, list(refresh = TRUE)))
+      ),
+      format = 'file',
+      cue = cue
+    )
+  )
 }

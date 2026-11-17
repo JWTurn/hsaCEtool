@@ -71,6 +71,24 @@ locations:
   # patterns with their folders, first match wins, e.g.
   # {clean_NMC.zip: <private folder>, "*": <shared folder>}. null = not shared.
   premade_folder: null
+  # Hand-off to a later phase, run by the pipeline instead of by hand. Only in
+  # the phase that cleans the locations (no `premade:`).
+  #   premade_write   true: target premade_files writes the premade zips (as
+  #                   write_premade()) to outputs/<project>/premade/ whenever the
+  #                   cleaned locations or study areas change. false: run
+  #                   write_premade() by hand.
+  #   premade_upload  true: target premade_upload then uploads them to
+  #                   premade_folder (as upload_premade()). Needs premade_write
+  #                   and premade_folder. false: run upload_premade() by hand.
+  premade_write: false
+  premade_upload: false
+  # In the phase that reads the premade files (`premade:`, `study_area: source:`,
+  # `study_area: extended: source:` as Google Drive links): true checks each file
+  # on Drive every run (target <file target>_drive) and downloads it again only
+  # when it changed there, so no `refresh: true` is needed. Needs internet;
+  # false uses the copies already downloaded (e.g. on a cluster compute node).
+  # A frozen extended study area (freeze: true) is never checked.
+  premade_check: false
   columns:               # names of the columns in the input data (default for every source)
     id: id                # animal (collar deployment) ID
     datetime: t_          # fix date and time (UTC)

@@ -187,6 +187,20 @@ check_config <- function(cfg) {
   if (!is.null(premade) && is.null(premade$path) && is.null(premade$url)) {
     add('locations: premade: give a path or a url')
   }
+  if (isTRUE(cfg$locations$premade_write) && !is.null(premade)) {
+    add(
+      'locations: premade_write: true is for the phase that cleans the locations; ',
+      'this one reads premade files (premade:)'
+    )
+  }
+  if (isTRUE(cfg$locations$premade_upload)) {
+    if (!isTRUE(cfg$locations$premade_write)) {
+      add('locations: premade_upload: true needs premade_write: true')
+    }
+    if (!length(cfg$locations$premade_folder)) {
+      add('locations: premade_upload: true needs premade_folder: (the Drive folder(s))')
+    }
+  }
   if (length(cfg$locations$sources) == 0 && is.null(premade)) {
     add('locations: sources is empty, so there are no caribou locations to read')
   }

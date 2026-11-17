@@ -36,30 +36,57 @@
 #' @export
 write_premade <- function(project = NULL, config_dir = NULL) {
   ctx <- pipeline_context(project, config_dir)
-  project <- ctx$project
   cfg <- ctx$cfg
-  dir <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'premade'), create = TRUE)
+  write_premade_files(
+    targets::tar_read(locations_clean, store = ctx$store),
+    targets::tar_read(study_area, store = ctx$store),
+    targets::tar_read(study_area_extended, store = ctx$store),
+    project = ctx$project,
+    buffer_m = cfg$locations$study_area$buffer_m,
+    out_dir = file.path(cfg$paths$outputs, ctx$project, 'premade')
+  )
+}
+
+#' @title Write the premade files
+#' @description The work of [write_premade()], from the results themselves.
+#'   Also run as the target `premade_files` when `locations: premade_write:`
+#'   is true, so the files are rewritten whenever the cleaned locations or
+#'   the study areas change.
+#' @param locations_clean data.table. The cleaned locations (target `locations_clean`).
+#' @param study_area,study_area_extended SpatVector. The study areas.
+#' @param project character. The project name, used in the file names.
+#' @param buffer_m numeric. The study area's buffer (metres), used in its file name.
+#' @param out_dir character. Folder the zips are written to.
+#' @return character. The zip files written.
+#' @author Julie W. Turner
+#' @export
+write_premade_files <- function(
+  locations_clean,
+  study_area,
+  study_area_extended,
+  project,
+  buffer_m,
+  out_dir
+) {
+  dir <- reproducible::checkPath(out_dir, create = TRUE)
   tmp <- tempfile()
   reproducible::checkPath(tmp, create = TRUE)
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
-  km <- round((cfg$locations$study_area$buffer_m %||% 0) / 1000)
+  km <- round((buffer_m %||% 0) / 1000)
   names <- c(
     clean = paste0('clean_', project),
     area = sprintf('clean_%s_%skmBuff', project, km),
     extended = paste0(project, '_studyArea_extended')
   )
 
-  saveRDS(
-    targets::tar_read(locations_clean, store = ctx$store),
-    file.path(tmp, paste0(names[['clean']], '.rds'))
-  )
+  saveRDS(locations_clean, file.path(tmp, paste0(names[['clean']], '.rds')))
   terra::writeVector(
-    targets::tar_read(study_area, store = ctx$store),
+    study_area,
     file.path(tmp, paste0(names[['area']], '.gpkg')),
     overwrite = TRUE
   )
   terra::writeVector(
-    targets::tar_read(study_area_extended, store = ctx$store),
+    study_area_extended,
     file.path(tmp, paste0(names[['extended']], '.gpkg')),
     overwrite = TRUE
   )
@@ -111,15 +138,35 @@ upload_premade <- function(project = NULL, zips = NULL, folders = NULL, config_d
       call. = FALSE
     )
   }
-  if (!is.null(cfg$run$google_email)) {
-    options(gargle_oauth_email = cfg$run$google_email)
-  }
   zips <- zips %||%
     list.files(
       file.path(cfg$paths$outputs, project, 'premade'),
       pattern = '[.]zip$',
       full.names = TRUE
     )
+  upload_premade_files(zips, folders, project, cfg$run$google_email)
+}
+
+#' @title Upload premade files to their Drive folders
+#' @description The work of [upload_premade()]. Also run as the target
+#'   `premade_upload` when `locations: premade_upload:` is true, so the files
+#'   are uploaded whenever the target `premade_files` rewrites them.
+#' @param zips character. Files to upload.
+#' @param folders Drive folder link or ID, or a named list or vector of them by
+#'   file name pattern (as `locations: premade_folder:`).
+#' @param project character. The project name: `clean_<project>.zip` holds the
+#'   cleaned locations, and its folder must be restricted.
+#' @param google_email character or NULL. The Google login to use (`run: google_email`).
+#' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
+#' @author Julie W. Turner
+#' @export
+upload_premade_files <- function(zips, folders, project, google_email = NULL) {
+  if (!length(folders)) {
+    stop('Set locations: premade_folder: to upload the premade files', call. = FALSE)
+  }
+  if (!is.null(google_email)) {
+    options(gargle_oauth_email = google_email)
+  }
   dest <- upload_destinations(basename(zips), folders)
   # only the cleaned locations must stay restricted
   locs <- basename(zips) == paste0('clean_', project, '.zip')
@@ -213,4 +260,56 @@ upload_to_drive <- function(files, folder, public_msg) {
     )
   }))
   out[]
+}
+
+#' @title Version of a file on Google Drive
+#' @description Its MD5 checksum, as Drive reports it. Run every time as the
+#'   target `<file target>_drive` when `locations: premade_check:` is true, so
+#'   a premade file (cleaned locations or study area) on Drive is downloaded
+#'   again only when it changed there, with no `refresh: true` to set by hand.
+#'   Needs internet: on a computer without it, set `premade_check: false` to
+#'   use the copies already downloaded.
+#' @param url character. A Google Drive link to the file.
+#' @param google_email character or NULL. The Google login to use (`run: google_email`).
+#' @return character. The checksum.
+#' @author Julie W. Turner
+#' @export
+drive_file_version <- function(url, google_email = NULL) {
+  if (!is.null(google_email)) {
+    options(gargle_oauth_email = google_email)
+  }
+  f <- tryCatch(
+    googledrive::drive_get(googledrive::as_id(url)),
+    error = function(e) {
+      stop(
+        'Could not check ',
+        url,
+        ' on Google Drive (',
+        conditionMessage(e),
+        '). ',
+        'Without internet, set locations: premade_check: false to use the copies already ',
+        'downloaded.',
+        call. = FALSE
+      )
+    }
+  )
+  md5 <- f$drive_resource[[1]]$md5Checksum
+  if (is.null(md5)) {
+    stop(
+      'Google Drive gives no checksum for ',
+      url,
+      ' (is it a Google Doc, not a file?)',
+      call. = FALSE
+    )
+  }
+  md5
+}
+
+#' @title Is this a Google Drive link?
+#' @param url character.
+#' @return logical.
+#' @keywords internal
+#' @noRd
+is_drive_url <- function(url) {
+  length(url) == 1 && !is.na(url) && grepl('^https?://(drive|docs)[.]google[.]com/', url)
 }
