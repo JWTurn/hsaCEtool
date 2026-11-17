@@ -22,7 +22,8 @@ targets_config <- function(cfg) {
     # columns kept after cleaning (with the columns tracks are split by) and how study, herd and juris are made
     tar_target(cfg_finish, list(
       keep = if (length(cfg$locations$keep_after_cleaning)) unique(c(unlist(cfg$locations$keep_after_cleaning), unlist(cfg$tracks$split_by))),
-      study = cfg$locations$study, herd = cfg$locations$herd, juris = cfg$locations$juris
+      study = cfg$locations$study, herd = cfg$locations$herd, juris = cfg$locations$juris,
+      fill = cfg$locations$fill
     )),
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
