@@ -36,6 +36,30 @@ test_that('filter_years and fit_step_distr', {
   expect_error(fit_step_distr(NULL, 'sl_', 'gamma'), 'No tracks are left')
 })
 
+test_that('keep_track_fixes keeps only the listed values and counts the rest', {
+  # made-up fixes: two GPS animals, one with a VHF fix, and one VHF animal
+  DT <- data.table(
+    id = c('a', 'a', 'a', 'b', 'b', 'c'),
+    GPS_VHF = c('GPS', 'GPS', 'VHF', 'GPS-VHF', NA, 'VHF'),
+    t_ = as.POSIXct('2020-03-01', tz = 'UTC') + 0:5 * 3600
+  )
+  expect_identical(keep_track_fixes(DT, list()), DT)
+  expect_identical(keep_track_fixes(DT, NULL), DT)
+
+  out <- keep_track_fixes(DT, list(GPS_VHF = list('GPS', 'GPS-VHF')))
+  expect_equal(out$GPS_VHF, c('GPS', 'GPS', 'GPS-VHF'))
+  sel <- attr(out, 'track_fix_selection')
+  expect_equal(sel[value == 'VHF', c(fixes, animals)], c(2L, 2L))
+  expect_false(sel[is.na(value), kept])
+  expect_equal(sum(sel$fixes), nrow(DT))
+
+  # a blank value is dropped even when NA is listed
+  expect_equal(nrow(keep_track_fixes(DT, list(GPS_VHF = c("GPS", NA)))), 2)
+
+  expect_error(keep_track_fixes(DT, list(collar = 'GPS')), 'keep_after_cleaning')
+  expect_error(keep_track_fixes(DT, list(GPS_VHF = 'Gps')), 'no fixes with value')
+})
+
 test_that('make_random_steps skips an animal whose bursts all have fewer than 3 steps', {
   set.seed(5)
   t0 <- as.POSIXct('2020-03-01', tz = 'UTC')

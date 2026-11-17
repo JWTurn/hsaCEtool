@@ -533,6 +533,33 @@ the median of the animals' own medians), for each animal and for each value of
 each column in `locations: fix_intervals: by:` (default `[source, herd]`).
 A column used here must be kept in `keep_after_cleaning`.
 
+### Fixes used for tracks
+
+`tracks: keep:` keeps only some fixes for tracks and steps, chosen by the values
+of columns of the target `locations`. For example, to build steps from GPS
+fixes only, so that a VHF relocation (less precise, and often weeks apart)
+never forms a step:
+
+```yaml
+tracks:
+  keep: {GPS_VHF: [GPS, GPS-VHF]}
+```
+
+| Part | Meaning |
+|---|---|
+| column name (`GPS_VHF`) | A column of `locations`; it must be listed in `locations: keep_after_cleaning:` |
+| values (`[GPS, GPS-VHF]`) | The values to keep, written exactly as in the data (case too) |
+| several columns | A fix is kept only if it matches every column |
+| blank values | Dropped; fill them first with `locations: fill:` if they should be kept |
+| `{}` (default) | Keep every fix |
+
+The fixes are dropped after the study area is made (all fixes shape it) and
+before tracks are resampled, so an animal with both GPS and VHF fixes keeps a
+GPS-only track. A listed value with no fixes stops the run, as it is probably
+misspelled. The target `track_fix_selection` counts the fixes and animals of
+each value of each column (counts only, no locations) and whether they were
+kept.
+
 ## Landscape layers: `layers_<project>.csv`
 
 Each landscape layer is one row of a table named in `landscape: layers:`. To add

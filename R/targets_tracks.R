@@ -29,12 +29,16 @@ targets_tracks <- function(cfg) {
     tar_target(steps, prep_steps(randsteps, cfg_tracks))
   }
   out <- list(
-    # only the years being analysed (and, for test runs, part of the data)
+    # only the years being analysed, (for test runs) part of the data, and the fixes in
+    # tracks: keep: (e.g. GPS only)
     tar_target(
       locations_years,
       filter_years(locations, cfg_tracks$min_year, cfg_tracks$max_year) |>
-        subset_locations(cfg_subset)
+        subset_locations(cfg_subset) |>
+        keep_track_fixes(cfg_tracks$keep)
     ),
+    # fixes and animals kept and dropped by tracks: keep: (counts only; NULL without it)
+    tar_target(track_fix_selection, attr(locations_years, 'track_fix_selection')),
 
     # the iteration units
     tar_target(
