@@ -221,7 +221,19 @@ tracks:
   # and `keep` (the polygons whose field is one of keep), e.g.
   #   within: {url: ..., target_file: provinces.shp, field: name, keep: [Yukon, British Columbia]}
   within: null
-  n_random: 30            # random (available) steps per observed step
+  # Keep only some fixes for tracks and steps, chosen by the values of columns of
+  # the target `locations`, e.g. only GPS fixes, so that a VHF relocation (less
+  # precise, often weeks apart) never forms a step:
+  #   keep: {GPS_VHF: [GPS, GPS-VHF]}
+  # Each entry is `column: [values to keep]`; a fix is kept only if it matches
+  # every entry. Values must match exactly (case too). A fix with a blank value
+  # is dropped (fill blanks first with `locations: fill:`). The dropped fixes
+  # still shape the study area. Each column must be in
+  # `locations: keep_after_cleaning:`. A listed value with no fixes stops the run
+  # (probably misspelled). Target `track_fix_selection` counts the fixes and
+  # animals kept and dropped for each value. {} = keep every fix.
+  keep: {}
+  n_random: 30           # random (available) steps per observed step
   sl_distr: gamma         # distribution fitted to step lengths: gamma, exp, lnorm, hnorm or unif
   ta_distr: vonmises      # distribution fitted to turning angles: vonmises or unif
   min_year: null          # keep steps from this year ... (null = from the first year in the data)

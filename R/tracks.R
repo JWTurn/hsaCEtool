@@ -310,6 +310,66 @@ filter_years <- function(DT, min_year, max_year) {
   DT[yr >= (min_year %||% -Inf) & yr <= (max_year %||% Inf)]
 }
 
+#' @title Keep only some fixes for tracks
+#' @description Optional: keeps the fixes whose columns hold the values listed
+#'   in `tracks: keep:`, and drops the rest, before tracks are made (e.g. only
+#'   GPS fixes, so a VHF relocation never forms a step). Each entry of `keep` is
+#'   a column and the values to keep; a fix is kept only if it matches every
+#'   entry. Values are compared as text; a fix with a blank (NA) value is
+#'   dropped. The dropped fixes still shaped the study area. An empty
+#'   `keep` keeps every fix. A column not in `DT` is an error (it must be kept
+#'   in `locations: keep_after_cleaning:`), as is a listed value with no fixes,
+#'   as it is probably misspelled.
+#' @param DT data.table of standard locations.
+#' @param keep named list. The `tracks: keep:` setting: column = values.
+#' @return data.table. With `keep`, it has the attribute `track_fix_selection`:
+#'   for each column in `keep` and each of its values in `DT`, the fixes and
+#'   animals (counts only) and whether they were kept by that column.
+#' @author Julie W. Turner
+#' @export
+keep_track_fixes <- function(DT, keep) {
+  if (!length(keep)) {
+    return(DT)
+  }
+  missing <- setdiff(names(keep), names(DT))
+  if (length(missing)) {
+    stop(
+      'tracks: keep: column(s) not in the locations: ',
+      paste(missing, collapse = ', '),
+      ' (add them to locations: keep_after_cleaning)',
+      call. = FALSE
+    )
+  }
+  rows <- rep(TRUE, nrow(DT))
+  counts <- vector('list', length(keep))
+  for (k in seq_along(keep)) {
+    col <- names(keep)[k]
+    vals <- as.character(unlist(keep[[k]]))
+    v <- as.character(DT[[col]])
+    absent <- setdiff(vals[!is.na(vals)], v)
+    if (length(absent)) {
+      stop(
+        'tracks: keep: ',
+        col,
+        ': no fixes with value(s) ',
+        paste(absent, collapse = ', '),
+        call. = FALSE
+      )
+    }
+    hit <- !is.na(v) & v %in% vals
+    counts[[k]] <- data.table::data.table(value = v, id = DT$id, kept = hit)[,
+      .(fixes = .N, animals = data.table::uniqueN(id)),
+      keyby = .(value, kept)
+    ][, column := col][]
+    rows <- rows & hit
+  }
+  out <- DT[rows]
+  sel <- data.table::rbindlist(counts)
+  data.table::setcolorder(sel, 'column')
+  data.table::setattr(out, 'track_fix_selection', sel)
+  out
+}
+
 #' @title First and last year of the landscape layers
 #' @description `tracks: min_year` and `max_year` if set, otherwise the first
 #'   and last year of the steps. Built layers whose `first_year` or

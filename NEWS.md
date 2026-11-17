@@ -1,5 +1,10 @@
 # hsaCEtool 0.0.0.9000
 
+- New setting `tracks: keep:` (`keep_track_fixes()`): keep only fixes whose
+  columns hold the listed values for tracks and steps, e.g. `{GPS_VHF: [GPS,
+  GPS-VHF]}` so a VHF relocation never forms a step. The dropped fixes still
+  shape the study area. Target `track_fix_selection` counts the fixes and
+  animals kept and dropped. The default `{}` keeps every fix, as before.
 - Fire and harvest year (`build: fire_year`, `harvest_year`) are now averaged
   up the resolutions in steps: each 30 m cell's most recent year; at the
   finest resolution, the mean of its burned (harvested) 30 m cells; at each
