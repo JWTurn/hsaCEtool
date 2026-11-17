@@ -11,7 +11,8 @@ finish_locations(DT, fin_cfg)
 
 \item{fin_cfg}{named list: \code{keep} (character; NULL or empty keeps every
 column), \code{study}, \code{herd} and \code{juris} (the \verb{locations: study:}, \verb{herd:} and
-\verb{juris:} settings).}
+\verb{juris:} settings), and \code{fill} (the \verb{locations: fill:} settings:
+\verb{<column>: \{by: <column>, values: \{<value of by>: <value>\}\}}).}
 }
 \value{
 data.table.
@@ -20,7 +21,9 @@ data.table.
 Run after cleaning (on \code{locations}), so \code{locations_clean}
 keeps every column. \code{sex} is filled from \code{Gender} where \code{sex} is missing,
 then coded \code{f}, \code{m} or NA (e.g. "Female", "F" and "f" all become \code{f};
-"Unknown" and "NA" become NA). \code{study}, \code{herd} and \code{juris} are made by
+"Unknown" and "NA" become NA). Blank values of other columns are filled
+with \code{fill}, by the value of another column (e.g. the collar type of
+each data source). \code{study}, \code{herd} and \code{juris} are made by
 \code{make_study()}, \code{make_herd()} and \code{\link[=make_juris]{make_juris()}}. Then only
 \code{id}, \code{source}, \code{t_}, \code{x_}, \code{y_} and the \code{keep} columns are kept; \code{keep}
 columns not in the data are skipped.

@@ -127,14 +127,17 @@ drop_date_only <- function(DT) {
 #' @description Run after cleaning (on `locations`), so `locations_clean`
 #'   keeps every column. `sex` is filled from `Gender` where `sex` is missing,
 #'   then coded `f`, `m` or NA (e.g. "Female", "F" and "f" all become `f`;
-#'   "Unknown" and "NA" become NA). `study`, `herd` and `juris` are made by
+#'   "Unknown" and "NA" become NA). Blank values of other columns are filled
+#'   with `fill`, by the value of another column (e.g. the collar type of
+#'   each data source). `study`, `herd` and `juris` are made by
 #'   `make_study()`, `make_herd()` and [make_juris()]. Then only
 #'   `id`, `source`, `t_`, `x_`, `y_` and the `keep` columns are kept; `keep`
 #'   columns not in the data are skipped.
 #' @param DT data.table of cleaned locations.
 #' @param fin_cfg named list: `keep` (character; NULL or empty keeps every
 #'   column), `study`, `herd` and `juris` (the `locations: study:`, `herd:` and
-#'   `juris:` settings).
+#'   `juris:` settings), and `fill` (the `locations: fill:` settings:
+#'   `<column>: {by: <column>, values: {<value of by>: <value>}}`).
 #' @return data.table.
 #' @author Julie W. Turner
 #' @export
@@ -145,6 +148,7 @@ finish_locations <- function(DT, fin_cfg) {
     DT[is.na(sex) | !nzchar(trimws(sex)), sex := as.character(Gender)]
   }
   if ('sex' %in% names(DT)) DT[, sex := standardize_sex(sex)]
+  fill_columns(DT, fin_cfg$fill)
   DT[, `:=`(study = make_study(DT, fin_cfg$study), herd = make_herd(DT, fin_cfg$herd),
              juris = make_juris(DT, fin_cfg$juris))]
 
@@ -153,6 +157,32 @@ finish_locations <- function(DT, fin_cfg) {
     DT <- DT[, unique(c('id', 'source', 't_', 'x_', 'y_', intersect(keep, names(DT)))), with = FALSE]
   }
   DT[]
+}
+
+#' @title Fill blank values of columns from another column
+#' @description For each column in `fill_cfg`, values that are NA or blank
+#'   are set from `values`, looked up by the fix's value of column `by`
+#'   (default `source`), e.g. the collar type of each data source in a file
+#'   that leaves it blank for some. A column not in the data is added. Values
+#'   already present are kept. Changes `DT` in place.
+#' @param DT data.table.
+#' @param fill_cfg named list: `<column>: {by: <column>, values: {<value of by>: <value>}}`.
+#' @return `DT`, invisibly.
+#' @keywords internal
+#' @noRd
+fill_columns <- function(DT, fill_cfg) {
+  for (col in names(fill_cfg)) {
+    values <- unlist(fill_cfg[[col]]$values)
+    by <- fill_cfg[[col]]$by %||% 'source'
+    if (!length(values)) next
+    if (!by %in% names(DT)) stop(sprintf('locations: fill: %s: by: column %s is not in the locations', col, by), call. = FALSE)
+    if (!col %in% names(DT)) DT[, (col) := NA_character_]
+    now <- as.character(DT[[col]])
+    key <- as.character(DT[[by]])
+    blank <- (is.na(now) | !nzchar(trimws(now))) & key %in% names(values)
+    if (any(blank)) DT[blank, (col) := unname(values[key[blank]])]
+  }
+  invisible(DT)
 }
 
 #' @title Code sex as f, m or NA

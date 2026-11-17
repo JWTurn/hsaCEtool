@@ -467,6 +467,8 @@ restricted storage that is not in git, to report back to the data owners.
   spreadsheet (default: the first), and `columns: herd`: with
   `locations: herd: keep` set, records for other herds are dropped before the
   step and only counted (`other_herds`).
+  With `columns: sex`, missing `sex` is filled from the records (coded as
+  for the capture log) for every animal with a record, whatever its outcome.
 - `long_gaps` splits a track at a silence of more than `max_gap_days`
   (default 365) into separate animals (`id`, `id_2`, ...), as it usually joins
   two deployments, and drops pieces of `min_fixes` (default 3) fixes or fewer
@@ -490,6 +492,10 @@ keeps every column. Before that:
 - `sex` is coded `f`, `m` or blank (NA), whatever the source used (`Female`,
   `F`, `f`; `Unknown` becomes blank), and filled from a `Gender` column where
   `sex` is missing.
+- `locations: fill:` fills blank values of a column from the value of another
+  column (`by`, default `source`), e.g. the collar type of data sources whose
+  file leaves it blank: `GPS_VHF: {by: DataSource, values: {Clay: GPS, Heiko:
+  VHF}}`. Values already there are kept.
 - `juris` is the jurisdiction the data come from, in lower case (e.g. `bc`,
   `yt`, `nt`), set for each source in `locations: juris: by_source:` (`source
   name: juris`), or taken from `juris: columns:` as for `herd`.

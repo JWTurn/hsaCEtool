@@ -10,7 +10,8 @@ read_mortality_records(file, cols, source, date_order = "dmy", sheet = NULL)
 \item{file}{character. The spreadsheet (xlsx) or CSV.}
 
 \item{cols}{named list. Column names in the file for \code{id}, \code{date} and
-optionally \code{cause}, \code{outcome} (e.g. Mortality, Censored) and \code{herd}.}
+optionally \code{cause}, \code{outcome} (e.g. Mortality, Censored), \code{herd} and
+\code{sex} (coded as in \code{\link[=read_capture_log]{read_capture_log()}}; used to fill missing \code{sex}).}
 
 \item{source}{character. The location source the records belong to.}
 
@@ -21,7 +22,7 @@ with slashes: "dmy" (e.g. 25/3/2019) or "mdy" (3/25/2019).}
 }
 \value{
 data.table with \code{source}, \code{id}, \code{mortality_date} (POSIXct, UTC
-midnight), \code{mortality_cause}, \code{mortality_outcome} and \code{herd}.
+midnight), \code{mortality_cause}, \code{mortality_outcome}, \code{herd} and \code{sex}.
 }
 \description{
 Read mortality records

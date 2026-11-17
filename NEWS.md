@@ -47,6 +47,14 @@
   and counted. `moves_after` uses movement among the fixes after the date
   (the step into the first is logged as `step_into_m`). Without the new
   settings, nothing changes.
+- A mortality source can name a `sex` column (`columns: sex`): missing `sex`
+  is filled from it for every animal with a record, whatever its outcome
+  (logged in `animal_decisions`). Coded as for the capture log.
+- New setting `locations: fill:` fills blank values of a column from another
+  column's value after cleaning (target `locations`), e.g.
+  `GPS_VHF: {by: DataSource, values: {Clay: GPS}}` for data sources whose
+  file leaves the collar type blank. `by` defaults to `source`. Not set (the
+  default), nothing changes.
 - The `dop` step's `column` and the `duplicates` step's `dop_column` can list
   several columns (e.g. `[DOP, PDOP, HDOP]`): each fix's DOP is the first with
   a value. One column works as before.

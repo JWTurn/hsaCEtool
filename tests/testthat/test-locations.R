@@ -346,6 +346,16 @@ test_that('finish_locations codes sex, adds study and herd, and keeps only the l
   # no keep list: every column kept
   expect_true(all(c('gps_dop', 'Gender') %in% names(finish_locations(DT, list(herd = herd_cfg)))))
   expect_equal(standardize_sex(c('M', 'male', 'f', 'Unknown', '')), c('m', 'm', 'f', NA, NA))
+  # fill: blank collar types from another column; values already there kept
+  DT[, `:=`(DataSource = c('Clay', 'Clay', 'Heiko', 'BCGov', 'Heiko', NA), GPS_VHF = c(NA, '', NA, 'GPS', 'GPS', NA))]
+  out <- finish_locations(DT, list(keep = 'GPS_VHF', herd = herd_cfg,
+                                   fill = list(GPS_VHF = list(by = 'DataSource', values = list(Clay = 'GPS', Heiko = 'VHF')))))
+  expect_equal(out$GPS_VHF, c('GPS', 'GPS', 'VHF', 'GPS', 'GPS', NA))
+  # by defaults to source; a new column is added
+  out <- finish_locations(DT, list(herd = herd_cfg, fill = list(collar = list(values = list(bc = 'Lotek')))))
+  expect_equal(out$collar, c('Lotek', 'Lotek', NA, NA, NA, NA))
+  expect_error(finish_locations(DT, list(herd = herd_cfg, fill = list(x = list(by = 'nope', values = list(a = 'b'))))),
+               'by: column nope')
   expect_equal(to_camel(c('Moose Lake (previously Tay River)', 'BC', 'PrairieCreek', NA)),
                c('MooseLakePreviouslyTayRiver', 'BC', 'PrairieCreek', NA))
 })

@@ -30,19 +30,19 @@ read_capture_log <- function(file, cols, source, date_order = 'dmy') {
   out <- data.table::data.table(source = source, id = tidy_id(get('id')), capture_id = tidy_id(get('capture_id')),
                                 capture_date = parse_record_dates(get('date'), date_order), collar = tidy_id(get('collar')),
                                 sex_raw = get('sex'), recapture = get('recapture'), herd = get('herd'))
-  out[, sex := data.table::fcase(toupper(sex_raw) %in% c('F', 'FALSE', 'FEMALE'), 'f',
-                                 toupper(sex_raw) %in% c('M', 'MALE'), 'm', default = NA_character_)]
+  out[, sex := record_sex(sex_raw)]
   out[!is.na(id) & nzchar(id)]
 }
 
 #' @title Read mortality records
 #' @param file character. The spreadsheet (xlsx) or CSV.
 #' @param cols named list. Column names in the file for `id`, `date` and
-#'   optionally `cause`, `outcome` (e.g. Mortality, Censored) and `herd`.
+#'   optionally `cause`, `outcome` (e.g. Mortality, Censored), `herd` and
+#'   `sex` (coded as in [read_capture_log()]; used to fill missing `sex`).
 #' @param source character. The location source the records belong to.
 #' @inheritParams read_capture_log
 #' @return data.table with `source`, `id`, `mortality_date` (POSIXct, UTC
-#'   midnight), `mortality_cause`, `mortality_outcome` and `herd`.
+#'   midnight), `mortality_cause`, `mortality_outcome`, `herd` and `sex`.
 #' @param sheet character or integer. Sheet of a spreadsheet; NULL for the first.
 #' @author Julie W. Turner
 #' @export
@@ -50,8 +50,20 @@ read_mortality_records <- function(file, cols, source, date_order = 'dmy', sheet
   x <- read_table_file(file, sheet)
   get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
   out <- data.table::data.table(source = source, id = tidy_id(get('id')), mortality_date = parse_record_dates(get('date'), date_order),
-                                mortality_cause = get('cause'), mortality_outcome = get('outcome'), herd = get('herd'))
+                                mortality_cause = get('cause'), mortality_outcome = get('outcome'), herd = get('herd'),
+                                sex = record_sex(get('sex')))
   out[!is.na(id) & nzchar(id)]
+}
+
+#' @title Sex in a record table, coded f, m or NA
+#' @description B.C. `FALSE` is read as female, as Excel turns a typed F into FALSE.
+#' @param x character.
+#' @return character.
+#' @keywords internal
+#' @noRd
+record_sex <- function(x) {
+  data.table::fcase(toupper(x) %in% c('F', 'FALSE', 'FEMALE'), 'f', toupper(x) %in% c('M', 'MALE'), 'm',
+                    default = NA_character_)
 }
 
 #' @title Trim spaces, even from text that is not valid UTF-8
@@ -228,7 +240,8 @@ clean_captures <- function(DT, params, crs) {
 #'   records with a flag in `qa$skip` (default `moves_after`: the animal still
 #'   moved after the date) are not applied, so their fixes are kept for review.
 #'   Records for herds outside `locations: herd: keep` are dropped first
-#'   ([add_record_tables()]) and only counted.
+#'   ([add_record_tables()]) and only counted. Where the table has `sex`, it
+#'   fills missing `sex` for every animal with a record, whatever its outcome.
 #' @inheritParams clean_bounds
 #' @param params named list: `table` (all sources' records), `after_days`
 #'   (default 1), `tz` (time zone of the recorded dates, default `UTC`: a death
@@ -253,6 +266,24 @@ clean_mortality_records <- function(DT, params, crs) {
                                        action = 'mortality records for other herds skipped', fixes = 0L,
                                        detail = sprintf('%s records for herds not in locations: herd: keep', n_other),
                                        flag = 'other_herds')
+  }
+  # sex from the records where missing (any outcome: censored animals too)
+  if ('sex' %in% names(rec) && any(!is.na(rec$sex))) {
+    if (!'sex' %in% names(DT)) DT[, sex := NA_character_]
+    sx <- unique(rec[!is.na(sex), .(source, id, rec_sex = sex)], by = c('source', 'id'))
+    DT[sx, on = c('source', 'id'), .fill := i.rec_sex]
+    if (!'.fill' %in% names(DT)) DT[, .fill := NA_character_]
+    fill <- (is.na(DT$sex) | !nzchar(trim_bytes(DT$sex))) & !is.na(DT$.fill)
+    if (any(fill)) {
+      dec[[length(dec) + 1]] <- data.table::data.table(source = paste(unique(DT$source[fill]), collapse = ', '),
+                                                       id = NA_character_, action = 'sex filled from mortality records',
+                                                       fixes = sum(fill),
+                                                       detail = sprintf('%s animals whose sex was missing',
+                                                                        data.table::uniqueN(DT[fill, .(source, id)])),
+                                                       flag = NA_character_)
+      DT[fill, sex := .fill]
+    }
+    DT[, .fill := NULL]
   }
   dead <- unlist(params$dead)
   if (length(dead)) {

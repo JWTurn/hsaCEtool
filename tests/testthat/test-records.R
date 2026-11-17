@@ -61,6 +61,18 @@ test_that('mortality records drop fixes after the death and make the animal dead
   expect_equal(unique(st[id == 'C']$mortality_status), 'alive')
 })
 
+test_that('mortality records fill missing sex, whatever the outcome', {
+  DT <- data.table(source = 'BC', id = rep(c('A', 'C', 'D'), each = 5), t_ = day(rep(1:5, 3)), x_ = 1, y_ = 1,
+                   sex = c(rep(NA, 5), rep('', 5), rep('m', 5)))
+  rec <- data.table(source = 'BC', id = c('A', 'C', 'D'), mortality_date = day(c(3, NA, NA)), mortality_cause = NA,
+                    mortality_outcome = c('Mortality', 'Censored', 'Censored'), sex = record_sex(c('F', 'FALSE', 'F')))
+  out <- clean_mortality_records(DT, list(table = rec, dead = 'Mortality'), 'EPSG:3154')
+  expect_equal(unique(out[, .(id, sex)])$sex, c('f', 'f', 'm'))   # censored C filled; D's own sex kept
+  d <- attr(out, 'decisions')
+  expect_equal(d[action == 'sex filled from mortality records']$detail, '2 animals whose sex was missing')
+  expect_equal(max(out[id == 'A']$t_), day(4))
+})
+
 test_that('long_gaps splits a track at long silences and drops stray fixes', {
   DT <- data.table(source = 'BC', id = c(rep('A', 10), rep('B', 12)),
                    t_ = day(c(1:5, 500:504, 1:10, 2000:2001)), x_ = 1, y_ = 1)

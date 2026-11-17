@@ -144,7 +144,7 @@ locations:
   captures: null          # a capture log: {source, url or path, target_file, archive, collar_column,
                           #   date_order (dmy or mdy, for dates with slashes; default dmy),
                           #   columns: {id, capture_id, date, collar, sex, recapture, herd}}
-  mortality_records: []   # list of {source, url or path, target_file, archive, sheet, date_order, columns: {id, date, cause, outcome, herd}}
+  mortality_records: []   # list of {source, url or path, target_file, archive, sheet, date_order, columns: {id, date, cause, outcome, herd, sex}}
 
   # Study area: the area landscape layers are prepared for.
   study_area:
@@ -168,6 +168,10 @@ locations:
   # t_, x_, y_ and these columns are kept, so tracks and steps stay small.
   # locations_clean keeps every column. [] keeps every column.
   keep_after_cleaning: [mortality_status, mortality_basis, deployment_end_type, sex, juris, study, herd]
+  # Blank values of a column filled from another column's value, after cleaning:
+  # <column>: {by: <column, default source>, values: {<value of by>: <value>}},
+  # e.g. GPS_VHF: {by: DataSource, values: {Clay: GPS}}. {} fills nothing.
+  fill: {}
   # Hours between fixes after cleaning (target fix_intervals), by animal and by each of these
   # columns of target locations (keep them in keep_after_cleaning), to choose tracks: rate_hours.
   fix_intervals:
