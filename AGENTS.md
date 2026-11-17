@@ -107,6 +107,11 @@ storage. Data-sharing agreements depend on this.
 - **Document R functions with `#'` roxygen blocks.** Internal helpers get
   `@keywords internal` + `@noRd`; use `@inheritParams`; preserve `@author`; never
   reorder function arguments.
+- **Formatting: `air`** (settings in `air.toml`, 100-character lines). Run
+  `air format .` on the R files you change before committing; CI (`format.yaml`)
+  fails on unformatted code. The one-time reformat is listed in
+  `.git-blame-ignore-revs`; turn that on once per clone with
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 - **Don't reformat or touch code unless asked.** If cleanup beyond the request seems
   needed, flag it, justify it, and get approval first.
 - **Edit `.R` files with R, not the editor's edit/write tools** (e.g. `writeLines()`),

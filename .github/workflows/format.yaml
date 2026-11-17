@@ -1,0 +1,33 @@
+# Code formatting: air format --check (settings in air.toml) on every push to main and every PR.
+# Fails if any R file is not formatted; fix locally with `air format .` and commit.
+# Action pinned to a commit SHA, as in R-CMD-check.yaml; air version pinned to match local use.
+name: format
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  air:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: posit-dev/setup-air@fd20dd239848b9d807848a7ab92265cf197de694 # v1.0.2
+        with:
+          version: "0.13.0"
+
+      - name: Check formatting
+        run: air format . --check
