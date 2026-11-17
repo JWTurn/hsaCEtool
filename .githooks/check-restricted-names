@@ -1,0 +1,373 @@
+#!/usr/bin/env bash
+## Refuse host names, IPv4 addresses and other restricted terms in what this repository publishes:
+## its tracked files, their names and its commit messages. Copied from JWTurn/caribou_SM_CEtool
+## (scripts/git-hooks/check-restricted-names, 2026-11-17); keep the two in step.
+##
+## usage: check-restricted-names --tree [<base>]
+##          the tracked files at HEAD, their names, and the messages of the commits in
+##          <base>..HEAD; <base> defaults to origin/main if it exists, else main
+##        check-restricted-names <remote> <url>   (git's pre-push ref lines on stdin)
+##          as a pre-push hook: the lines the commits the push publishes add, the names of the
+##          files they add, and their messages. .githooks/pre-push runs it (with
+##          git config core.hooksPath .githooks).
+##
+## The script names nothing itself, and its lists are gitignored: host names are .hostPatterns in
+## .claude/r-project-policy.json (ERE fragments), other terms the lines of _restricted_terms.txt
+## (blank and ## lines ignored). Each file is looked for in the worktree's top directory and its
+## parents, then in the main worktree, so a linked worktree uses the main clone's lists. A missing
+## list is a notice and not a failure; a policy file without jq to read it is a failure. IPv4
+## addresses need no list.
+##
+## Matching, in the C locale: a host case-sensitively with letters-only boundaries (so a host name
+## glued to "_" or digits matches, and a capitalized genus name or a longer word does not); a term
+## case-insensitively as a fixed string, inside words too; an IPv4 address as four octets 0-255
+## joined by dots, with no digit or dot next to it except a period that ends a sentence (so a
+## version such as 0.0.0.9029 does not match). Only the superproject is scanned. The IPv4 matcher
+## skips renv.lock, since its 4-part package versions read as addresses; the others do not.
+##
+## Exit status: 0 nothing found; 1 something found, or the scan failed; 2 a usage error. Each hit is
+## printed on stderr as <file>:<line>: <text> for a line of a tracked file, <file>: (file name)
+## for its name, <commit>:<line>: <text> for a line of a commit message,
+## <commit>:<file>:<line>: <text> for a line a commit adds, and <commit>:<file>: (file name) for the
+## name of a file a commit adds.
+## No pipefail: the exit status of each part of a pipe is checked where it matters.
+set -u
+
+me=check-restricted-names
+remedy="$me: remove it, or push with --no-verify if it is a false positive"
+
+usage() {
+  echo "usage: $me --tree [<base>]" >&2
+  echo "       $me <remote> <url>   (as a pre-push hook, with git's ref lines on stdin)" >&2
+  exit 2
+}
+
+case "${1:-}" in
+  --tree)
+    [ "$#" -le 2 ] || usage
+    mode=tree
+    base="${2:-}"
+    ;;
+  '' | -*) usage ;;
+  *)
+    [ "$#" -eq 2 ] || usage
+    mode=hook
+    remote="$1"
+    ;;
+esac
+
+## An IPv4 address: an octet, 0-255, written out four times (awk gets this too; no {n} intervals)
+octet='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
+ip_re="(^|[^0-9.])$octet[.]$octet[.]$octet[.]$octet([^0-9.]|[.][^0-9]|[.]?\$)"
+
+## git_root <dir>: canonical root of the repo holding <dir> (or <dir> itself); from r-project-core's
+## _policy.sh, so a repo reachable under more than one path resolves to one
+git_root() {
+  local top
+  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" || top="$1"
+  readlink -f "$top" 2>/dev/null || printf '%s' "$top"
+}
+
+## find_list <name>: the path of <name> in the worktree's top directory or the nearest parent that
+## has one, else in the main worktree or the nearest parent of it (as _policy.sh's policy_file())
+find_list() {
+  local start d
+  for start in "$top" "$main"; do
+    d="$start"
+    while [ "$d" != "/" ] && [ -n "$d" ]; do
+      [ -f "$d/$1" ] && {
+        printf '%s' "$d/$1"
+        return 0
+      }
+      d="$(dirname "$d")"
+    done
+  done
+  return 1
+}
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "$me: not in a git worktree" >&2
+  exit 2
+fi
+top="$(git_root "$PWD")"
+cd "$top" || exit 2
+## the main worktree: the one holding the common .git directory (the same as $top unless this is
+## a linked worktree)
+main=
+common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
+  main="$(readlink -f "$(dirname "$common")")"
+[ "$main" = "$top" ] && main=
+
+## the host list, joined into one pattern
+host_re=
+if ! policy="$(find_list .claude/r-project-policy.json)"; then
+  echo "$me: host check skipped: no .claude/r-project-policy.json" >&2
+elif ! command -v jq >/dev/null 2>&1; then
+  ## skipping would let a push name a host on a control node
+  echo "$me: jq is needed to read hostPatterns from $policy" >&2
+  exit 1
+else
+  if ! list="$(jq -r '.hostPatterns // [] | .[]' "$policy" 2>/dev/null)"; then
+    echo "$me: cannot read hostPatterns from $policy" >&2
+    exit 1
+  fi
+  hosts=()
+  while IFS= read -r h; do
+    [ -n "$h" ] && hosts+=("$h")
+  done <<<"$list"
+  if [ "${#hosts[@]}" -gt 0 ]; then
+    joined="$(
+      IFS='|'
+      printf '%s' "${hosts[*]}"
+    )"
+    host_re="(^|[^[:alpha:]])($joined)([^[:alpha:]]|\$)"
+  else
+    echo "$me: host check skipped: no hostPatterns in $policy" >&2
+  fi
+fi
+
+## the other terms, trimmed
+terms=()
+if ! terms_file="$(find_list _restricted_terms.txt)"; then
+  echo "$me: terms check skipped: no _restricted_terms.txt" >&2
+elif [ ! -r "$terms_file" ]; then
+  echo "$me: cannot read $terms_file" >&2
+  exit 1
+else
+  while IFS= read -r t || [ -n "$t" ]; do
+    t="${t#"${t%%[![:space:]]*}"}"
+    t="${t%"${t##*[![:space:]]}"}"
+    case "$t" in '' | '##'*) continue ;; esac
+    terms+=("$t")
+  done <"$terms_file"
+  [ "${#terms[@]}" -gt 0 ] || echo "$me: terms check skipped: no terms in $terms_file" >&2
+fi
+
+## The matchers, for awk: bad(<text>, <skip IPv4>) is 1 when the text holds a hit. The patterns
+## come through the environment, which awk does not unescape as it does -v values.
+awk_lib='
+BEGIN {
+  ip = ENVIRON["RN_IP"]
+  host = ENVIRON["RN_HOST"]
+  nt = split(ENVIRON["RN_TERMS"], term, "\n")
+  for (i = 1; i <= nt; i++) term[i] = tolower(term[i])
+}
+function bad(l, noip,    i, lo) {
+  if (!noip && l ~ ip) return 1
+  if (host != "" && l ~ host) return 1
+  lo = tolower(l)
+  for (i = 1; i <= nt; i++) if (term[i] != "" && index(lo, term[i]) > 0) return 1
+  return 0
+}
+'
+
+## Matches the lines of a `git log` stream (msg_format, optionally with -p -U0): a message line
+## starts with one space, a line a commit adds with "+" inside a hunk (a header "+++ " line comes
+## before the first "@@" of its file). Prints the hits.
+awk_log="$awk_lib"'
+/^commit / { c = substr($2, 1, 12); part = "msg"; n = 0; next }
+/^diff / { part = "head"; f = ""; next }
+part == "msg" {
+  n++
+  l = substr($0, 2)
+  if (bad(l, 0)) print c ":" n ": " l
+  next
+}
+part == "head" && /^[+][+][+] / {
+  f = substr($0, 5)
+  if (substr(f, 1, 2) == "b/") f = substr(f, 3)
+  sub(/\t$/, "", f)
+  next
+}
+/^@@ / {
+  part = "hunk"
+  s = $0
+  sub(/^@@ [^+]*[+]/, "", s)
+  sub(/[^0-9].*$/, "", s)
+  ln = s + 0
+  next
+}
+part == "hunk" && /^[+]/ {
+  l = substr($0, 2)
+  if (bad(l, f == "renv.lock")) print c ":" f ":" ln ": " l
+  ln++
+}
+'
+
+## Matches the lines of a `git log --name-status` stream (names_format): an added file is "A", a
+## tab, then its path, which git quotes if it holds a tab, a newline, a quote or a backslash, so
+## no path line starts a header. An empty new file has no "+++ " line in a patch, so file names
+## get this pass of their own.
+awk_names="$awk_lib"'
+/^commit / { c = substr($2, 1, 12); next }
+/^A\t/ { f = substr($0, 3); if (bad(f, 0)) print c ":" f ": (file name)" }
+'
+
+## Matches paths, one per line.
+awk_paths="$awk_lib"'
+{ if (bad($0, 0)) print $0 ": (file name)" }
+'
+
+## run_awk <program>: the program over stdin, with the patterns in its environment
+run_awk() {
+  RN_IP="$ip_re" RN_HOST="$host_re" RN_TERMS="$(printf '%s\n' ${terms[@]+"${terms[@]}"})" \
+    LC_ALL=C awk "$1"
+}
+
+## scan_log <awk program> <git log arguments>: sets log_hits to the hits in these commits, sorted,
+## one per line. Returns 1 when git or awk failed. awk reads to the end, so git never meets a
+## closed pipe. The root commit's diff, each merge's diff against every parent, and the commits
+## themselves rather than replacements are pinned against the repository's config; no external
+## diff, textconv or extra context lines.
+scan_log() {
+  local prog="$1" out
+  shift
+  out="$(
+    git -c core.quotePath=false -c log.showRoot=true -c log.diffMerges=separate \
+      --no-replace-objects log --no-color --no-notes --no-show-signature "$@" 2>/dev/null |
+      run_awk "$prog"
+    echo "status=${PIPESTATUS[0]}:${PIPESTATUS[1]}"
+  )"
+  [ "${out##*status=}" = 0:0 ] || return 1
+  log_hits="$(printf '%s' "${out%status=*}" | LC_ALL=C sort -u)"
+}
+
+msg_format='--format=commit %H%n%w(0,1,1)%B'
+names_format='--format=commit %H'
+
+## the log options of a scan of the lines commits add, and of the files they add
+patch_opts=(-p -m --text -U0 --inter-hunk-context=0 --no-renames --no-ext-diff --no-textconv
+  --no-relative --src-prefix=a/ --dst-prefix=b/)
+names_opts=(--name-status --diff-filter=A -m --no-renames --no-relative)
+
+## scan_push <sha> <exclusions>: sets push_hits to the hits in the commits a push of <sha>
+## publishes (git log <sha> <exclusions>): the lines they add, their messages and the names of
+## the files they add. Returns 1 when a scan failed.
+scan_push() {
+  local sha="$1"
+  shift
+  scan_log "$awk_log" "$msg_format" "${patch_opts[@]}" "$sha" "$@" || return 1
+  push_hits="$log_hits"
+  scan_log "$awk_names" "$names_format" "${names_opts[@]}" "$sha" "$@" || return 1
+  push_hits="$(printf '%s\n%s\n' "$push_hits" "$log_hits" | LC_ALL=C sort -u | sed '/^$/d')"
+}
+
+## grep_tree <pathspec> <git grep options and patterns>: appends the matching lines of the
+## tracked files at HEAD under <pathspec> to file_hits as <file>:<line>: <text>. Returns 1 when
+## git grep failed.
+grep_tree() {
+  local spec="$1" out rc=0
+  shift
+  out="$(
+    LC_ALL=C git -c core.quotePath=false grep -I -n --no-color --no-column \
+      --no-recurse-submodules "$@" HEAD -- "$spec" 2>/dev/null
+  )" || rc=$?
+  case "$rc" in
+    0) file_hits+="$(printf '%s\n' "$out" | sed -E 's/^HEAD:([^:]*:[0-9]+):/\1: /')"$'\n' ;;
+    1) ;;
+    *) return 1 ;;
+  esac
+}
+
+## grep_names: appends the tracked paths at HEAD that hold a hit to file_hits as
+## <path>: (file name). Returns 1 when git or awk failed.
+grep_names() {
+  local out
+  out="$(
+    git -c core.quotePath=false ls-tree -r --name-only HEAD 2>/dev/null | run_awk "$awk_paths"
+    echo "status=${PIPESTATUS[0]}:${PIPESTATUS[1]}"
+  )"
+  [ "${out##*status=}" = 0:0 ] || return 1
+  file_hits+="${out%status=*}"
+}
+
+what="a host name, an IPv4 address or a restricted term"
+
+## print_hits <header> <hits>: the header and the hits, indented, on stderr
+print_hits() {
+  echo "$me: $1" >&2
+  printf '%s\n' "$2" | sed 's/^/  /' >&2
+}
+
+if [ "$mode" = tree ]; then
+  status=0
+  file_hits=
+  scanned=1
+  ## IPv4 everywhere but renv.lock, the others everywhere; then the file names
+  grep_tree ':(exclude)renv.lock' -E -e "$ip_re" || scanned=0
+  if [ -n "$host_re" ]; then
+    grep_tree . -E -e "$host_re" || scanned=0
+  fi
+  if [ "${#terms[@]}" -gt 0 ]; then
+    patterns=()
+    for t in "${terms[@]}"; do
+      patterns+=(-e "$t")
+    done
+    grep_tree . -F -i "${patterns[@]}" || scanned=0
+  fi
+  grep_names || scanned=0
+  if [ "$scanned" -eq 0 ]; then
+    echo "$me: could not scan the tracked files at HEAD" >&2
+    exit 1
+  fi
+  if [ -n "$file_hits" ]; then
+    print_hits "the tracked files at HEAD hold $what:" \
+      "$(printf '%s' "$file_hits" | LC_ALL=C sort -t : -k1,1 -k2,2n -u)"
+    status=1
+  fi
+
+  if [ -n "$base" ]; then
+    if ! git rev-parse --verify -q "$base^{commit}" >/dev/null; then
+      echo "$me: unknown base '$base'" >&2
+      exit 2
+    fi
+  else
+    for b in origin/main main; do
+      if git rev-parse --verify -q "$b^{commit}" >/dev/null; then
+        base="$b"
+        break
+      fi
+    done
+  fi
+  if [ -z "$base" ]; then
+    echo "$me: message check skipped: no origin/main or main" >&2
+  elif ! scan_log "$awk_log" "$msg_format" "$base..HEAD"; then
+    echo "$me: could not scan the commit messages of $base..HEAD" >&2
+    exit 1
+  elif [ -n "$log_hits" ]; then
+    print_hits "the commit messages of $base..HEAD hold $what:" "$log_hits"
+    status=1
+  fi
+  [ "$status" -eq 0 ] || echo "$remedy" >&2
+  exit "$status"
+fi
+
+## hook mode: the ref lines, read whole, so a last line without a newline is not lost
+refs="$(cat)"
+status=0
+found=0
+scanned=()
+while read -r local_ref local_sha _ remote_sha; do
+  ## a deletion (all-zero local sha) publishes nothing
+  case "${local_sha:-0}" in *[!0]*) ;; *) continue ;; esac
+  ## what this push publishes: commits the remote's tracking refs do not reach, nor the commit the
+  ## remote ref holds now (a force-push or a push to a URL has no tracking ref), nor a commit an
+  ## earlier ref of this push already scanned
+  not=(--not ${scanned[@]+"${scanned[@]}"} "--remotes=$remote")
+  case "${remote_sha:-0}" in
+    *[!0]*) git cat-file -e "$remote_sha^{commit}" 2>/dev/null && not+=("$remote_sha") ;;
+  esac
+  if ! scan_push "$local_sha" "${not[@]}"; then
+    echo "$me: could not check $local_ref, so it is not pushed." >&2
+    status=1
+    continue
+  fi
+  scanned+=("$local_sha")
+  if [ -n "$push_hits" ]; then
+    print_hits "refusing to push $local_ref, which adds or mentions $what:" "$push_hits"
+    status=1
+    found=1
+  fi
+done <<<"$refs"
+[ "$found" -eq 0 ] || echo "$remedy" >&2
+exit "$status"

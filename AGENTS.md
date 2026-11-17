@@ -80,10 +80,16 @@ restricted storage. Data-sharing agreements depend on this.
   with coordinates or IDs plus times) in code, comments, docs, commit messages,
   issues or PRs. Summaries without coordinates are fine.
 - **Tests and examples** use made-up locations only (see `tests/testthat/helper-source.R`).
-- **Guard:** `.githooks/pre-commit` blocks data file types and tables with
-  coordinate-like columns. Turn it on once per clone with
-  `git config core.hooksPath .githooks`. Never bypass it with `--no-verify`; if it
-  blocks something that is not location data, ask the user.
+- **Guard:** `.githooks/pre-commit` blocks data file types, tables with
+  coordinate-like columns, and non-ASCII characters in `R/` and `tests/` (write them
+  as `\uXXXX` escapes). `.githooks/pre-push` runs `check-restricted-names`, which
+  blocks host names, IPv4 addresses and other restricted terms in what a push
+  publishes (added lines, file names, commit messages); its lists
+  (`_restricted_terms.txt`, `.claude/r-project-policy.json`) are gitignored and kept
+  in the clone or a folder above it. `bash .githooks/check-restricted-names --tree`
+  scans the whole tree. Turn the hooks on once per clone with
+  `git config core.hooksPath .githooks`. Never bypass them with `--no-verify`; if
+  one blocks something harmless, ask the user.
 - **Before the repo goes public:** check the whole git history, not just current files.
 
 ---
