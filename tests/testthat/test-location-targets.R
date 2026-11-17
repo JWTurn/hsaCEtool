@@ -114,3 +114,55 @@ test_that('herd keep and study area add change the targets only when set', {
   tl <- stats::setNames(tl, purrr::map_chr(tl, function(t) t$settings$name))
   expect_match(cmd_text(tl$locations_clean), 'keep_herds(read_premade_locations(', fixed = TRUE)
 })
+
+test_that('premade_write and premade_upload add the hand-off targets', {
+  tl <- source_targets(made_up)
+  expect_false(any(c('premade_files', 'premade_upload') %in% names(tl)))
+  tl <- source_targets(
+    made_up,
+    premade_write = TRUE,
+    premade_upload = TRUE,
+    premade_folder = list(clean_TEST.zip = 'private', '*' = 'shared')
+  )
+  expect_equal(tl$premade_files$settings$format, 'file')
+  expect_match(cmd_text(tl$premade_files), 'write_premade_files(locations_clean', fixed = TRUE)
+  expect_match(cmd_text(tl$premade_upload), 'upload_premade_files(premade_files', fixed = TRUE)
+  expect_match(cmd_text(tl$premade_upload), 'private', fixed = TRUE)
+  # upload needs the write and a folder
+  expect_error(source_targets(made_up, premade_upload = TRUE), 'premade_write')
+  expect_error(
+    source_targets(made_up, premade_write = TRUE, premade_upload = TRUE),
+    'premade_folder'
+  )
+})
+
+test_that('premade_check checks Drive links every run, and only those', {
+  pre_targets <- function(...) {
+    dir <- withr::local_tempdir()
+    yaml::write_yaml(list(locations = list(...)), file.path(dir, 'PRE.yaml'))
+    tl <- targets_locations(read_config('PRE', config_dir = dir))
+    stats::setNames(tl, purrr::map_chr(tl, function(t) t$settings$name))
+  }
+  drive <- list(url = 'https://drive.google.com/file/d/xyz/view', target_file = 'clean.rds')
+  area <- list(url = 'https://drive.google.com/file/d/abc/view', target_file = 'a.gpkg')
+  tl <- pre_targets(premade = drive, premade_check = TRUE, study_area = list(source = area))
+  expect_equal(tl$locations_premade_file_drive$cue$mode, 'always')
+  expect_match(cmd_text(tl$locations_premade_file_drive), 'drive_file_version(', fixed = TRUE)
+  expect_match(cmd_text(tl$locations_premade_file), 'locations_premade_file_drive', fixed = TRUE)
+  expect_match(cmd_text(tl$locations_premade_file), 'refresh = TRUE', fixed = TRUE)
+  expect_true('study_area_file_drive' %in% names(tl))
+  # off by default, and never for a local path
+  tl <- pre_targets(premade = drive)
+  expect_false(any(grepl('_drive$', names(tl))))
+  tl <- pre_targets(premade = list(path = 'clean.rds'), premade_check = TRUE)
+  expect_false(any(grepl('_drive$', names(tl))))
+  # a frozen extended study area is not checked
+  tl <- pre_targets(
+    premade = drive,
+    premade_check = TRUE,
+    study_area = list(source = area, extended = list(source = area, freeze = TRUE))
+  )
+  expect_false('study_area_extended_file_drive' %in% names(tl))
+  # writing is for the phase that cleans the locations
+  expect_error(pre_targets(premade = drive, premade_write = TRUE), 'premade_write')
+})

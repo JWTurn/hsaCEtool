@@ -53,3 +53,48 @@ test_that('a folder open to anyone with the link is refused only when checked', 
   expect_error(upload_to_drive('a.zip', 'open', 'must be restricted'), 'must be restricted')
   expect_equal(upload_to_drive('a.zip', 'open', NULL)$action, 'uploaded')
 })
+
+test_that('write_premade_files zips the cleaned locations and both study areas', {
+  skip_if_not_installed('terra')
+  dir <- withr::local_tempdir()
+  # made-up locations and squares, nothing real
+  locs <- data.table::data.table(id = 'a', x_ = 1, y_ = 2)
+  sq <- terra::vect('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))', crs = 'EPSG:3005')
+  zips <- write_premade_files(locs, sq, sq, 'TEST', 20000, file.path(dir, 'premade'))
+  expect_equal(basename(zips), files)
+  expect_true(all(file.exists(zips)))
+  inside <- utils::unzip(zips[1], list = TRUE)$Name
+  expect_equal(inside, 'clean_TEST.rds')
+})
+
+test_that('upload_premade_files checks only the folder of the cleaned locations', {
+  calls <- list()
+  local_mocked_bindings(
+    upload_to_drive = function(files, folder, public_msg) {
+      calls[[folder]] <<- !is.null(public_msg)
+      data.table::data.table(name = basename(files))
+    }
+  )
+  upload_premade_files(files, list(clean_TEST.zip = 'private', '*' = 'shared'), 'TEST')
+  expect_equal(calls, list(private = TRUE, shared = FALSE))
+  expect_error(upload_premade_files(files, NULL, 'TEST'), 'premade_folder')
+})
+
+test_that('drive_file_version gives the checksum, and a clear error offline', {
+  local_mocked_bindings(
+    drive_get = function(id) list(drive_resource = list(list(md5Checksum = 'abc'))),
+    .package = 'googledrive'
+  )
+  expect_equal(drive_file_version('https://drive.google.com/file/d/xyz/view'), 'abc')
+  local_mocked_bindings(
+    drive_get = function(id) stop('no connection'),
+    .package = 'googledrive'
+  )
+  expect_error(
+    drive_file_version('https://drive.google.com/file/d/xyz/view'),
+    'premade_check: false'
+  )
+  expect_true(is_drive_url('https://drive.google.com/file/d/xyz/view'))
+  expect_false(is_drive_url('https://example.org/a.zip'))
+  expect_false(is_drive_url(NA_character_))
+})

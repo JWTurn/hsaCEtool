@@ -225,6 +225,21 @@ layer). `upload_premade()` stops if the folder for the cleaned locations
 (`clean_<project>.zip`) is shared with anyone with the link, as they are caribou
 locations; the study areas may go to a folder shared more widely.
 
+To have the pipeline do this instead of running it by hand, turn it on in the
+phase that cleans the locations, and the check in the phase that reads them:
+
+| Setting | Phase | What it does |
+|---|---|---|
+| `locations: premade_write: true` | cleans the locations | Target `premade_files` writes the three zips (as `write_premade()`) whenever the cleaned locations or study areas change |
+| `locations: premade_upload: true` | cleans the locations | Target `premade_upload` then uploads them to `premade_folder` (as `upload_premade()`); needs `premade_write` and `premade_folder` |
+| `locations: premade_check: true` | reads the premade files | Each Google Drive link in `premade:`, `study_area: source:` and `study_area: extended: source:` is checked on Drive every run (target `<file target>_drive`); a file is downloaded again only when it changed there, so `refresh: true` is not needed |
+
+All three are `false` by default (run the helpers by hand). The upload and the
+check need internet and the Google login of `run: google_email`; on a computer
+without internet (e.g. a cluster compute node), set `premade_check: false` to
+use the copies already downloaded. A frozen extended study area
+(`freeze: true`) is never checked.
+
 Movebank user names and passwords are never written in the settings. Save
 yours once with `move2::movebank_store_credentials("<user>")`, which keeps it
 in your computer's keyring; downloads read it from there.
