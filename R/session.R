@@ -20,10 +20,12 @@
 #' @export
 #' @author Julie W. Turner
 ce_session_setup <- function(timeout_s = 3600) {
-  old <- options(reproducible.useCache = FALSE,
-                 timeout = max(timeout_s, getOption('timeout')))
-  Sys.setenv(OGR_SQLITE_ALLOW_ANY_EXTENSION = 'YES',
-             OGR_CURRENT_DATE = '2000-01-01T00:00:00Z',
-             GDAL_HTTP_MAX_RETRY = '10', GDAL_HTTP_RETRY_DELAY = '5')
+  old <- options(reproducible.useCache = FALSE, timeout = max(timeout_s, getOption('timeout')))
+  Sys.setenv(
+    OGR_SQLITE_ALLOW_ANY_EXTENSION = 'YES',
+    OGR_CURRENT_DATE = '2000-01-01T00:00:00Z',
+    GDAL_HTTP_MAX_RETRY = '10',
+    GDAL_HTTP_RETRY_DELAY = '5'
+  )
   invisible(old)
 }

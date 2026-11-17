@@ -37,34 +37,78 @@ make_templates <- function(study_area, tmpl, crs, paths, out_dir) {
     } else {
       terra::rast(get_source(tmpl$source, paths)[1])
     }
-    if (!terra::same.crs(r, crs)) stop('The template raster is not in ', crs, call. = FALSE)
-    if (!isTRUE(all.equal(terra::res(r), rep(tmpl$base_res, 2)))) {
-      stop('The template raster has ', paste(terra::res(r), collapse = ' x '),
-           ' m cells; set landscape: template: base_res to match', call. = FALSE)
+    if (!terra::same.crs(r, crs)) {
+      stop('The template raster is not in ', crs, call. = FALSE)
     }
-    terra::ifel(is.na(r[[1]]), NA, 1, filename = fine_file, datatype = 'INT1U',
-                gdal = gdal_opts, overwrite = TRUE)
+    if (!isTRUE(all.equal(terra::res(r), rep(tmpl$base_res, 2)))) {
+      stop(
+        'The template raster has ',
+        paste(terra::res(r), collapse = ' x '),
+        ' m cells; set landscape: template: base_res to match',
+        call. = FALSE
+      )
+    }
+    terra::ifel(
+      is.na(r[[1]]),
+      NA,
+      1,
+      filename = fine_file,
+      datatype = 'INT1U',
+      gdal = gdal_opts,
+      overwrite = TRUE
+    )
   } else {
     area <- terra::aggregate(terra::project(study_area, crs))
-    if ((tmpl$buffer_m %||% 0) > 0) area <- terra::aggregate(terra::buffer(area, tmpl$buffer_m))
+    if ((tmpl$buffer_m %||% 0) > 0) {
+      area <- terra::aggregate(terra::buffer(area, tmpl$buffer_m))
+    }
     step <- tmpl$base_res * lcm(unlist(tmpl$factors))
-    e <- as.vector(terra::ext(area))   # xmin, xmax, ymin, ymax
-    te <- c(floor(e[1] / step), floor(e[3] / step), ceiling(e[2] / step), ceiling(e[4] / step)) * step
+    e <- as.vector(terra::ext(area)) # xmin, xmax, ymin, ymax
+    te <- c(floor(e[1] / step), floor(e[3] / step), ceiling(e[2] / step), ceiling(e[4] / step)) *
+      step
     area_file <- tempfile(fileext = '.gpkg')
     on.exit(unlink(area_file), add = TRUE)
     terra::writeVector(area, area_file)
     # gdal_rasterize streams to disk, so very large templates are fine
-    sf::gdal_utils('rasterize', area_file, fine_file, options = c(
-      '-burn', '1', '-init', '0', '-a_nodata', '0', '-ot', 'Byte',
-      '-te', te, '-tr', tmpl$base_res, tmpl$base_res,
-      '-co', gdal_opts[1], '-co', gdal_opts[2]))
+    sf::gdal_utils(
+      'rasterize',
+      area_file,
+      fine_file,
+      options = c(
+        '-burn',
+        '1',
+        '-init',
+        '0',
+        '-a_nodata',
+        '0',
+        '-ot',
+        'Byte',
+        '-te',
+        te,
+        '-tr',
+        tmpl$base_res,
+        tmpl$base_res,
+        '-co',
+        gdal_opts[1],
+        '-co',
+        gdal_opts[2]
+      )
+    )
   }
 
   fine <- terra::rast(fine_file)
   coarse_files <- purrr::map_chr(unlist(tmpl$factors), function(f) {
     out <- file.path(out_dir, paste0('template_', tmpl$base_res * f, 'm.tif'))
-    terra::aggregate(fine, f, fun = 'sum', na.rm = TRUE, filename = out,
-                     datatype = 'INT4U', gdal = gdal_opts, overwrite = TRUE)
+    terra::aggregate(
+      fine,
+      f,
+      fun = 'sum',
+      na.rm = TRUE,
+      filename = out,
+      datatype = 'INT4U',
+      gdal = gdal_opts,
+      overwrite = TRUE
+    )
     out
   })
   c(fine_file, coarse_files)
@@ -90,10 +134,33 @@ make_margin_template <- function(template, margin_m, out) {
   box <- tempfile(fileext = '.gpkg')
   on.exit(unlink(box), add = TRUE)
   terra::writeVector(terra::as.polygons(terra::ext(e), crs = terra::crs(r)), box)
-  sf::gdal_utils('rasterize', box, out, options = c(
-    '-burn', '1', '-init', '1', '-a_nodata', '0', '-ot', 'Byte',
-    '-te', e[1], e[3], e[2], e[4], '-tr', res, res,
-    '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'))
+  sf::gdal_utils(
+    'rasterize',
+    box,
+    out,
+    options = c(
+      '-burn',
+      '1',
+      '-init',
+      '1',
+      '-a_nodata',
+      '0',
+      '-ot',
+      'Byte',
+      '-te',
+      e[1],
+      e[3],
+      e[2],
+      e[4],
+      '-tr',
+      res,
+      res,
+      '-co',
+      'COMPRESS=DEFLATE',
+      '-co',
+      'TILED=YES'
+    )
+  )
   out
 }
 
@@ -105,7 +172,9 @@ make_margin_template <- function(template, margin_m, out) {
 #' @noRd
 template_file <- function(templates, res) {
   f <- templates[basename(templates) == paste0('template_', res, 'm.tif')]
-  if (length(f) != 1) stop('No ', res, ' m template; add its factor to landscape: template: factors', call. = FALSE)
+  if (length(f) != 1) {
+    stop('No ', res, ' m template; add its factor to landscape: template: factors', call. = FALSE)
+  }
   f
 }
 

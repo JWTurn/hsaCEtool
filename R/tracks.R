@@ -29,11 +29,21 @@ make_tracks <- function(DT, crs) {
 #' @return `steps_xyt`, or NULL.
 #' @author Julie W. Turner
 #' @export
-resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 3, min_steps = 20, zero_ta = 'random') {
+resample_tracks <- function(
+  tracks,
+  rate,
+  tolerance,
+  probsfilter,
+  min_burst_n = 3,
+  min_steps = 20,
+  zero_ta = 'random'
+) {
   t <- amt::track_resample(tracks, rate = rate, tolerance = tolerance) |>
     amt::filter_min_n_burst(min_n = min_burst_n)
 
-  if (nrow(t) < min_steps) return()
+  if (nrow(t) < min_steps) {
+    return()
+  }
 
   s <- amt::steps_by_burst(t, lonlat = FALSE, keep_cols = 'start')
   s <- fix_zero_steps(s, zero_ta)
@@ -57,16 +67,22 @@ resample_tracks <- function(tracks, rate, tolerance, probsfilter, min_burst_n = 
 fix_zero_steps <- function(s, ta = 'random') {
   z <- which(s$sl_ == 0)
   pos <- s$sl_[!is.na(s$sl_) & s$sl_ > 0]
-  if (!length(z) || !length(pos)) return(s)
-  if (!ta %in% c('random', 'zero')) stop('zero-length step direction must be "random" or "zero"', call. = FALSE)
-  wrap <- function(a) (a + pi) %% (2 * pi) - pi   # to -pi..pi, as amt's turning angles
+  if (!length(z) || !length(pos)) {
+    return(s)
+  }
+  if (!ta %in% c('random', 'zero')) {
+    stop('zero-length step direction must be "random" or "zero"', call. = FALSE)
+  }
+  wrap <- function(a) (a + pi) %% (2 * pi) - pi # to -pi..pi, as amt's turning angles
   s$sl_[z] <- min(pos)
   # in time order, so runs of zero-length steps chain
   for (i in z) {
     prev <- if (i > 1 && s$burst_[i - 1] == s$burst_[i]) s$direction_p[i - 1] else NA_real_
     d <- if (ta == 'zero' && !is.na(prev)) prev else stats::runif(1, -pi, pi)
     s$direction_p[i] <- d
-    if (!is.na(prev)) s$ta_[i] <- wrap(d - prev)
+    if (!is.na(prev)) {
+      s$ta_[i] <- wrap(d - prev)
+    }
     if (i < nrow(s) && s$burst_[i + 1] == s$burst_[i] && !is.na(s$direction_p[i + 1])) {
       s$ta_[i + 1] <- wrap(s$direction_p[i + 1] - d)
     }
@@ -87,12 +103,20 @@ fix_zero_steps <- function(s, ta = 'random') {
 #' @author Julie W. Turner
 #' @export
 make_random_steps <- function(DT, n_rand = 10, sl.distr = NULL, ta.distr = NULL) {
-  if (is.null(DT) || nrow(DT) == 0) return()
+  if (is.null(DT) || nrow(DT) == 0) {
+    return()
+  }
   n <- table(DT$burst_)
   DT <- DT[DT$burst_ %in% names(n)[n >= 3], ]
-  if (nrow(DT) == 0) return()
-  if (is.null(sl.distr)) sl.distr <- amt::fit_distr(DT$sl_, 'gamma')
-  if (is.null(ta.distr)) ta.distr <- amt::fit_distr(DT$ta_, 'vonmises')
+  if (nrow(DT) == 0) {
+    return()
+  }
+  if (is.null(sl.distr)) {
+    sl.distr <- amt::fit_distr(DT$sl_, 'gamma')
+  }
+  if (is.null(ta.distr)) {
+    ta.distr <- amt::fit_distr(DT$ta_, 'vonmises')
+  }
   amt::random_steps(DT, n_control = n_rand, sl_distr = sl.distr, ta_distr = ta.distr)
 }
 
@@ -102,10 +126,16 @@ make_random_steps <- function(DT, n_rand = 10, sl.distr = NULL, ta.distr = NULL)
 #' @author Julie W. Turner
 #' @export
 calc_distribution_parameters <- function(steps) {
-  if (is.null(steps)) return()
+  if (is.null(steps)) {
+    return()
+  }
   tas <- amt::ta_distr_params(steps)
   sls <- amt::sl_distr_params(steps)
-  data.table::data.table(cbind(data.table::setDT(tas), data.table::setDT(sls), id = unique(steps$id)))
+  data.table::data.table(cbind(
+    data.table::setDT(tas),
+    data.table::setDT(sls),
+    id = unique(steps$id)
+  ))
 }
 
 #' @title Finish the step table
@@ -154,23 +184,46 @@ prep_steps <- function(randsteps, trk_cfg, area = NULL) {
 #' @keywords internal
 #' @noRd
 keep_steps_within <- function(DT, area) {
-  none <- data.table::data.table(what = c('used steps dropped: start or end outside the area',
-                                          'random steps dropped: end outside the area'), n = 0L)
-  if (is.null(area) || !nrow(DT)) return(data.table::setattr(DT, 'outside_area', if (is.null(area)) NULL else none))
+  none <- data.table::data.table(
+    what = c(
+      'used steps dropped: start or end outside the area',
+      'random steps dropped: end outside the area'
+    ),
+    n = 0L
+  )
+  if (is.null(area) || !nrow(DT)) {
+    return(data.table::setattr(DT, 'outside_area', if (is.null(area)) NULL else none))
+  }
   crs <- sf::st_crs(area)
-  xy <- c(DT$x1_, DT$x2_); yy <- c(DT$y1_, DT$y2_)
-  box <- sf::st_as_sfc(sf::st_bbox(c(xmin = min(xy, na.rm = TRUE), ymin = min(yy, na.rm = TRUE),
-                                     xmax = max(xy, na.rm = TRUE), ymax = max(yy, na.rm = TRUE)), crs = crs))
+  xy <- c(DT$x1_, DT$x2_)
+  yy <- c(DT$y1_, DT$y2_)
+  box <- sf::st_as_sfc(sf::st_bbox(
+    c(
+      xmin = min(xy, na.rm = TRUE),
+      ymin = min(yy, na.rm = TRUE),
+      xmax = max(xy, na.rm = TRUE),
+      ymax = max(yy, na.rm = TRUE)
+    ),
+    crs = crs
+  ))
   outside <- sf::st_difference(sf::st_buffer(box, 1000), sf::st_union(area))
-  if (any(grepl('COLLECTION', sf::st_geometry_type(outside)))) outside <- sf::st_collection_extract(outside, 'POLYGON')
-  outside <- suppressWarnings(sf::st_cast(outside, 'POLYGON'))   # one test per piece
-  if (!length(outside)) return(data.table::setattr(DT, 'outside_area', none))
+  if (any(grepl('COLLECTION', sf::st_geometry_type(outside)))) {
+    outside <- sf::st_collection_extract(outside, 'POLYGON')
+  }
+  outside <- suppressWarnings(sf::st_cast(outside, 'POLYGON')) # one test per piece
+  if (!length(outside)) {
+    return(data.table::setattr(DT, 'outside_area', none))
+  }
   is_out <- function(x, y) {
     out <- !is.na(x) & FALSE
     for (k in seq_along(outside)) {
       b <- sf::st_bbox(outside[k])
-      cand <- which(!out & !is.na(x) & x >= b[['xmin']] & x <= b[['xmax']] & y >= b[['ymin']] & y <= b[['ymax']])
-      if (!length(cand)) next
+      cand <- which(
+        !out & !is.na(x) & x >= b[['xmin']] & x <= b[['xmax']] & y >= b[['ymin']] & y <= b[['ymax']]
+      )
+      if (!length(cand)) {
+        next
+      }
       pts <- sf::st_as_sf(data.frame(x = x[cand], y = y[cand]), coords = c('x', 'y'), crs = crs)
       out[cand] <- lengths(sf::st_intersects(pts, outside[k])) > 0
     }
@@ -198,15 +251,34 @@ keep_steps_within <- function(DT, area) {
 #' @author Julie W. Turner
 #' @export
 make_steps_area <- function(file, within, crs) {
-  a <- sf::st_read(file[tolower(tools::file_ext(file)) %in% c('shp', 'gpkg', 'geojson')][1], quiet = TRUE)
+  a <- sf::st_read(
+    file[tolower(tools::file_ext(file)) %in% c('shp', 'gpkg', 'geojson')][1],
+    quiet = TRUE
+  )
   if (!is.null(within$field)) {
     if (!within$field %in% names(a)) {
-      stop('tracks: within: field ', within$field, ' is not in ', basename(file[1]), ' (has ',
-           paste(names(a), collapse = ', '), ')', call. = FALSE)
+      stop(
+        'tracks: within: field ',
+        within$field,
+        ' is not in ',
+        basename(file[1]),
+        ' (has ',
+        paste(names(a), collapse = ', '),
+        ')',
+        call. = FALSE
+      )
     }
     keep <- unlist(within$keep)
     miss <- setdiff(keep, a[[within$field]])
-    if (length(miss)) stop('tracks: within: keep has values not in ', within$field, ': ', paste(miss, collapse = ', '), call. = FALSE)
+    if (length(miss)) {
+      stop(
+        'tracks: within: keep has values not in ',
+        within$field,
+        ': ',
+        paste(miss, collapse = ', '),
+        call. = FALSE
+      )
+    }
     a <- a[a[[within$field]] %in% keep, ]
   }
   sf::st_union(sf::st_make_valid(sf::st_transform(sf::st_geometry(a), crs)))
@@ -270,9 +342,12 @@ fill_years <- function(x, default) {
 #' @export
 fit_step_distr <- function(resamples, column, distr) {
   if (NROW(resamples) == 0) {
-    stop('No tracks are left after resampling: none had min_steps steps at rate_hours',
-         ' (within tolerance_minutes) between min_year and max_year. Check the tracks:',
-         ' settings, or the animals chosen by subset:.', call. = FALSE)
+    stop(
+      'No tracks are left after resampling: none had min_steps steps at rate_hours',
+      ' (within tolerance_minutes) between min_year and max_year. Check the tracks:',
+      ' settings, or the animals chosen by subset:.',
+      call. = FALSE
+    )
   }
   amt::fit_distr(resamples[[column]], distr)
 }

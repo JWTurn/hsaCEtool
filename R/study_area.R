@@ -22,7 +22,9 @@ make_study_area <- function(DT, sa_cfg, file = NULL, crs, add = NULL) {
   }
   pts <- sf::st_as_sf(DT[, .(x_, y_)], coords = c('x_', 'y_'), crs = sf::st_crs(crs))
   sa <- sf::st_union(sf::st_buffer(pts, dist = sa_cfg$buffer_m))
-  if (isTRUE(sa_cfg$convex_hull)) sa <- sf::st_convex_hull(sa)
+  if (isTRUE(sa_cfg$convex_hull)) {
+    sa <- sf::st_convex_hull(sa)
+  }
   sa <- terra::vect(sa)
   if (length(add)) {
     extra <- terra::project(terra::vect(add[1]), crs)
@@ -53,8 +55,12 @@ make_study_area_extended <- function(study_area, ext_cfg, file = NULL) {
     return(terra::aggregate(terra::project(terra::vect(file[1]), terra::crs(study_area))))
   }
   sa <- sf::st_union(sf::st_as_sf(study_area))
-  if (isTRUE(ext_cfg$convex_hull)) sa <- sf::st_convex_hull(sa)
-  if ((ext_cfg$buffer_m %||% 0) > 0) sa <- sf::st_buffer(sa, dist = ext_cfg$buffer_m)
+  if (isTRUE(ext_cfg$convex_hull)) {
+    sa <- sf::st_convex_hull(sa)
+  }
+  if ((ext_cfg$buffer_m %||% 0) > 0) {
+    sa <- sf::st_buffer(sa, dist = ext_cfg$buffer_m)
+  }
   terra::vect(sa)
 }
 
@@ -126,13 +132,21 @@ check_extended_area <- function(locations, area, buffer_m, project, crs) {
   }
   out <- DT[near, .(fixes_near_edge = .N, animals = data.table::uniqueN(id)), keyby = source]
   if (nrow(out)) {
-    warning(sprintf(paste0(
-      '%s cleaned fixes from %s animals are within %s m of the edge of the extended study area, or outside it, ',
-      'so the landscape layers may not reach far enough around them. To rebuild the extended study area (and ',
-      'all layers) from the data: in config/%s.yaml, under locations: study_area: extended:, set freeze: false ',
-      'and comment out the source line if there is one, then rerun. See target study_area_check for counts by source.'),
-      sum(out$fixes_near_edge), data.table::uniqueN(DT$id[near]), format(buffer_m, scientific = FALSE), project),
-      call. = FALSE)
+    warning(
+      sprintf(
+        paste0(
+          '%s cleaned fixes from %s animals are within %s m of the edge of the extended study area, or outside it, ',
+          'so the landscape layers may not reach far enough around them. To rebuild the extended study area (and ',
+          'all layers) from the data: in config/%s.yaml, under locations: study_area: extended:, set freeze: false ',
+          'and comment out the source line if there is one, then rerun. See target study_area_check for counts by source.'
+        ),
+        sum(out$fixes_near_edge),
+        data.table::uniqueN(DT$id[near]),
+        format(buffer_m, scientific = FALSE),
+        project
+      ),
+      call. = FALSE
+    )
   }
   out[]
 }

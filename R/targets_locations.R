@@ -13,18 +13,30 @@ targets_config <- function(cfg) {
     tar_target(cfg_project, cfg$project),
     tar_target(cfg_paths, cfg$paths),
     # only what the readers use, so cleaning or study area edits don't rerun downloads
-    tar_target(cfg_locations, cfg$locations[intersect(c('columns', 'input_crs', 'keep_columns', 'tz'),
-                                                      names(cfg$locations))]),
+    tar_target(
+      cfg_locations,
+      cfg$locations[intersect(
+        c('columns', 'input_crs', 'keep_columns', 'tz'),
+        names(cfg$locations)
+      )]
+    ),
     tar_target(cfg_source_duplicates, cfg$locations$source_duplicates),
     tar_target(cfg_cleaning, cfg$locations$cleaning),
     tar_target(cfg_study_area, cfg$locations$study_area),
     tar_target(cfg_crop_method, cfg$locations$crop_method),
     # columns kept after cleaning (with the columns tracks are split by) and how study, herd and juris are made
-    tar_target(cfg_finish, list(
-      keep = if (length(cfg$locations$keep_after_cleaning)) unique(c(unlist(cfg$locations$keep_after_cleaning), unlist(cfg$tracks$split_by))),
-      study = cfg$locations$study, herd = cfg$locations$herd, juris = cfg$locations$juris,
-      fill = cfg$locations$fill
-    )),
+    tar_target(
+      cfg_finish,
+      list(
+        keep = if (length(cfg$locations$keep_after_cleaning)) {
+          unique(c(unlist(cfg$locations$keep_after_cleaning), unlist(cfg$tracks$split_by)))
+        },
+        study = cfg$locations$study,
+        herd = cfg$locations$herd,
+        juris = cfg$locations$juris,
+        fill = cfg$locations$fill
+      )
+    ),
     tar_target(cfg_subset, cfg$subset),
     tar_target(cfg_tracks, cfg$tracks),
     tar_target(cfg_template, cfg$landscape$template),
@@ -34,10 +46,17 @@ targets_config <- function(cfg) {
     tar_target(cfg_terrain, cfg$landscape$terrain),
     tar_target(cfg_fire, cfg$landscape$fire),
     tar_target(cfg_forest_age, cfg$landscape$forest_age),
-    tar_target(cfg_access, list(
-      access = cfg$landscape$access,
-      cache = if (nzchar(cfg$paths$input_cache %||% '')) cfg$paths$input_cache else cfg$paths$inputs
-    )),
+    tar_target(
+      cfg_access,
+      list(
+        access = cfg$landscape$access,
+        cache = if (nzchar(cfg$paths$input_cache %||% '')) {
+          cfg$paths$input_cache
+        } else {
+          cfg$paths$inputs
+        }
+      )
+    ),
     tar_target(cfg_extract, cfg$extract[setdiff(names(cfg$extract), 'availability_by')]),
     tar_target(cfg_availability_by, cfg$extract$availability_by)
   )
@@ -82,41 +101,87 @@ targets_locations <- function(cfg) {
     nm <- source_target_name(src, i)
     cue <- tar_cue(mode = if (isTRUE(src$refresh)) 'always' else 'thorough')
     if (identical(src$type, 'movebank')) {
-      src_targets <- c(src_targets, list(
-        # download one at a time, on the main process (Movebank limits parallel
-        # requests); depends only on the study, so reading changes don't re-download
-        tar_target_raw(paste0(nm, '_download'),
-                       substitute(download_movebank(SRC, cfg_paths), list(SRC = src[intersect(c('study', 'name'), names(src))])),
-                       format = 'file', cue = download_cue(src$refresh, freeze), deployment = 'main'),
-        tar_target_raw(nm, substitute(read_movebank(FILE, SRC, cfg_locations, cfg_project$crs),
-                                      list(FILE = as.symbol(paste0(nm, '_download')), SRC = src)))
-      ))
+      src_targets <- c(
+        src_targets,
+        list(
+          # download one at a time, on the main process (Movebank limits parallel
+          # requests); depends only on the study, so reading changes don't re-download
+          tar_target_raw(
+            paste0(nm, '_download'),
+            substitute(
+              download_movebank(SRC, cfg_paths),
+              list(SRC = src[intersect(c('study', 'name'), names(src))])
+            ),
+            format = 'file',
+            cue = download_cue(src$refresh, freeze),
+            deployment = 'main'
+          ),
+          tar_target_raw(
+            nm,
+            substitute(
+              read_movebank(FILE, SRC, cfg_locations, cfg_project$crs),
+              list(FILE = as.symbol(paste0(nm, '_download')), SRC = src)
+            )
+          )
+        )
+      )
     } else if (identical(src$type, 'bc')) {
       files <- list(NEW = quote(NULL), OLD = quote(NULL), REF = quote(NULL))
       for (part in intersect(c('new', 'old', 'reference'), names(src))) {
         part_nm <- paste0(nm, '_', part)
         part_cue <- download_cue(isTRUE(src$refresh) || isTRUE(src[[part]]$refresh), freeze)
-        src_targets <- c(src_targets, list(
-          tar_target_raw(part_nm, substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src[[part]]))),
-                         format = 'file', cue = part_cue)
-        ))
+        src_targets <- c(
+          src_targets,
+          list(
+            tar_target_raw(
+              part_nm,
+              substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src[[part]]))),
+              format = 'file',
+              cue = part_cue
+            )
+          )
+        )
         files[[c(new = 'NEW', old = 'OLD', reference = 'REF')[[part]]]] <- as.symbol(part_nm)
       }
-      src_targets <- c(src_targets, list(
-        tar_target_raw(nm, substitute(read_bc_locations(NEW, OLD, REF, SRC, cfg_locations, cfg_project$crs),
-                                      c(files, list(SRC = src)))),
-        tar_target_raw(paste0(nm, '_log'), substitute(attr(X, 'merge_log'), list(X = as.symbol(nm))))
-      ))
+      src_targets <- c(
+        src_targets,
+        list(
+          tar_target_raw(
+            nm,
+            substitute(
+              read_bc_locations(NEW, OLD, REF, SRC, cfg_locations, cfg_project$crs),
+              c(files, list(SRC = src))
+            )
+          ),
+          tar_target_raw(
+            paste0(nm, '_log'),
+            substitute(attr(X, 'merge_log'), list(X = as.symbol(nm)))
+          )
+        )
+      )
     } else {
       # a path or a url: get (download) the file, then read it, so changes to
       # how it is read don't download it again
       file_nm <- paste0(nm, '_file')
-      src_targets <- c(src_targets, list(
-        tar_target_raw(file_nm, substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src))),
-                       format = 'file', cue = download_cue(src$refresh, freeze)),
-        tar_target_raw(nm, substitute(read_locations_file(FILE, SRC, cfg_locations, cfg_project$crs),
-                                      list(FILE = as.symbol(file_nm), SRC = src)), cue = cue)
-      ))
+      src_targets <- c(
+        src_targets,
+        list(
+          tar_target_raw(
+            file_nm,
+            substitute(get_source(SRC, cfg_paths), list(SRC = source_key(src))),
+            format = 'file',
+            cue = download_cue(src$refresh, freeze)
+          ),
+          tar_target_raw(
+            nm,
+            substitute(
+              read_locations_file(FILE, SRC, cfg_locations, cfg_project$crs),
+              list(FILE = as.symbol(file_nm), SRC = src)
+            ),
+            cue = cue
+          )
+        )
+      )
     }
     src_names <- c(src_names, nm)
   }
@@ -125,37 +190,86 @@ targets_locations <- function(cfg) {
   rec_targets <- list()
   cap <- cfg$locations$captures
   if (!is.null(cap) && is.null(premade)) {
-    rec_targets <- c(rec_targets, list(
-      tar_target_raw('captures_file', substitute(get_source(SRC, cfg_paths), list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), cap)))),
-                     format = 'file', cue = download_cue(cap$refresh, freeze)),
-      tar_target_raw('capture_log', substitute(read_capture_log(captures_file, COLS, SOURCE, ORDER),
-                                               list(COLS = cap$columns, SOURCE = cap$source, ORDER = cap$date_order %||% 'dmy')))
-    ))
+    rec_targets <- c(
+      rec_targets,
+      list(
+        tar_target_raw(
+          'captures_file',
+          substitute(
+            get_source(SRC, cfg_paths),
+            list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), cap)))
+          ),
+          format = 'file',
+          cue = download_cue(cap$refresh, freeze)
+        ),
+        tar_target_raw(
+          'capture_log',
+          substitute(
+            read_capture_log(captures_file, COLS, SOURCE, ORDER),
+            list(COLS = cap$columns, SOURCE = cap$source, ORDER = cap$date_order %||% 'dmy')
+          )
+        )
+      )
+    )
   }
   morts <- cfg$locations$mortality_records
   mort_names <- character()
   for (i in seq_along(if (is.null(premade)) morts)) {
     mr <- morts[[i]]
     nm <- paste0('mortality_records_', i)
-    rec_targets <- c(rec_targets, list(
-      tar_target_raw(paste0(nm, '_file'), substitute(get_source(SRC, cfg_paths), list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), mr)))),
-                     format = 'file', cue = download_cue(mr$refresh, freeze)),
-      tar_target_raw(nm, substitute(read_mortality_records(FILE, COLS, SOURCE, ORDER, SHEET),
-                                    list(FILE = as.symbol(paste0(nm, '_file')), COLS = mr$columns, SOURCE = mr$source,
-                                         ORDER = mr$date_order %||% 'dmy', SHEET = mr$sheet)))
-    ))
+    rec_targets <- c(
+      rec_targets,
+      list(
+        tar_target_raw(
+          paste0(nm, '_file'),
+          substitute(
+            get_source(SRC, cfg_paths),
+            list(SRC = source_key(utils::modifyList(list(subfolder = 'records'), mr)))
+          ),
+          format = 'file',
+          cue = download_cue(mr$refresh, freeze)
+        ),
+        tar_target_raw(
+          nm,
+          substitute(
+            read_mortality_records(FILE, COLS, SOURCE, ORDER, SHEET),
+            list(
+              FILE = as.symbol(paste0(nm, '_file')),
+              COLS = mr$columns,
+              SOURCE = mr$source,
+              ORDER = mr$date_order %||% 'dmy',
+              SHEET = mr$sheet
+            )
+          )
+        )
+      )
+    )
     mort_names <- c(mort_names, nm)
   }
   # the cleaning settings, with the record tables for the steps that use them
-  clean_cfg <- substitute(add_record_tables(cfg_cleaning, CAP, MORT, CAPSRC, CAPCOL, HERD),
-                          list(CAP = if (!is.null(cap)) quote(capture_log) else NULL,
-                               MORT = if (length(mort_names)) as.call(c(quote(list), purrr::map(mort_names, as.symbol))) else NULL,
-                               CAPSRC = cap$source, CAPCOL = cap$collar_column %||% 'collar_id', HERD = cfg$locations$herd))
+  clean_cfg <- substitute(
+    add_record_tables(cfg_cleaning, CAP, MORT, CAPSRC, CAPCOL, HERD),
+    list(
+      CAP = if (!is.null(cap)) quote(capture_log) else NULL,
+      MORT = if (length(mort_names)) {
+        as.call(c(quote(list), purrr::map(mort_names, as.symbol)))
+      } else {
+        NULL
+      },
+      CAPSRC = cap$source,
+      CAPCOL = cap$collar_column %||% 'collar_id',
+      HERD = cfg$locations$herd
+    )
+  )
 
   # optional: only the herds in locations: herd: keep:, before cleaning
   herd_keep <- length(unlist(cfg$locations$herd$keep)) > 0
   keep_herds_call <- function(expr) {
-    if (herd_keep) substitute(keep_herds(X, HERD), list(X = expr, HERD = cfg$locations$herd)) else expr
+    if (herd_keep) {
+      substitute(keep_herds(X, HERD), list(X = expr, HERD = cfg$locations$herd))
+    } else {
+      expr
+    }
   }
   herd_targets <- if (herd_keep) {
     # fixes and animals of each herd, and whether kept (counts only)
@@ -163,39 +277,74 @@ targets_locations <- function(cfg) {
   }
 
   clean_targets <- if (is.null(premade)) {
-    combine <- substitute(combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs, KEEP),
-                          list(SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol))),
-                               KEEP = unlist(cfg$locations$keep_spaces)))
+    combine <- substitute(
+      combine_locations(SRCS, cfg_source_duplicates, cfg_project$crs, KEEP),
+      list(
+        SRCS = as.call(c(quote(list), purrr::map(src_names, as.symbol))),
+        KEEP = unlist(cfg$locations$keep_spaces)
+      )
+    )
     combine <- keep_herds_call(combine)
-    c(rec_targets, herd_targets, list(
-      tar_target_raw('locations_raw', combine),
-      tar_target_raw('locations_clean',
-                     substitute(clean_locations(locations_raw, CFG, cfg_project$crs), list(CFG = clean_cfg))),
-      # what the corrections did to each animal (capture log, recorded deaths, long
-      # silences), and a lookup of animals, IDs and collars, for reporting to the
-      # data owners; written to outputs/ (restricted storage, not git)
-      tar_target(animal_decisions, attr(locations_clean, 'decisions')),
-      tar_target(animal_decisions_file,
-                 write_decisions(animal_decisions, file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_decisions.csv')),
-                 format = 'file'),
-      tar_target_raw('animal_lookup', substitute(make_animal_lookup(CAP, locations_clean, CAPCOL),
-                                                 list(CAP = if (!is.null(cap)) quote(capture_log) else NULL,
-                                                      CAPCOL = cap$collar_column %||% 'collar_id'))),
-      tar_target(animal_lookup_file,
-                 write_decisions(animal_lookup, file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_lookup.csv')),
-                 format = 'file'),
-      tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
-      tar_target(flag_summary, summarize_flags(locations_clean, locations_raw))
-    ))
+    c(
+      rec_targets,
+      herd_targets,
+      list(
+        tar_target_raw('locations_raw', combine),
+        tar_target_raw(
+          'locations_clean',
+          substitute(clean_locations(locations_raw, CFG, cfg_project$crs), list(CFG = clean_cfg))
+        ),
+        # what the corrections did to each animal (capture log, recorded deaths, long
+        # silences), and a lookup of animals, IDs and collars, for reporting to the
+        # data owners; written to outputs/ (restricted storage, not git)
+        tar_target(animal_decisions, attr(locations_clean, 'decisions')),
+        tar_target(
+          animal_decisions_file,
+          write_decisions(
+            animal_decisions,
+            file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_decisions.csv')
+          ),
+          format = 'file'
+        ),
+        tar_target_raw(
+          'animal_lookup',
+          substitute(
+            make_animal_lookup(CAP, locations_clean, CAPCOL),
+            list(
+              CAP = if (!is.null(cap)) quote(capture_log) else NULL,
+              CAPCOL = cap$collar_column %||% 'collar_id'
+            )
+          )
+        ),
+        tar_target(
+          animal_lookup_file,
+          write_decisions(
+            animal_lookup,
+            file.path(cfg_paths$outputs, cfg_project$name, 'decisions', 'animal_lookup.csv')
+          ),
+          format = 'file'
+        ),
+        tar_target(mortality_check, check_mortality(locations_raw, locations_clean)),
+        tar_target(flag_summary, summarize_flags(locations_clean, locations_raw))
+      )
+    )
   } else {
     # premade cleaned locations, downloaded apart from any older file of the same name
     premade <- utils::modifyList(list(subfolder = 'premade'), premade)
     list(
-      tar_target_raw('locations_premade_file', substitute(get_source(SRC, cfg_paths), list(SRC = premade)),
-                     format = 'file', cue = tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')),
-      tar_target_raw('locations_clean',
-                     keep_herds_call(substitute(read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
-                                                list(SRC = premade)))),
+      tar_target_raw(
+        'locations_premade_file',
+        substitute(get_source(SRC, cfg_paths), list(SRC = premade)),
+        format = 'file',
+        cue = tar_cue(mode = if (isTRUE(premade$refresh)) 'always' else 'thorough')
+      ),
+      tar_target_raw(
+        'locations_clean',
+        keep_herds_call(substitute(
+          read_premade_locations(locations_premade_file, SRC, cfg_project$crs),
+          list(SRC = premade)
+        ))
+      ),
       tar_target(flag_summary, summarize_flags(locations_clean))
     )
   }
@@ -212,38 +361,75 @@ targets_locations <- function(cfg) {
     }
     list(
       tar_target_raw('study_area_add_file', add_cmd, format = 'file'),
-      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area, file = NULL,
-                                                 crs = cfg_project$crs, add = study_area_add_file))
+      tar_terra_vect(
+        study_area,
+        make_study_area(
+          locations_clean,
+          cfg_study_area,
+          file = NULL,
+          crs = cfg_project$crs,
+          add = study_area_add_file
+        )
+      )
     )
   } else if (is.null(sa_src)) {
     list(
-      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area,
-                                                 file = NULL, crs = cfg_project$crs))
+      tar_terra_vect(
+        study_area,
+        make_study_area(locations_clean, cfg_study_area, file = NULL, crs = cfg_project$crs)
+      )
     )
   } else {
     list(
-      tar_target_raw('study_area_file', substitute(get_source(SRC, cfg_paths), list(SRC = sa_src)),
-                     format = 'file'),
-      tar_terra_vect(study_area, make_study_area(locations_clean, cfg_study_area,
-                                                 file = study_area_file, crs = cfg_project$crs))
+      tar_target_raw(
+        'study_area_file',
+        substitute(get_source(SRC, cfg_paths), list(SRC = sa_src)),
+        format = 'file'
+      ),
+      tar_terra_vect(
+        study_area,
+        make_study_area(
+          locations_clean,
+          cfg_study_area,
+          file = study_area_file,
+          crs = cfg_project$crs
+        )
+      )
     )
   }
   ext_src <- cfg$locations$study_area$extended$source
   # freeze: true keeps the extended study area as built, so changes to the
   # locations do not move it (and the templates and every layer built on it)
-  ext_cue <- if (isTRUE(cfg$locations$study_area$extended$freeze)) tar_cue(mode = 'never') else tar_cue()
+  ext_cue <- if (isTRUE(cfg$locations$study_area$extended$freeze)) {
+    tar_cue(mode = 'never')
+  } else {
+    tar_cue()
+  }
   ext_targets <- if (is.null(ext_src)) {
     list(
-      tar_terra_vect(study_area_extended,
-                     make_study_area_extended(study_area, cfg_study_area$extended), cue = ext_cue)
+      tar_terra_vect(
+        study_area_extended,
+        make_study_area_extended(study_area, cfg_study_area$extended),
+        cue = ext_cue
+      )
     )
   } else {
     list(
-      tar_target_raw('study_area_extended_file', substitute(get_source(SRC, cfg_paths), list(SRC = ext_src)),
-                     format = 'file', cue = ext_cue),
-      tar_terra_vect(study_area_extended,
-                     make_study_area_extended(study_area, cfg_study_area$extended,
-                                              file = study_area_extended_file), cue = ext_cue)
+      tar_target_raw(
+        'study_area_extended_file',
+        substitute(get_source(SRC, cfg_paths), list(SRC = ext_src)),
+        format = 'file',
+        cue = ext_cue
+      ),
+      tar_terra_vect(
+        study_area_extended,
+        make_study_area_extended(
+          study_area,
+          cfg_study_area$extended,
+          file = study_area_extended_file
+        ),
+        cue = ext_cue
+      )
     )
   }
 
@@ -257,18 +443,35 @@ targets_locations <- function(cfg) {
     sa_targets,
     ext_targets,
     list(
-      tar_target(locations,
-                 crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method) |>
-                   finish_locations(cfg_finish)),
+      tar_target(
+        locations,
+        crop_locations(drop_date_only(locations_clean), study_area, cfg_crop_method) |>
+          finish_locations(cfg_finish)
+      ),
       # animals by source, jurisdiction, study and herd, to check the names (counts only)
-      tar_target(herd_check, locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)]),
+      tar_target(
+        herd_check,
+        locations[, .(animals = data.table::uniqueN(id)), keyby = .(source, juris, study, herd)]
+      ),
       # hours between fixes, by animal and by each fix_intervals: by column (to choose tracks: rate_hours)
-      tar_target_raw('fix_intervals', substitute(summarize_fix_intervals(locations, BY),
-                                                 list(BY = cfg$locations$fix_intervals$by %||% list('source', 'herd')))),
+      tar_target_raw(
+        'fix_intervals',
+        substitute(
+          summarize_fix_intervals(locations, BY),
+          list(BY = cfg$locations$fix_intervals$by %||% list('source', 'herd'))
+        )
+      ),
       # warns if cleaned fixes come within the buffer width of the extended study area's edge
-      tar_target(study_area_check,
-                 check_extended_area(locations_clean, study_area_extended, cfg_study_area$extended$buffer_m,
-                                     cfg_project$name, cfg_project$crs))
+      tar_target(
+        study_area_check,
+        check_extended_area(
+          locations_clean,
+          study_area_extended,
+          cfg_study_area$extended$buffer_m,
+          cfg_project$name,
+          cfg_project$crs
+        )
+      )
     )
   )
 }
@@ -298,7 +501,10 @@ source_target_name <- function(src, i) {
 #' @keywords internal
 #' @noRd
 source_key <- function(src) {
-  src[intersect(c('path', 'url', 'target_file', 'archive', 'fun', 'subfolder', 'refresh'), names(src))]
+  src[intersect(
+    c('path', 'url', 'target_file', 'archive', 'fun', 'subfolder', 'refresh'),
+    names(src)
+  )]
 }
 
 #' @title When a download target runs again

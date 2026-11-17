@@ -49,8 +49,10 @@
 #' @author Julie W. Turner
 #' @export
 read_bc_locations <- function(new_file, old_file, ref_file, src, loc_cfg, crs) {
-  p <- utils::modifyList(list(local_tz = 'America/Vancouver', match_m = 2, max_shift_h = 48,
-                              species = 'Caribou'), src$params %||% list())
+  p <- utils::modifyList(
+    list(local_tz = 'America/Vancouver', match_m = 2, max_shift_h = 48, species = 'Caribou'),
+    src$params %||% list()
+  )
   log <- list()
   note <- function(step, n) log[[length(log) + 1]] <<- data.table::data.table(step = step, n = n)
 
@@ -67,16 +69,21 @@ read_bc_locations <- function(new_file, old_file, ref_file, src, loc_cfg, crs) {
   nw[, `:=`(t = t, bc_file = 'new', time_note = 'clock time as UTC', mortality = NA)]
   note('new file rows', nrow(nw))
   note('new: dates with a (wrong, ignored) UTC offset', sum(has_off))
-  if (anyNA(nw$t)) stop('Could not read ', sum(is.na(nw$t)), ' dates in ', new_file[1], call. = FALSE)
+  if (anyNA(nw$t)) {
+    stop('Could not read ', sum(is.na(nw$t)), ' dates in ', new_file[1], call. = FALSE)
+  }
 
   # reference file: correct times 7 or 8 h late
   if (length(ref_file)) {
     ref <- data.table::fread(ref_file[1])
     need_cols(ref, c('Collar_ID', 'Latitude', 'Longitude', 'timestamp'), ref_file[1])
     ref[, timestamp := as_utc(timestamp)]
-    pr <- match_fixes(nw[, .(g = as.character(Cllr_ID), t, lat, lon)],
-                      ref[, .(g = as.character(Collar_ID), t = timestamp, lat = Latitude, lon = Longitude)],
-                      9 * 3600, p$match_m)
+    pr <- match_fixes(
+      nw[, .(g = as.character(Cllr_ID), t, lat, lon)],
+      ref[, .(g = as.character(Collar_ID), t = timestamp, lat = Latitude, lon = Longitude)],
+      9 * 3600,
+      p$match_m
+    )
     exact <- unique(pr[abs(dt) < 60]$ia)
     fix <- pr[!ia %in% exact & (abs(dt + 7 * 3600) < 60 | abs(dt + 8 * 3600) < 60)]
     fix <- fix[order(abs(dt))][!duplicated(ia)]
@@ -84,57 +91,118 @@ read_bc_locations <- function(new_file, old_file, ref_file, src, loc_cfg, crs) {
     note('new: times corrected from the reference file', nrow(fix))
   }
 
-  out <- nw[, .(id = data.table::fcoalesce(Anml_ID, paste0('collar_', Cllr_ID)),
-                t, lon, lat, herd = Pop_Unt, wlh_id = WLH_ID, animal_id = Anml_ID,
-                collar_id = as.character(Cllr_ID), vendor = tolower(Vendor),
-                sex = if ('Sex' %in% names(nw)) Sex else NA_character_,
-                gps_dop = if ('DOP' %in% names(nw)) DOP else NA_real_,
-                elevation = if ('Elevatn' %in% names(nw)) Elevatn else NA_real_,
-                secured = if ('SECURED' %in% names(nw)) SECURED else NA_character_,
-                mortality, bc_file, time_note)]
+  out <- nw[, .(
+    id = data.table::fcoalesce(Anml_ID, paste0('collar_', Cllr_ID)),
+    t,
+    lon,
+    lat,
+    herd = Pop_Unt,
+    wlh_id = WLH_ID,
+    animal_id = Anml_ID,
+    collar_id = as.character(Cllr_ID),
+    vendor = tolower(Vendor),
+    sex = if ('Sex' %in% names(nw)) Sex else NA_character_,
+    gps_dop = if ('DOP' %in% names(nw)) DOP else NA_real_,
+    elevation = if ('Elevatn' %in% names(nw)) Elevatn else NA_real_,
+    secured = if ('SECURED' %in% names(nw)) SECURED else NA_character_,
+    mortality,
+    bc_file,
+    time_note
+  )]
 
   # old file: mortality flags and fixes the new file lacks
   if (length(old_file)) {
     old <- data.table::fread(old_file[1])
-    need_cols(old, c('population_unit', 'species', 'wlh_id', 'deviceid', 'latitude', 'longitude',
-                     'acquisition_date'), old_file[1])
+    need_cols(
+      old,
+      c(
+        'population_unit',
+        'species',
+        'wlh_id',
+        'deviceid',
+        'latitude',
+        'longitude',
+        'acquisition_date'
+      ),
+      old_file[1]
+    )
     note('old file rows', nrow(old))
     old <- old[species %in% unlist(p$species)]
     note(paste('old: rows of', paste(unlist(p$species), collapse = ', ')), nrow(old))
     old[, acquisition_date := remove_utc_offset(as_utc(acquisition_date), p$local_tz)]
     old <- unique(old, by = c('acquisition_date', 'latitude', 'longitude'))
     note('old: distinct fixes (duplicates removed)', nrow(old))
-    if (!'mortality' %in% names(old)) old[, mortality := NA]
-    pr <- match_fixes(old[, .(g = population_unit, t = acquisition_date, lat = latitude, lon = longitude)],
-                      out[, .(g = herd, t, lat, lon)], p$max_shift_h * 3600, p$match_m)
+    if (!'mortality' %in% names(old)) {
+      old[, mortality := NA]
+    }
+    pr <- match_fixes(
+      old[, .(g = population_unit, t = acquisition_date, lat = latitude, lon = longitude)],
+      out[, .(g = herd, t, lat, lon)],
+      p$max_shift_h * 3600,
+      p$match_m
+    )
     pr <- pr[order(abs(dt))][!duplicated(ia)]
     same <- pr[abs(dt) < 60]
     shifted <- pr[abs(dt) >= 60 & !ib %in% same$ib][order(abs(dt))][!duplicated(ib)]
     note('old: same fix in new', nrow(same))
     note('old: same position in new at another time (old time used)', nrow(shifted))
-    flag <- rbind(same, shifted)[, .(mort = old$mortality[ia]), by = ib][, .(mort = if (all(is.na(mort))) NA else any(mort, na.rm = TRUE)), by = ib]
+    flag <- rbind(same, shifted)[, .(mort = old$mortality[ia]), by = ib][,
+      .(mort = if (all(is.na(mort))) NA else any(mort, na.rm = TRUE)),
+      by = ib
+    ]
     out[flag$ib, mortality := flag$mort]
-    out[shifted$ib, `:=`(t = old$acquisition_date[shifted$ia],
-                         time_note = 'time from old file (new file had this position at another time)')]
+    out[
+      shifted$ib,
+      `:=`(
+        t = old$acquisition_date[shifted$ia],
+        time_note = 'time from old file (new file had this position at another time)'
+      )
+    ]
     note('new: fixes given a mortality flag from old', sum(!is.na(flag$mort)))
 
     add <- old[!seq_len(.N) %in% c(same$ia, shifted$ia)]
     # animal IDs as in the new file, through WLH_ID
-    ids <- out[!is.na(wlh_id) & !is.na(animal_id), .N, by = .(wlh_id, animal_id)][order(-N)][!duplicated(wlh_id)]
+    ids <- out[!is.na(wlh_id) & !is.na(animal_id), .N, by = .(wlh_id, animal_id)][order(-N)][
+      !duplicated(wlh_id)
+    ]
     add[, wlh_id := data.table::fifelse(wlh_id == '', NA_character_, as.character(wlh_id))]
     add[, deviceid := data.table::fifelse(deviceid == '', NA_character_, as.character(deviceid))]
-    add[, id := data.table::fcoalesce(ids$animal_id[match(wlh_id, ids$wlh_id)], wlh_id,
-                                      data.table::fifelse(is.na(deviceid), NA_character_, paste0('collar_', deviceid)))]
+    add[,
+      id := data.table::fcoalesce(
+        ids$animal_id[match(wlh_id, ids$wlh_id)],
+        wlh_id,
+        data.table::fifelse(is.na(deviceid), NA_character_, paste0('collar_', deviceid))
+      )
+    ]
     note('old: fixes not in new', nrow(add))
     note('old: fixes not in new without an animal or collar ID (dropped)', sum(is.na(add$id)))
     add <- add[!is.na(id)]
-    out <- data.table::rbindlist(list(out, add[, .(
-      id, t = acquisition_date, lon = longitude, lat = latitude, herd = population_unit,
-      wlh_id, animal_id = ids$animal_id[match(wlh_id, ids$wlh_id)], collar_id = deviceid,
-      vendor = if ('vendor' %in% names(add)) tolower(vendor) else NA_character_,
-      elevation = if ('elevation' %in% names(add)) elevation else NA_real_,
-      secured = if ('secure_ind' %in% names(add)) data.table::fifelse(secure_ind, 'Yes', 'No') else NA_character_,
-      mortality, bc_file = 'old', time_note = 'only in old file')]), fill = TRUE)
+    out <- data.table::rbindlist(
+      list(
+        out,
+        add[, .(
+          id,
+          t = acquisition_date,
+          lon = longitude,
+          lat = latitude,
+          herd = population_unit,
+          wlh_id,
+          animal_id = ids$animal_id[match(wlh_id, ids$wlh_id)],
+          collar_id = deviceid,
+          vendor = if ('vendor' %in% names(add)) tolower(vendor) else NA_character_,
+          elevation = if ('elevation' %in% names(add)) elevation else NA_real_,
+          secured = if ('secure_ind' %in% names(add)) {
+            data.table::fifelse(secure_ind, 'Yes', 'No')
+          } else {
+            NA_character_
+          },
+          mortality,
+          bc_file = 'old',
+          time_note = 'only in old file'
+        )]
+      ),
+      fill = TRUE
+    )
   }
   out[vendor == '', vendor := NA_character_]
   out[, time_clash := .N > 1, by = .(id, t)]
@@ -171,8 +239,12 @@ match_fixes <- function(a, b, window_s, max_m) {
   pr <- data.table::rbindlist(purrr::map(offsets, function(o) {
     a[, `:=`(cy = floor(la / cell + o[1]), cx = floor(oa / cell + o[2]))]
     b[, `:=`(cy = floor(lb / cell + o[1]), cx = floor(ob / cell + o[2]))]
-    b[a, on = .(g, cy, cx, tb >= lo, tb <= hi), nomatch = NULL,
-      .(ia = i.ia, ib = x.ib, dt = x.tb - i.ta, d = metres_apart(i.la, i.oa, x.lb, x.ob))]
+    b[
+      a,
+      on = .(g, cy, cx, tb >= lo, tb <= hi),
+      nomatch = NULL,
+      .(ia = i.ia, ib = x.ib, dt = x.tb - i.ta, d = metres_apart(i.la, i.oa, x.lb, x.ob))
+    ]
   }))
   unique(pr[d <= max_m], by = c('ia', 'ib'))
 }
@@ -207,7 +279,9 @@ remove_utc_offset <- function(x, tz) {
 #' @keywords internal
 #' @noRd
 as_utc <- function(x) {
-  if (!inherits(x, 'POSIXct')) x <- as.POSIXct(x, tz = 'UTC')
+  if (!inherits(x, 'POSIXct')) {
+    x <- as.POSIXct(x, tz = 'UTC')
+  }
   attr(x, 'tzone') <- 'UTC'
   x
 }
@@ -217,6 +291,7 @@ as_utc <- function(x) {
 #' @noRd
 need_cols <- function(d, cols, file) {
   missing <- setdiff(cols, names(d))
-  if (length(missing)) stop(basename(file), ' lacks columns: ', paste(missing, collapse = ', '), call. = FALSE)
+  if (length(missing)) {
+    stop(basename(file), ' lacks columns: ', paste(missing, collapse = ', '), call. = FALSE)
+  }
 }
-

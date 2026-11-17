@@ -31,39 +31,72 @@
 #' @keywords internal
 #' @noRd
 read_layers <- function(file) {
-  if (!file.exists(file)) stop('Layer table not found: ', file, call. = FALSE)
-  text_cols <- intersect(c('path', 'url', 'target_file', 'archive', 'build', 'class'), names(data.table::fread(file, nrows = 0)))
+  if (!file.exists(file)) {
+    stop('Layer table not found: ', file, call. = FALSE)
+  }
+  text_cols <- intersect(
+    c('path', 'url', 'target_file', 'archive', 'build', 'class'),
+    names(data.table::fread(file, nrows = 0))
+  )
   layers <- data.table::fread(file, colClasses = list(character = text_cols))
   for (col in c('path', 'url', 'target_file', 'archive', 'build', 'class')) {
-    if (!col %in% names(layers)) layers[, (col) := NA_character_]
+    if (!col %in% names(layers)) {
+      layers[, (col) := NA_character_]
+    }
     layers[get(col) == '', (col) := NA_character_]
   }
-  if (!'time_since' %in% names(layers)) layers[, time_since := FALSE]
-  if (!'ts_nodata' %in% names(layers)) layers[, ts_nodata := NA_real_]
+  if (!'time_since' %in% names(layers)) {
+    layers[, time_since := FALSE]
+  }
+  if (!'ts_nodata' %in% names(layers)) {
+    layers[, ts_nodata := NA_real_]
+  }
   layers[is.na(time_since), time_since := FALSE]
-  layers[, `:=`(first_year = as.integer(first_year), last_year = as.integer(last_year),
-                time_since = as.logical(time_since), ts_nodata = as.numeric(ts_nodata))]
+  layers[, `:=`(
+    first_year = as.integer(first_year),
+    last_year = as.integer(last_year),
+    time_since = as.logical(time_since),
+    ts_nodata = as.numeric(ts_nodata)
+  )]
 
   problems <- character()
   add <- function(rows, msg) {
-    if (any(rows)) problems <<- c(problems, paste0(msg, ': ', paste(layers$name[rows], collapse = ', ')))
+    if (any(rows)) {
+      problems <<- c(problems, paste0(msg, ': ', paste(layers$name[rows], collapse = ', ')))
+    }
   }
-  if (!'name' %in% names(layers)) stop('Layer table ', file, ' needs a `name` column', call. = FALSE)
+  if (!'name' %in% names(layers)) {
+    stop('Layer table ', file, ' needs a `name` column', call. = FALSE)
+  }
   add(duplicated(layers$name), 'names used more than once')
-  add(make.names(layers$name) != layers$name, 'names must be letters, numbers, . and _ and not start with a number')
+  add(
+    make.names(layers$name) != layers$name,
+    'names must be letters, numbers, . and _ and not start with a number'
+  )
   add(is.na(layers$path) & is.na(layers$url) & is.na(layers$build), 'no path, url or build')
   static <- layers$build %in% c('elevation', 'northness')
   given <- !is.na(layers$first_year) | !is.na(layers$last_year)
   # built layers are yearly unless static; their blank years use the layer year range
   yearly <- given | (!is.na(layers$build) & !static)
-  add(!is.na(layers$first_year) & !is.na(layers$last_year) & layers$last_year < layers$first_year,
-      'last_year before first_year')
-  add(is.na(layers$build) & given & (is.na(layers$first_year) | is.na(layers$last_year)),
-      'layers that are not built need both first_year and last_year, or neither')
+  add(
+    !is.na(layers$first_year) & !is.na(layers$last_year) & layers$last_year < layers$first_year,
+    'last_year before first_year'
+  )
+  add(
+    is.na(layers$build) & given & (is.na(layers$first_year) | is.na(layers$last_year)),
+    'layers that are not built need both first_year and last_year, or neither'
+  )
   has_year <- grepl('{year}', paste(layers$path, layers$url, layers$target_file), fixed = TRUE)
-  add(yearly & is.na(layers$build) & !has_year, 'yearly layer without {year} in its path, url or target_file')
-  add(static & given, 'elevation and northness do not change by year: leave first_year and last_year blank')
-  windowed <- layers$build %in% c('harvest_pa', 'harvest_dens', 'harvest_dist', 'fire_pa', 'fire_dens', 'fire_dist')
+  add(
+    yearly & is.na(layers$build) & !has_year,
+    'yearly layer without {year} in its path, url or target_file'
+  )
+  add(
+    static & given,
+    'elevation and northness do not change by year: leave first_year and last_year blank'
+  )
+  windowed <- layers$build %in%
+    c('harvest_pa', 'harvest_dens', 'harvest_dist', 'fire_pa', 'fire_dens', 'fire_dist')
   bad_win <- windowed & !is.na(layers$class) & !grepl('^[1-9][0-9]*$', layers$class %||% '')
   add(bad_win, 'class (years counted as recent) must be a whole number above 0')
   add(!yearly & has_year, '{year} in path but no first_year/last_year')
@@ -71,7 +104,13 @@ read_layers <- function(file) {
   layers[, yearly := yearly]
 
   if (length(problems)) {
-    stop('Problems in layer table ', file, ':\n  - ', paste(problems, collapse = '\n  - '), call. = FALSE)
+    stop(
+      'Problems in layer table ',
+      file,
+      ':\n  - ',
+      paste(problems, collapse = '\n  - '),
+      call. = FALSE
+    )
   }
   layers[]
 }
@@ -90,7 +129,14 @@ get_layer_files <- function(path, url, target_file, archive, first_year, last_ye
   fill <- function(x, y) if (is.na(x)) NULL else gsub('{year}', y, x, fixed = TRUE)
   years <- if (is.na(first_year)) NA else first_year:last_year
   purrr::map_chr(years, function(y) {
-    get_source(list(path = fill(path, y), url = fill(url, y),
-                    target_file = fill(target_file, y), archive = fill(archive, y)), paths)[1]
+    get_source(
+      list(
+        path = fill(path, y),
+        url = fill(url, y),
+        target_file = fill(target_file, y),
+        archive = fill(archive, y)
+      ),
+      paths
+    )[1]
   })
 }

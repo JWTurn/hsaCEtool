@@ -33,7 +33,9 @@
 #' @export
 targets_models <- function(cfg) {
   models <- cfg$model$models
-  if (!length(models)) return(list())
+  if (!length(models)) {
+    return(list())
+  }
   out <- list(
     tar_target(cfg_model, cfg$model[c('groups', 'distance_cap')]),
     tar_target(season_table, cfg$seasons),
@@ -48,45 +50,100 @@ targets_models <- function(cfg) {
     coefs_nm <- as.symbol(paste0('model_coefs_', nm))
     seasons_nm <- as.symbol(paste0('seasons_', nm))
     set_nm <- models[[nm]]$season_set %||% cfg$model$season_set
-    out <- c(out, list(
-      # without upload:, which only says whether upload_models() shares the fit,
-      # so marking a model for upload does not refit it
-      tar_target_raw(as.character(cfg_nm), substitute({
-        s <- cfg$model$models[[NM]]
-        s[setdiff(names(s), 'upload')]
-      }, list(NM = nm))),
-      tar_target_raw(as.character(seasons_nm), substitute(season_dates(season_table, SET), list(SET = set_nm))),
-      tar_target_raw(as.character(data_nm), substitute(
-        build_model_data(steps, extracted, animal_codes, c(cfg_model, list(seasons = SEASONS)), CFG),
-        list(CFG = cfg_nm, SEASONS = seasons_nm))),
-      tar_target_raw(paste0('model_log_', nm), substitute(DATA$log, list(DATA = data_nm)))
-    ))
+    out <- c(
+      out,
+      list(
+        # without upload:, which only says whether upload_models() shares the fit,
+        # so marking a model for upload does not refit it
+        tar_target_raw(
+          as.character(cfg_nm),
+          substitute(
+            {
+              s <- cfg$model$models[[NM]]
+              s[setdiff(names(s), 'upload')]
+            },
+            list(NM = nm)
+          )
+        ),
+        tar_target_raw(
+          as.character(seasons_nm),
+          substitute(season_dates(season_table, SET), list(SET = set_nm))
+        ),
+        tar_target_raw(
+          as.character(data_nm),
+          substitute(
+            build_model_data(
+              steps,
+              extracted,
+              animal_codes,
+              c(cfg_model, list(seasons = SEASONS)),
+              CFG
+            ),
+            list(CFG = cfg_nm, SEASONS = seasons_nm)
+          )
+        ),
+        tar_target_raw(paste0('model_log_', nm), substitute(DATA$log, list(DATA = data_nm)))
+      )
+    )
     if (isTRUE(models[[nm]]$export)) {
-      out <- c(out, list(tar_target_raw(paste0('model_table_', nm, '_file'), substitute(
-        write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables'), SEASONS),
-        list(DATA = data_nm, CFG = cfg_nm, NM = nm, SEASONS = seasons_nm)),
-        format = 'file')))
+      out <- c(
+        out,
+        list(tar_target_raw(
+          paste0('model_table_', nm, '_file'),
+          substitute(
+            write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables'), SEASONS),
+            list(DATA = data_nm, CFG = cfg_nm, NM = nm, SEASONS = seasons_nm)
+          ),
+          format = 'file'
+        ))
+      )
     }
     # fit: false builds the table only (e.g. to check it before a long fit)
-    if (isFALSE(models[[nm]]$fit)) next
+    if (isFALSE(models[[nm]]$fit)) {
+      next
+    }
     # control: only in the command of a model that sets it, so adding it to one
     # model does not change (and refit) the others
     fit_cmd <- if (is.null(models[[nm]]$control)) {
-      substitute(fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000), list(DATA = data_nm, CFG = cfg_nm))
+      substitute(
+        fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000),
+        list(DATA = data_nm, CFG = cfg_nm)
+      )
     } else {
-      substitute(fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000,
-                          control = utils::modifyList(list(rank_check = 'adjust'), CFG$control)),
-                 list(DATA = data_nm, CFG = cfg_nm))
+      substitute(
+        fit_issa(
+          DATA$data,
+          CFG$formula,
+          step_sd = CFG$step_sd %||% 1000,
+          control = utils::modifyList(list(rank_check = 'adjust'), CFG$control)
+        ),
+        list(DATA = data_nm, CFG = cfg_nm)
+      )
     }
-    out <- c(out, list(
-      tar_target_raw(as.character(fit_nm), fit_cmd),
-      tar_target_raw(as.character(coefs_nm), substitute(model_coefficients(FIT), list(FIT = fit_nm))),
-      tar_target_raw(paste0(coefs_nm, '_files'), substitute(
-        write_model_coefficients(COEFS, LOG, NM, model_dir, SEASONS, CFG$seasons %||% 'all'),
-        list(COEFS = coefs_nm, LOG = as.symbol(paste0('model_log_', nm)), NM = nm,
-             SEASONS = seasons_nm, CFG = cfg_nm)),
-        format = 'file')
-    ))
+    out <- c(
+      out,
+      list(
+        tar_target_raw(as.character(fit_nm), fit_cmd),
+        tar_target_raw(
+          as.character(coefs_nm),
+          substitute(model_coefficients(FIT), list(FIT = fit_nm))
+        ),
+        tar_target_raw(
+          paste0(coefs_nm, '_files'),
+          substitute(
+            write_model_coefficients(COEFS, LOG, NM, model_dir, SEASONS, CFG$seasons %||% 'all'),
+            list(
+              COEFS = coefs_nm,
+              LOG = as.symbol(paste0('model_log_', nm)),
+              NM = nm,
+              SEASONS = seasons_nm,
+              CFG = cfg_nm
+            )
+          ),
+          format = 'file'
+        )
+      )
+    )
   }
   out
 }

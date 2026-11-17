@@ -14,32 +14,49 @@ test_that('merge_config can set a setting to NULL', {
 
 test_that('read_config combines default, project and override files', {
   dir <- withr::local_tempdir()
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
-                        tracks = list(n_random = 5)),
-                   file.path(dir, 'TEST.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+      tracks = list(n_random = 5)
+    ),
+    file.path(dir, 'TEST.yaml')
+  )
   writeLines('function(cfg) { cfg$tracks$min_steps <- 7; cfg }', file.path(dir, 'TEST.R'))
 
   cfg <- read_config('TEST', config_dir = dir)
   expect_equal(cfg$tracks$n_random, 5)
   expect_equal(cfg$tracks$min_steps, 7)
-  expect_equal(cfg$tracks$rate_hours, 11)   # from default.yaml
+  expect_equal(cfg$tracks$rate_hours, 11) # from default.yaml
   expect_equal(cfg$project$name, 'TEST')
   # seasons: the package's table unless the project names its own
-  expect_equal(names(season_dates(cfg$seasons, cfg$model$season_set)), c('winter', 'spring', 'summer', 'fall'))
-  writeLines(c('set,season,start_month,start_day,end_month,end_day', 'mine,warm,5,1,9,30'),
-             file.path(dir, 'seasons_TEST.csv'))
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
-                        model = list(season_table = 'seasons_TEST.csv', season_set = 'mine')),
-                   file.path(dir, 'TEST.yaml'))
+  expect_equal(
+    names(season_dates(cfg$seasons, cfg$model$season_set)),
+    c('winter', 'spring', 'summer', 'fall')
+  )
+  writeLines(
+    c('set,season,start_month,start_day,end_month,end_day', 'mine,warm,5,1,9,30'),
+    file.path(dir, 'seasons_TEST.csv')
+  )
+  yaml::write_yaml(
+    list(
+      locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+      model = list(season_table = 'seasons_TEST.csv', season_set = 'mine')
+    ),
+    file.path(dir, 'TEST.yaml')
+  )
   cfg <- read_config('TEST', config_dir = dir)
   expect_equal(season_dates(cfg$seasons, 'mine'), list(warm = list('05-01', '09-30')))
 })
 
 test_that('check_config reports problems in plain language', {
   dir <- withr::local_tempdir()
-  yaml::write_yaml(list(project = list(crs = 'EPSG:4326'),
-                        locations = list(cleaning = list(steps = list('no_such_step')))),
-                   file.path(dir, 'BAD.yaml'))
+  yaml::write_yaml(
+    list(
+      project = list(crs = 'EPSG:4326'),
+      locations = list(cleaning = list(steps = list('no_such_step')))
+    ),
+    file.path(dir, 'BAD.yaml')
+  )
   err <- tryCatch(read_config('BAD', config_dir = dir), error = conditionMessage)
   expect_match(err, 'units in metres')
   expect_match(err, 'sources is empty')
@@ -59,7 +76,10 @@ test_that('a complete made-up project has valid settings', {
 test_that('a default.yaml in the project folder is not read, with a warning', {
   dir <- withr::local_tempdir()
   yaml::write_yaml(list(tracks = list(n_random = 99)), file.path(dir, 'default.yaml'))
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds')))), file.path(dir, 'TEST.yaml'))
+  yaml::write_yaml(
+    list(locations = list(sources = list(list(type = 'file', path = 'x.rds')))),
+    file.path(dir, 'TEST.yaml')
+  )
   expect_warning(cfg <- read_config('TEST', config_dir = dir), 'is not read')
   expect_equal(cfg$tracks$n_random, 30)
 })
@@ -68,31 +88,52 @@ test_that('shared settings files come between the defaults and the project file'
   dir <- withr::local_tempdir()
   shared1 <- file.path(dir, 'shared1.yaml')
   shared2 <- file.path(dir, 'shared2.yaml')
-  yaml::write_yaml(list(project = list(crs = 'EPSG:3005'), tracks = list(n_random = 8, min_steps = 9)), shared1)
+  yaml::write_yaml(
+    list(project = list(crs = 'EPSG:3005'), tracks = list(n_random = 8, min_steps = 9)),
+    shared1
+  )
   yaml::write_yaml(list(tracks = list(n_random = 6)), shared2)
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
-                        tracks = list(min_steps = 4)),
-                   file.path(dir, 'TEST.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+      tracks = list(min_steps = 4)
+    ),
+    file.path(dir, 'TEST.yaml')
+  )
   cfg <- read_config('TEST', config_dir = dir, shared = c(shared1, shared2))
-  expect_equal(cfg$project$crs, 'EPSG:3005')   # shared over the defaults
-  expect_equal(cfg$tracks$n_random, 6)         # later shared file wins
-  expect_equal(cfg$tracks$min_steps, 4)        # project file wins over shared
-  expect_equal(cfg$tracks$rate_hours, 11)      # still from the defaults
-  expect_error(read_config('TEST', config_dir = dir, shared = file.path(dir, 'none.yaml')), 'not found')
+  expect_equal(cfg$project$crs, 'EPSG:3005') # shared over the defaults
+  expect_equal(cfg$tracks$n_random, 6) # later shared file wins
+  expect_equal(cfg$tracks$min_steps, 4) # project file wins over shared
+  expect_equal(cfg$tracks$rate_hours, 11) # still from the defaults
+  expect_error(
+    read_config('TEST', config_dir = dir, shared = file.path(dir, 'none.yaml')),
+    'not found'
+  )
 })
 
 test_that('a default.yaml read as the project file or as shared settings gives no warning', {
   dir <- withr::local_tempdir()
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
-                        tracks = list(n_random = 12, min_steps = 5)),
-                   file.path(dir, 'default.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(sources = list(list(type = 'file', path = 'x.rds'))),
+      tracks = list(n_random = 12, min_steps = 5)
+    ),
+    file.path(dir, 'default.yaml')
+  )
   yaml::write_yaml(list(tracks = list(min_steps = 3)), file.path(dir, 'local.yaml'))
-  expect_no_warning(cfg <- read_config('TEST', config_dir = dir, project_file = file.path(dir, 'default.yaml')))
+  expect_no_warning(
+    cfg <- read_config('TEST', config_dir = dir, project_file = file.path(dir, 'default.yaml'))
+  )
   expect_equal(cfg$tracks$n_random, 12)
-  expect_equal(cfg$tracks$min_steps, 3)        # local.yaml still wins
+  expect_equal(cfg$tracks$min_steps, 3) # local.yaml still wins
   expect_equal(cfg$project$name, 'TEST')
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'file', path = 'x.rds')))), file.path(dir, 'TEST.yaml'))
-  expect_no_warning(cfg <- read_config('TEST', config_dir = dir, shared = file.path(dir, 'default.yaml')))
+  yaml::write_yaml(
+    list(locations = list(sources = list(list(type = 'file', path = 'x.rds')))),
+    file.path(dir, 'TEST.yaml')
+  )
+  expect_no_warning(
+    cfg <- read_config('TEST', config_dir = dir, shared = file.path(dir, 'default.yaml'))
+  )
   expect_equal(cfg$tracks$n_random, 12)
 })
 
@@ -106,30 +147,48 @@ test_that('a key named y stays a name, not TRUE', {
 
 test_that('premade locations can replace the sources', {
   dir <- withr::local_tempdir()
-  yaml::write_yaml(list(locations = list(premade = list(path = 'clean.rds'))), file.path(dir, 'PRE.yaml'))
+  yaml::write_yaml(
+    list(locations = list(premade = list(path = 'clean.rds'))),
+    file.path(dir, 'PRE.yaml')
+  )
   expect_equal(read_config('PRE', config_dir = dir)$locations$premade$path, 'clean.rds')
-  yaml::write_yaml(list(locations = list(premade = list(target_file = 'clean.rds'))), file.path(dir, 'BAD.yaml'))
+  yaml::write_yaml(
+    list(locations = list(premade = list(target_file = 'clean.rds'))),
+    file.path(dir, 'BAD.yaml')
+  )
   expect_error(read_config('BAD', config_dir = dir), 'premade: give a path or a url')
 })
 
 test_that('study_area: add needs a path or url, and is not used with study_area: source', {
   dir <- withr::local_tempdir()
   src <- list(list(type = 'file', path = 'x.rds'))
-  yaml::write_yaml(list(locations = list(sources = src, study_area = list(add = list(path = 'r.gpkg')))),
-                   file.path(dir, 'OK.yaml'))
+  yaml::write_yaml(
+    list(locations = list(sources = src, study_area = list(add = list(path = 'r.gpkg')))),
+    file.path(dir, 'OK.yaml')
+  )
   expect_equal(read_config('OK', config_dir = dir)$locations$study_area$add$path, 'r.gpkg')
-  yaml::write_yaml(list(locations = list(sources = src,
-                                         study_area = list(source = list(path = 's.gpkg'),
-                                                           add = list(target_file = 'r.gpkg')))),
-                   file.path(dir, 'BAD.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(
+        sources = src,
+        study_area = list(source = list(path = 's.gpkg'), add = list(target_file = 'r.gpkg'))
+      )
+    ),
+    file.path(dir, 'BAD.yaml')
+  )
   err <- tryCatch(read_config('BAD', config_dir = dir), error = conditionMessage)
   expect_match(err, 'study_area: add: give one of a path, a url or a target')
   expect_match(err, 'not with study_area: source:')
-  yaml::write_yaml(list(locations = list(sources = src, study_area = list(add = list(target = 'herd ranges')))),
-                   file.path(dir, 'BAD2.yaml'))
+  yaml::write_yaml(
+    list(locations = list(sources = src, study_area = list(add = list(target = 'herd ranges')))),
+    file.path(dir, 'BAD2.yaml')
+  )
   expect_error(read_config('BAD2', config_dir = dir), 'target must be the name of one target')
-  yaml::write_yaml(list(locations = list(sources = src,
-                                         study_area = list(add = list(target = 'r', path = 'r.gpkg')))),
-                   file.path(dir, 'BAD3.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(sources = src, study_area = list(add = list(target = 'r', path = 'r.gpkg')))
+    ),
+    file.path(dir, 'BAD3.yaml')
+  )
   expect_error(read_config('BAD3', config_dir = dir), 'give one of a path, a url or a target')
 })

@@ -34,14 +34,35 @@ yukon_norm <- function(x) {
 #' @return data.table.
 #' @keywords internal
 #' @noRd
-clean_rows <- function(step, kind, source = NA_character_, ref_id = NA_character_, type = NA_character_,
-                       detail = NA_character_, size = NA_real_) {
+clean_rows <- function(
+  step,
+  kind,
+  source = NA_character_,
+  ref_id = NA_character_,
+  type = NA_character_,
+  detail = NA_character_,
+  size = NA_real_
+) {
   if (any(lengths(list(source, ref_id, type, detail, size)) == 0)) {
-    return(data.table::data.table(step = character(), kind = character(), source = character(), REF_ID = character(),
-                                  type = character(), detail = character(), size = numeric()))
+    return(data.table::data.table(
+      step = character(),
+      kind = character(),
+      source = character(),
+      REF_ID = character(),
+      type = character(),
+      detail = character(),
+      size = numeric()
+    ))
   }
-  data.table::data.table(step = step, kind = kind, source = as.character(source), REF_ID = as.character(ref_id),
-                         type = as.character(type), detail = as.character(detail), size = round(as.numeric(size), 4))
+  data.table::data.table(
+    step = step,
+    kind = kind,
+    source = as.character(source),
+    REF_ID = as.character(ref_id),
+    type = as.character(type),
+    detail = as.character(detail),
+    size = round(as.numeric(size), 4)
+  )
 }
 
 #' @title Size of features: km for lines, km2 for polygons
@@ -78,16 +99,31 @@ read_yukon_reclass <- function(xlsx, patches = NULL) {
       col <- function(pat) {
         i <- grep(paste0(pat, ' ', v, '$'), nm, ignore.case = TRUE)
         if (length(i) != 1) {
-          stop(basename(xlsx), ' (', sheet, '): expected one column matching "', pat, ' ', v, '"', call. = FALSE)
+          stop(
+            basename(xlsx),
+            ' (',
+            sheet,
+            '): expected one column matching "',
+            pat,
+            ' ',
+            v,
+            '"',
+            call. = FALSE
+          )
         }
         as.character(d[[i]])
       }
       out <- data.table::data.table(
-        kind = kind, schema = v,
-        industry = col('^(Industry|Land use) type'), disturbance = col('^Disturbance type'),
+        kind = kind,
+        schema = v,
+        industry = col('^(Industry|Land use) type'),
+        disturbance = col('^Disturbance type'),
         industry_rc = col('^(Industry|Land use) reclassification'),
-        disturbance_rc = col(if (kind == 'lines') '^Disturbance reclassification' else '^Linear feature type'),
-        lf_type = if (kind == 'lines') col('^Linear feature type') else NA_character_)
+        disturbance_rc = col(
+          if (kind == 'lines') '^Disturbance reclassification' else '^Linear feature type'
+        ),
+        lf_type = if (kind == 'lines') col('^Linear feature type') else NA_character_
+      )
       out[!is.na(industry) & !is.na(disturbance)]
     }))
   }))
@@ -95,12 +131,18 @@ read_yukon_reclass <- function(xlsx, patches = NULL) {
   if (!is.null(patches)) {
     p <- data.table::fread(patches, na.strings = '', colClasses = 'character')
     p[, `:=`(k_ind = yukon_norm(industry), k_dist = yukon_norm(disturbance))]
-    lut <- rbind(lut[!p, on = c('kind', 'schema', 'k_ind', 'k_dist')], p[, names(lut), with = FALSE])
+    lut <- rbind(
+      lut[!p, on = c('kind', 'schema', 'k_ind', 'k_dist')],
+      p[, names(lut), with = FALSE]
+    )
   }
   dup <- lut[duplicated(lut, by = c('kind', 'schema', 'k_ind', 'k_dist'))]
   if (nrow(dup)) {
-    stop('Reclassification has more than one row for: ',
-         paste(unique(paste(dup$kind, dup$schema, dup$industry, dup$disturbance)), collapse = '; '), call. = FALSE)
+    stop(
+      'Reclassification has more than one row for: ',
+      paste(unique(paste(dup$kind, dup$schema, dup$industry, dup$disturbance)), collapse = '; '),
+      call. = FALSE
+    )
   }
   lut[]
 }
@@ -123,9 +165,15 @@ read_yukon_reclass <- function(xlsx, patches = NULL) {
 #' @keywords internal
 #' @export
 standardise_yukon <- function(x, kind, source, lut, crs, max_year) {
-  ren <- c(TYPE_LANDUSE = 'TYPE_INDUSTRY', TYPE_INDUS = 'TYPE_INDUSTRY', INDUSTRY = 'TYPE_INDUSTRY',
-           TYPE_DISTU = 'TYPE_DISTURBANCE', DISTURB = 'TYPE_DISTURBANCE',
-           FEATURE_VI = 'FEATURE_VISIBILITY', IMG_DATE = 'IMAGE_DATE')
+  ren <- c(
+    TYPE_LANDUSE = 'TYPE_INDUSTRY',
+    TYPE_INDUS = 'TYPE_INDUSTRY',
+    INDUSTRY = 'TYPE_INDUSTRY',
+    TYPE_DISTU = 'TYPE_DISTURBANCE',
+    DISTURB = 'TYPE_DISTURBANCE',
+    FEATURE_VI = 'FEATURE_VISIBILITY',
+    IMG_DATE = 'IMAGE_DATE'
+  )
   d <- data.table::as.data.table(sf::st_drop_geometry(x))
   schema <- if ('TYPE_LANDUSE' %in% names(d)) 'v5' else 'v4'
   have <- intersect(names(ren), names(d))
@@ -133,23 +181,52 @@ standardise_yukon <- function(x, kind, source, lut, crs, max_year) {
   for (cl in c('REF_ID', 'DATABASE', 'FEATURE_VISIBILITY', 'TYPE_INDUSTRY', 'TYPE_DISTURBANCE')) {
     d[, (cl) := if (cl %in% names(d)) as.character(get(cl)) else NA_character_]
   }
-  d[, `:=`(TYPE_INDUSTRY = data.table::fcoalesce(TYPE_INDUSTRY, 'Unknown'),
-           TYPE_DISTURBANCE = data.table::fcoalesce(TYPE_DISTURBANCE, 'Unknown'))]
-  d[, `:=`(kind = kind, schema = schema, k_ind = yukon_norm(TYPE_INDUSTRY), k_dist = yukon_norm(TYPE_DISTURBANCE))]
+  d[, `:=`(
+    TYPE_INDUSTRY = data.table::fcoalesce(TYPE_INDUSTRY, 'Unknown'),
+    TYPE_DISTURBANCE = data.table::fcoalesce(TYPE_DISTURBANCE, 'Unknown')
+  )]
+  d[, `:=`(
+    kind = kind,
+    schema = schema,
+    k_ind = yukon_norm(TYPE_INDUSTRY),
+    k_dist = yukon_norm(TYPE_DISTURBANCE)
+  )]
   d[, `:=`(industry_rc = NA_character_, disturbance_rc = NA_character_, lf_type = NA_character_)]
-  d[lut, on = c('kind', 'schema', 'k_ind', 'k_dist'),
-    `:=`(industry_rc = i.industry_rc, disturbance_rc = i.disturbance_rc, lf_type = i.lf_type)]
+  d[
+    lut,
+    on = c('kind', 'schema', 'k_ind', 'k_dist'),
+    `:=`(industry_rc = i.industry_rc, disturbance_rc = i.disturbance_rc, lf_type = i.lf_type)
+  ]
   img <- if ('IMAGE_DATE' %in% names(d)) d$IMAGE_DATE else rep(NA, nrow(d))
   y <- suppressWarnings(as.integer(substr(as.character(img), 1, 4)))
   bad <- !is.na(y) & (y < 1950 | y > max_year)
-  bad_dates <- clean_rows('image date not possible: read as missing', kind, source, d$REF_ID[bad],
-                          d$TYPE_DISTURBANCE[bad], paste('image date', as.character(img[bad])))
+  bad_dates <- clean_rows(
+    'image date not possible: read as missing',
+    kind,
+    source,
+    d$REF_ID[bad],
+    d$TYPE_DISTURBANCE[bad],
+    paste('image date', as.character(img[bad]))
+  )
   y[bad] <- NA_integer_
   d[, `:=`(image_year = y, source = source)]
-  keep <- c('REF_ID', 'DATABASE', 'FEATURE_VISIBILITY', 'TYPE_INDUSTRY', 'TYPE_DISTURBANCE',
-            'industry_rc', 'disturbance_rc', 'lf_type', 'image_year', 'schema', 'source')
+  keep <- c(
+    'REF_ID',
+    'DATABASE',
+    'FEATURE_VISIBILITY',
+    'TYPE_INDUSTRY',
+    'TYPE_DISTURBANCE',
+    'industry_rc',
+    'disturbance_rc',
+    'lf_type',
+    'image_year',
+    'schema',
+    'source'
+  )
   g <- sf::st_transform(sf::st_zm(sf::st_geometry(x)), crs)
-  if (kind == 'polys') g <- sf::st_make_valid(g)
+  if (kind == 'polys') {
+    g <- sf::st_make_valid(g)
+  }
   out <- sf::st_sf(d[, keep, with = FALSE], geometry = g)
   out <- out[!sf::st_is_empty(out), ]
   attr(out, 'cleaning') <- bad_dates
@@ -167,12 +244,20 @@ yukon_cast <- function(g, kind) {
   empty <- if (kind == 'lines') sf::st_multilinestring() else sf::st_multipolygon()
   out <- purrr::map(seq_along(g), function(i) {
     gi <- g[i]
-    if (sf::st_is_empty(gi)) return(empty)
-    if (grepl('COLLECTION', sf::st_geometry_type(gi))) gi <- sf::st_collection_extract(gi, type, warn = FALSE)
+    if (sf::st_is_empty(gi)) {
+      return(empty)
+    }
+    if (grepl('COLLECTION', sf::st_geometry_type(gi))) {
+      gi <- sf::st_collection_extract(gi, type, warn = FALSE)
+    }
     gi <- gi[!sf::st_is_empty(gi)]
-    if (!length(gi)) return(empty)
+    if (!length(gi)) {
+      return(empty)
+    }
     u <- sf::st_union(gi)
-    if (grepl('COLLECTION', sf::st_geometry_type(u))) u <- sf::st_union(sf::st_collection_extract(u, type, warn = FALSE))
+    if (grepl('COLLECTION', sf::st_geometry_type(u))) {
+      u <- sf::st_union(sf::st_collection_extract(u, type, warn = FALSE))
+    }
     sf::st_cast(u, if (kind == 'lines') 'MULTILINESTRING' else 'MULTIPOLYGON')[[1]]
   })
   sf::st_sfc(out, crs = sf::st_crs(g))
@@ -188,7 +273,9 @@ yukon_cast <- function(g, kind) {
 #' @noRd
 yukon_op <- function(op, a, b, kind) {
   r <- op(a, b)
-  if (!length(r)) r <- sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(a))
+  if (!length(r)) {
+    r <- sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(a))
+  }
   yukon_cast(r[1], kind)
 }
 
@@ -207,8 +294,11 @@ yukon_op <- function(op, a, b, kind) {
 #' @export
 read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
   layers <- setdiff(sf::st_layers(gdb)$name, qa$layer)
-  tab <- data.table::data.table(layer = layers, type = sub('.*_', '', layers),
-                                wp = sub('(_sd)?_(lines|polys|aoi)$', '', layers))
+  tab <- data.table::data.table(
+    layer = layers,
+    type = sub('.*_', '', layers),
+    wp = sub('(_sd)?_(lines|polys|aoi)$', '', layers)
+  )
   tab <- tab[type %in% c('lines', 'polys', 'aoi')]
   dropped <- 0L
   qa_log <- list()
@@ -217,7 +307,11 @@ read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
     parts <- purrr::map(tab[type == kind]$layer, function(l) {
       x <- sf::st_read(gdb, l, type = if (kind == 'polys') 6 else 5, quiet = TRUE)
       if (!is.null(qa$layer) && identical(l, qa$applies_to)) {
-        q <- data.table::as.data.table(sf::st_drop_geometry(sf::st_read(gdb, qa$layer, quiet = TRUE)))
+        q <- data.table::as.data.table(sf::st_drop_geometry(sf::st_read(
+          gdb,
+          qa$layer,
+          quiet = TRUE
+        )))
         flag <- q[get(qa$field) %in% unlist(qa$drop)]
         key_x <- paste(x$REF_ID, round(x$Shape_Length, 3))
         hit <- key_x %in% paste(flag$REF_ID, round(flag$Shape_Length, 3))
@@ -225,8 +319,14 @@ read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
         if (any(hit)) {
           tcol <- intersect(c('TYPE_DISTURBANCE', 'TYPE_DISTU'), names(x))[1]
           qa_log[[length(qa_log) + 1]] <<- clean_rows(
-            paste0('dropped: marked ', paste(unlist(qa$drop), collapse = '/'), ' in ', qa$layer), kind,
-            tab[layer == l]$wp, x$REF_ID[hit], x[[tcol]][hit], paste(qa$field, 'in', qa$layer), x$Shape_Length[hit] / 1000)
+            paste0('dropped: marked ', paste(unlist(qa$drop), collapse = '/'), ' in ', qa$layer),
+            kind,
+            tab[layer == l]$wp,
+            x$REF_ID[hit],
+            x[[tcol]][hit],
+            paste(qa$field, 'in', qa$layer),
+            x$Shape_Length[hit] / 1000
+          )
         }
         x <- x[!hit, ]
       }
@@ -240,12 +340,20 @@ read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
   polys <- read_kind('polys')
   aoi <- purrr::map(seq_len(nrow(tab[type == 'aoi'])), function(i) {
     r <- tab[type == 'aoi'][i]
-    a <- sf::st_union(sf::st_make_valid(sf::st_transform(sf::st_zm(sf::st_read(gdb, r$layer, type = 6, quiet = TRUE)), crs)))
+    a <- sf::st_union(sf::st_make_valid(sf::st_transform(
+      sf::st_zm(sf::st_read(gdb, r$layer, type = 6, quiet = TRUE)),
+      crs
+    )))
     kinds <- intersect(c('lines', 'polys'), tab[wp == r$wp]$type)
     sf::st_sf(wp = rep(r$wp, length(kinds)), kind = kinds, geometry = rep(a, length(kinds)))
   })
-  list(lines = lines, polys = polys, aoi = purrr::reduce(aoi, rbind), qa_dropped = dropped,
-       cleaning = data.table::rbindlist(c(qa_log, date_log)))
+  list(
+    lines = lines,
+    polys = polys,
+    aoi = purrr::reduce(aoi, rbind),
+    qa_dropped = dropped,
+    cleaning = data.table::rbindlist(c(qa_log, date_log))
+  )
 }
 
 #' @title Other features near each feature: a quick search
@@ -259,9 +367,12 @@ read_yukon_wp <- function(gdb, qa, lut, crs, max_year) {
 #' @keywords internal
 #' @noRd
 yukon_nearby <- function(g, others, buffer_m) {
-  boxes <- sf::st_sfc(purrr::map(g, function(gi) {
-    sf::st_as_sfc(sf::st_bbox(gi) + c(-buffer_m, -buffer_m, buffer_m, buffer_m))[[1]]
-  }), crs = sf::st_crs(g))
+  boxes <- sf::st_sfc(
+    purrr::map(g, function(gi) {
+      sf::st_as_sfc(sf::st_bbox(gi) + c(-buffer_m, -buffer_m, buffer_m, buffer_m))[[1]]
+    }),
+    crs = sf::st_crs(g)
+  )
   sf::st_intersects(boxes, others)
 }
 
@@ -278,18 +389,26 @@ yukon_nearby <- function(g, others, buffer_m) {
 #' @noRd
 yukon_away_from <- function(gi, others, kind, buffer_m, min_m) {
   out <- yukon_cast(gi, kind)
-  if (length(others)) out <- yukon_op(sf::st_difference, out, sf::st_union(sf::st_buffer(others, buffer_m)), kind)
-  if (sf::st_is_empty(out)) return(out)
+  if (length(others)) {
+    out <- yukon_op(sf::st_difference, out, sf::st_union(sf::st_buffer(others, buffer_m)), kind)
+  }
+  if (sf::st_is_empty(out)) {
+    return(out)
+  }
   if (kind == 'lines') {
     parts <- sf::st_cast(out, 'LINESTRING')
     parts <- parts[as.numeric(sf::st_length(parts)) >= min_m]
-    if (!length(parts)) return(yukon_cast(sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(gi)), kind))
+    if (!length(parts)) {
+      return(yukon_cast(sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(gi)), kind))
+    }
     return(yukon_cast(sf::st_union(parts), kind))
   }
   # keep whole the polygon pieces that are at least min_m wide somewhere
   parts <- sf::st_cast(out, 'POLYGON')
   parts <- parts[!sf::st_is_empty(sf::st_buffer(parts, -min_m / 2))]
-  if (!length(parts)) return(yukon_cast(sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(gi)), kind))
+  if (!length(parts)) {
+    return(yukon_cast(sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(gi)), kind))
+  }
   yukon_cast(sf::st_union(parts), kind)
 }
 
@@ -311,15 +430,24 @@ yukon_replace_mapped <- function(x, wp, aoi, kind, buffer_m, min_m) {
   x$part <- 'whole'
   x0 <- x
   inside <- which(lengths(sf::st_intersects(x, aoi)) > 0)
-  if (!length(inside)) return(list(x = x, n = 0L, log = NULL))
+  if (!length(inside)) {
+    return(list(x = x, n = 0L, log = NULL))
+  }
   g <- sf::st_geometry(x)
   wg <- sf::st_geometry(wp)
   near <- yukon_nearby(g[inside], wg, buffer_m)
   has <- which(lengths(near) > 0)
   t0 <- Sys.time()
   kept <- purrr::map(seq_along(has), function(k) {
-    if (k %% 5000 == 0) message(sprintf('  %s, GeoYukon kept where not re-mapped: %d of %d, %.1f min', kind, k,
-                                        length(has), as.numeric(difftime(Sys.time(), t0, units = 'mins'))))
+    if (k %% 5000 == 0) {
+      message(sprintf(
+        '  %s, GeoYukon kept where not re-mapped: %d of %d, %.1f min',
+        kind,
+        k,
+        length(has),
+        as.numeric(difftime(Sys.time(), t0, units = 'mins'))
+      ))
+    }
     yukon_away_from(g[inside[has[k]]], wg[near[[has[k]]]], kind, buffer_m, min_m)[[1]]
   })
   idx <- inside[has]
@@ -331,15 +459,34 @@ yukon_replace_mapped <- function(x, wp, aoi, kind, buffer_m, min_m) {
   cut <- setdiff(idx[changed], gone)
   untouched <- setdiff(inside, idx[changed])
   log <- rbind(
-    clean_rows('GeoYukon feature left out: mapped again by a work package (within buffer)', kind, 'GeoYukon',
-               x0$REF_ID[gone], x0$TYPE_DISTURBANCE[gone], 'replaced by the work-package feature(s) within 20 m',
-               yukon_size(sf::st_geometry(x0)[gone], kind)),
-    clean_rows('GeoYukon feature cut: part mapped again by a work package', kind, 'GeoYukon',
-               x0$REF_ID[cut], x0$TYPE_DISTURBANCE[cut], 'part not mapped again kept; size = part kept',
-               yukon_size(g[cut], kind)),
-    clean_rows('GeoYukon feature kept: inside a work-package AOI but not mapped again', kind, 'GeoYukon',
-               x0$REF_ID[untouched], x0$TYPE_DISTURBANCE[untouched], 'no work-package feature within 20 m',
-               yukon_size(g[untouched], kind)))
+    clean_rows(
+      'GeoYukon feature left out: mapped again by a work package (within buffer)',
+      kind,
+      'GeoYukon',
+      x0$REF_ID[gone],
+      x0$TYPE_DISTURBANCE[gone],
+      'replaced by the work-package feature(s) within 20 m',
+      yukon_size(sf::st_geometry(x0)[gone], kind)
+    ),
+    clean_rows(
+      'GeoYukon feature cut: part mapped again by a work package',
+      kind,
+      'GeoYukon',
+      x0$REF_ID[cut],
+      x0$TYPE_DISTURBANCE[cut],
+      'part not mapped again kept; size = part kept',
+      yukon_size(g[cut], kind)
+    ),
+    clean_rows(
+      'GeoYukon feature kept: inside a work-package AOI but not mapped again',
+      kind,
+      'GeoYukon',
+      x0$REF_ID[untouched],
+      x0$TYPE_DISTURBANCE[untouched],
+      'no work-package feature within 20 m',
+      yukon_size(g[untouched], kind)
+    )
+  )
   list(x = x[!sf::st_is_empty(x), ], n = sum(changed), log = log)
 }
 
@@ -360,7 +507,12 @@ yukon_replace_mapped <- function(x, wp, aoi, kind, buffer_m, min_m) {
 #' @keywords internal
 #' @noRd
 yukon_dedupe <- function(x, kind, buffer_m) {
-  d <- data.table::data.table(i = seq_len(nrow(x)), id = x$REF_ID, img = x$image_year, src = x$source)
+  d <- data.table::data.table(
+    i = seq_len(nrow(x)),
+    id = x$REF_ID,
+    img = x$image_year,
+    src = x$source
+  )
   d[, first := if (all(is.na(img))) NA_integer_ else min(img, na.rm = TRUE), by = id]
   d[is.na(id), first := img]
   multi <- d[!is.na(id), .(n_src = data.table::uniqueN(src)), by = id][n_src > 1]$id
@@ -376,13 +528,25 @@ yukon_dedupe <- function(x, kind, buffer_m) {
   gone <- other[same]
   reused <- other[!same]
   log <- rbind(
-    clean_rows('work-package copy left out: same REF_ID in overlapping work packages', kind, gone$src, gone$id,
-               x$TYPE_DISTURBANCE[gone$i], sprintf('image %s; copy kept from %s', gone$img, gone$kept_src),
-               yukon_size(g[gone$i], kind)),
-    clean_rows('REF_ID reused: same ID in another work package for a different feature (kept)', kind, reused$src,
-               reused$id, x$TYPE_DISTURBANCE[reused$i],
-               sprintf('more than %s m from the feature with this ID in %s', buffer_m, reused$kept_src),
-               yukon_size(g[reused$i], kind)))
+    clean_rows(
+      'work-package copy left out: same REF_ID in overlapping work packages',
+      kind,
+      gone$src,
+      gone$id,
+      x$TYPE_DISTURBANCE[gone$i],
+      sprintf('image %s; copy kept from %s', gone$img, gone$kept_src),
+      yukon_size(g[gone$i], kind)
+    ),
+    clean_rows(
+      'REF_ID reused: same ID in another work package for a different feature (kept)',
+      kind,
+      reused$src,
+      reused$id,
+      x$TYPE_DISTURBANCE[reused$i],
+      sprintf('more than %s m from the feature with this ID in %s', buffer_m, reused$kept_src),
+      yukon_size(g[reused$i], kind)
+    )
+  )
   keep <- setdiff(d$i, gone$i)
   x$image_year_first <- d$first
   x <- x[keep, ]
@@ -404,7 +568,9 @@ yukon_dedupe <- function(x, kind, buffer_m) {
 #' @noRd
 yukon_dedupe_noid <- function(x, kind, buffer_m, min_m) {
   noid <- which(is.na(x$REF_ID))
-  if (!length(noid)) return(list(x = x, n = 0L, log = NULL))
+  if (!length(noid)) {
+    return(list(x = x, n = 0L, log = NULL))
+  }
   noid <- noid[order(x$image_year[noid], na.last = FALSE)]
   g <- sf::st_geometry(x)
   near <- yukon_nearby(g[noid], g, buffer_m)
@@ -414,17 +580,26 @@ yukon_dedupe_noid <- function(x, kind, buffer_m, min_m) {
   for (k in seq_along(noid)) {
     i <- noid[k]
     other <- near[[k]][x$source[near[[k]]] != x$source[i] & !gone[near[[k]]]]
-    if (!length(other)) next
-    if (!sf::st_is_empty(yukon_away_from(g[i], g[other], kind, buffer_m, min_m))) next
+    if (!length(other)) {
+      next
+    }
+    if (!sf::st_is_empty(yukon_away_from(g[i], g[other], kind, buffer_m, min_m))) {
+      next
+    }
     gone[i] <- TRUE
     along[i] <- paste(sort(unique(x$source[other])), collapse = ' + ')
     if (!is.na(first[i])) first[other] <- pmin(first[other], first[i], na.rm = TRUE)
   }
   x$image_year_first <- first
-  log <- clean_rows('work-package copy left out: no REF_ID, along features of an overlapping work package', kind,
-                    x$source[gone], NA_character_, x$TYPE_DISTURBANCE[gone],
-                    sprintf('image %s; within %s m of features of %s', x$image_year[gone], buffer_m, along[gone]),
-                    yukon_size(g[gone], kind))
+  log <- clean_rows(
+    'work-package copy left out: no REF_ID, along features of an overlapping work package',
+    kind,
+    x$source[gone],
+    NA_character_,
+    x$TYPE_DISTURBANCE[gone],
+    sprintf('image %s; within %s m of features of %s', x$image_year[gone], buffer_m, along[gone]),
+    yukon_size(g[gone], kind)
+  )
   list(x = x[!gone, ], n = sum(gone), log = log)
 }
 
@@ -445,8 +620,15 @@ yukon_dedupe_noid <- function(x, kind, buffer_m, min_m) {
 #'   filled where reported, and `log` (data.table: what was matched).
 #' @keywords internal
 #' @noRd
-yukon_reported_years <- function(x, kind, mines, fixes, mine_source, mine_types = c('quartz', 'othermines'),
-                                 mine_max_m = 200) {
+yukon_reported_years <- function(
+  x,
+  kind,
+  mines,
+  fixes,
+  mine_source,
+  mine_types = c('quartz', 'othermines'),
+  mine_max_m = 200
+) {
   log <- list()
   if (kind == 'polys' && !is.null(mines) && nrow(mines)) {
     cand <- which(x$feature_type %in% mine_types)
@@ -456,24 +638,44 @@ yukon_reported_years <- function(x, kind, mines, fixes, mine_source, mine_types 
       how <- 'inside'
       if (!length(j)) {
         d <- as.numeric(sf::st_distance(mines[i, ], x[cand, ]))
-        if (length(d) && min(d) <= mine_max_m) { j <- cand[which.min(d)]; how <- sprintf('nearest, %.0f m', min(d)) }
+        if (length(d) && min(d) <= mine_max_m) {
+          j <- cand[which.min(d)]
+          how <- sprintf('nearest, %.0f m', min(d))
+        }
       }
-      log[[length(log) + 1]] <- data.table::data.table(what = 'mine', name = paste0(mines$name[i], if (length(j)) paste0(' (', how, ')')),
-                                                       features = length(j), ref_id = paste(x$REF_ID[j], collapse = ' '))
-      if (!length(j)) next
+      log[[length(log) + 1]] <- data.table::data.table(
+        what = 'mine',
+        name = paste0(mines$name[i], if (length(j)) paste0(' (', how, ')')),
+        features = length(j),
+        ref_id = paste(x$REF_ID[j], collapse = ' ')
+      )
+      if (!length(j)) {
+        next
+      }
       x$year_start[j] <- as.integer(mines$start[i])
       x$year_end[j] <- if (isTRUE(mines$end[i] > 0)) as.integer(mines$end[i]) else NA_integer_
       x$year_rule[j] <- 'reported'
-      x$year_source[j] <- sprintf('%s: %s production %s-%s', mine_source, mines$name[i], mines$start[i],
-                                  if (isTRUE(mines$end[i] > 0)) mines$end[i] else 'ongoing')
+      x$year_source[j] <- sprintf(
+        '%s: %s production %s-%s',
+        mine_source,
+        mines$name[i],
+        mines$start[i],
+        if (isTRUE(mines$end[i] > 0)) mines$end[i] else 'ongoing'
+      )
     }
   }
   if (!is.null(fixes) && nrow(fixes)) {
     for (k in which(fixes$kind == kind)) {
       j <- which(x$REF_ID == fixes$ref_id[k])
-      log[[length(log) + 1]] <- data.table::data.table(what = 'fix', name = fixes$note[k], features = length(j),
-                                                       ref_id = fixes$ref_id[k])
-      if (!length(j)) next
+      log[[length(log) + 1]] <- data.table::data.table(
+        what = 'fix',
+        name = fixes$note[k],
+        features = length(j),
+        ref_id = fixes$ref_id[k]
+      )
+      if (!length(j)) {
+        next
+      }
       x$year_start[j] <- as.integer(fixes$year_start[k])
       x$year_end[j] <- as.integer(fixes$year_end[k])
       x$year_rule[j] <- 'reported'
@@ -505,46 +707,81 @@ yukon_reported_years <- function(x, kind, mines, fixes, mine_source, mine_types 
 #' @keywords internal
 #' @noRd
 yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
-  if (is.null(x$part)) x$part <- 'whole'
+  if (is.null(x$part)) {
+    x$part <- 'whole'
+  }
   yr <- x$image_year_first
   cand <- which(!(x$REF_ID %in% old$REF_ID) & is.na(x$year_rule) & !is.na(yr))
-  if (!length(cand)) return(list(x = x, n = 0L))
+  if (!length(cand)) {
+    return(list(x = x, n = 0L))
+  }
   g <- sf::st_geometry(x)
   in_ext <- sf::st_intersects(g[cand], extent)
   og <- sf::st_geometry(old)
   near_old <- yukon_nearby(g[cand], og, buffer_m)
   eg <- sf::st_geometry(extent)
-  areas <- new.env()   # union of each set of mapped areas, made once
+  areas <- new.env() # union of each set of mapped areas, made once
   area_of <- function(e) {
     key <- paste(e, collapse = '_')
-    if (is.null(areas[[key]])) areas[[key]] <- sf::st_union(eg[e])
+    if (is.null(areas[[key]])) {
+      areas[[key]] <- sf::st_union(eg[e])
+    }
     areas[[key]]
   }
   t0 <- Sys.time()
   pieces <- purrr::map(seq_along(cand), function(k) {
-    if (k %% 5000 == 0) message(sprintf('  %s, new parts: %d of %d candidates, %.1f min', kind, k, length(cand),
-                                        as.numeric(difftime(Sys.time(), t0, units = 'mins'))))
+    if (k %% 5000 == 0) {
+      message(sprintf(
+        '  %s, new parts: %d of %d candidates, %.1f min',
+        kind,
+        k,
+        length(cand),
+        as.numeric(difftime(Sys.time(), t0, units = 'mins'))
+      ))
+    }
     i <- cand[k]
     e <- in_ext[[k]][extent$last_img_year[in_ext[[k]]] < yr[i]]
-    if (!length(e)) return(NULL)
+    if (!length(e)) {
+      return(NULL)
+    }
     gi <- g[i]
     a <- area_of(e)
-    inside <- if (lengths(sf::st_within(gi, a)) > 0) yukon_cast(gi, kind) else yukon_op(sf::st_intersection, gi, a, kind)
-    if (sf::st_is_empty(inside)) return(NULL)
+    inside <- if (lengths(sf::st_within(gi, a)) > 0) {
+      yukon_cast(gi, kind)
+    } else {
+      yukon_op(sf::st_intersection, gi, a, kind)
+    }
+    if (sf::st_is_empty(inside)) {
+      return(NULL)
+    }
     new <- yukon_away_from(inside, og[near_old[[k]]], kind, buffer_m, min_m)
-    if (sf::st_is_empty(new)) return(NULL)
+    if (sf::st_is_empty(new)) {
+      return(NULL)
+    }
     # lines: take away a 1 cm corridor around the new part, not the line itself,
     # whose cut ends are not exactly on gi (the rest would keep the new part too)
     cut <- if (kind == 'lines') sf::st_buffer(new, 0.01) else new
-    list(i = i, new = new, rest = yukon_op(sf::st_difference, gi, cut, kind),
-         source = sprintf('Seen by %d on imagery (not the year built); not on the earlier GeoYukon map (%s)', yr[i],
-                          paste(sprintf('%s, imagery %s', extent$project[e], extent$img_years[e]), collapse = '; ')))
+    list(
+      i = i,
+      new = new,
+      rest = yukon_op(sf::st_difference, gi, cut, kind),
+      source = sprintf(
+        'Seen by %d on imagery (not the year built); not on the earlier GeoYukon map (%s)',
+        yr[i],
+        paste(sprintf('%s, imagery %s', extent$project[e], extent$img_years[e]), collapse = '; ')
+      )
+    )
   })
   pieces <- purrr::compact(pieces)
-  if (!length(pieces)) return(list(x = x, n = 0L))
+  if (!length(pieces)) {
+    return(list(x = x, n = 0L))
+  }
   idx <- purrr::map_int(pieces, 'i')
   new_rows <- x[idx, ]
-  sf::st_geometry(new_rows) <- sf::st_sfc(purrr::map(pieces, function(p) p$new[[1]]), crs = sf::st_crs(x))
+  sf::st_geometry(new_rows) <- sf::st_sfc(
+    purrr::map(pieces, function(p) p$new[[1]]),
+    crs = sf::st_crs(x)
+  )
   new_rows$part <- 'new'
   new_rows$year_start <- yr[idx]
   new_rows$year_rule <- 'image_new'
@@ -552,9 +789,15 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
   g[idx] <- sf::st_sfc(purrr::map(pieces, function(p) p$rest[[1]]), crs = sf::st_crs(x))
   sf::st_geometry(x) <- g
   x$part[idx] <- 'rest'
-  log <- clean_rows('year seen by (image date, not year built): part not on the earlier GeoYukon map', kind, new_rows$source,
-                    new_rows$REF_ID, new_rows$TYPE_DISTURBANCE, new_rows$year_source,
-                    yukon_size(sf::st_geometry(new_rows), kind))
+  log <- clean_rows(
+    'year seen by (image date, not year built): part not on the earlier GeoYukon map',
+    kind,
+    new_rows$source,
+    new_rows$REF_ID,
+    new_rows$TYPE_DISTURBANCE,
+    new_rows$year_source,
+    yukon_size(sf::st_geometry(new_rows), kind)
+  )
   x <- rbind(x, new_rows)
   list(x = x[!sf::st_is_empty(x), ], n = length(idx), log = log)
 }
@@ -572,17 +815,22 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
 yukon_feature_type <- function(x, kind) {
   drc <- yukon_norm(x$disturbance_rc)
   if (kind == 'lines') {
-    return(data.table::fcase(drc %in% c('highway', 'railway', 'paved road'), 'paved',
-                             yukon_norm(x$lf_type) %in% 'unpaved road', 'unpaved',
-                             default = 'otherlf'))
+    return(data.table::fcase(
+      drc %in% c('highway', 'railway', 'paved road') , 'paved'   ,
+      yukon_norm(x$lf_type) %in% 'unpaved road'      , 'unpaved' ,
+      default = 'otherlf'
+    ))
   }
-  ind <- yukon_norm(x$TYPE_INDUSTRY); dist <- yukon_norm(x$TYPE_DISTURBANCE)
-  data.table::fcase(x$schema == 'v4' & dist == 'mining', 'othermines',
-                    x$schema == 'v5' & ind == 'mining' & dist == 'unknown', 'othermines',
-                    drc %in% 'placer mining', 'placer',
-                    drc %in% 'quartz mining', 'quartz',
-                    drc %in% 'harvest', NA_character_,
-                    default = 'otherpoly')
+  ind <- yukon_norm(x$TYPE_INDUSTRY)
+  dist <- yukon_norm(x$TYPE_DISTURBANCE)
+  data.table::fcase(
+    x$schema == 'v4' & dist == 'mining'                    , 'othermines'  ,
+    x$schema == 'v5' & ind == 'mining' & dist == 'unknown' , 'othermines'  ,
+    drc %in% 'placer mining'                               , 'placer'      ,
+    drc %in% 'quartz mining'                               , 'quartz'      ,
+    drc %in% 'harvest'                                     , NA_character_ ,
+    default = 'otherpoly'
+  )
 }
 
 #' @title Unpaved type of merged Yukon unpaved roads: winter, resource or all-season
@@ -599,10 +847,20 @@ yukon_unpaved_type <- function(x) {
   dist <- yukon_norm(x$TYPE_DISTURBANCE)
   ind <- yukon_norm(c(x$TYPE_INDUSTRY))
   ind_rc <- yukon_norm(x$industry_rc)
-  resource <- c('forestry', 'mining', 'oil and gas', 'placer', 'quartz', 'quartz mining', 'placer mining')
-  out <- data.table::fcase(grepl('winter|ice road', dist), 'winter',
-                           ind %in% resource | ind_rc %in% resource | grepl('resource|mining road', dist), 'resource',
-                           default = 'all-season')
+  resource <- c(
+    'forestry',
+    'mining',
+    'oil and gas',
+    'placer',
+    'quartz',
+    'quartz mining',
+    'placer mining'
+  )
+  out <- data.table::fcase(
+    grepl('winter|ice road', dist)                                                 , 'winter'   ,
+    ind %in% resource | ind_rc %in% resource | grepl('resource|mining road', dist) , 'resource' ,
+    default = 'all-season'
+  )
   out[x$feature_type != 'unpaved'] <- NA_character_
   out
 }
@@ -635,23 +893,50 @@ merge_yukon_disturbance <- function(inputs, ym, patches, fixes, crs, out_dir) {
   lut <- read_yukon_reclass(inputs$reclass, patches)
   pick <- function(f, ext) f[tolower(tools::file_ext(f)) == ext][1]
   gy <- list(
-    lines = standardise_yukon(sf::st_read(pick(inputs$geoyukon_lines, 'shp'), type = 5, quiet = TRUE),
-                              'lines', 'GeoYukon', lut, crs, max_year),
-    polys = standardise_yukon(sf::st_read(pick(inputs$geoyukon_polys, 'shp'), type = 6, quiet = TRUE),
-                              'polys', 'GeoYukon', lut, crs, max_year))
+    lines = standardise_yukon(
+      sf::st_read(pick(inputs$geoyukon_lines, 'shp'), type = 5, quiet = TRUE),
+      'lines',
+      'GeoYukon',
+      lut,
+      crs,
+      max_year
+    ),
+    polys = standardise_yukon(
+      sf::st_read(pick(inputs$geoyukon_polys, 'shp'), type = 6, quiet = TRUE),
+      'polys',
+      'GeoYukon',
+      lut,
+      crs,
+      max_year
+    )
+  )
   wp <- read_yukon_wp(inputs$work_packages, ym$qa, lut, crs, max_year)
-  ext <- sf::st_make_valid(sf::st_transform(sf::st_read(pick(inputs$extent, 'shp'), quiet = TRUE), crs))
-  ext <- sf::st_sf(project = ext[[ym$extent_fields$project %||% 'PROJECT']],
-                   img_years = as.character(ext[[ym$extent_fields$img_years %||% 'IMG_YEARS']]),
-                   geometry = sf::st_geometry(ext))
+  ext <- sf::st_make_valid(sf::st_transform(
+    sf::st_read(pick(inputs$extent, 'shp'), quiet = TRUE),
+    crs
+  ))
+  ext <- sf::st_sf(
+    project = ext[[ym$extent_fields$project %||% 'PROJECT']],
+    img_years = as.character(ext[[ym$extent_fields$img_years %||% 'IMG_YEARS']]),
+    geometry = sf::st_geometry(ext)
+  )
   ext$last_img_year <- as.integer(sub('.*-', '', ext$img_years))
   mines <- NULL
   if (!is.null(inputs$mines)) {
     m <- sf::st_transform(sf::st_read(pick(inputs$mines, 'shp'), quiet = TRUE), crs)
     mf <- ym$mine_fields
-    mines <- sf::st_sf(name = m[[mf$name]], start = m[[mf$start]], end = m[[mf$end]], geometry = sf::st_geometry(m))
+    mines <- sf::st_sf(
+      name = m[[mf$name]],
+      start = m[[mf$start]],
+      end = m[[mf$end]],
+      geometry = sf::st_geometry(m)
+    )
   }
-  fx <- if (!is.null(fixes)) data.table::fread(fixes, na.strings = '', colClasses = 'character') else NULL
+  fx <- if (!is.null(fixes)) {
+    data.table::fread(fixes, na.strings = '', colClasses = 'character')
+  } else {
+    NULL
+  }
   message('Yukon merge: inputs read')
   logs <- list()
   out <- list()
@@ -668,64 +953,166 @@ merge_yukon_disturbance <- function(inputs, ym, patches, fixes, crs, out_dir) {
     w$part <- 'whole'
     x <- rbind(g, w[, names(g)])
     x$feature_type <- yukon_feature_type(x, kind)
-    unmatched <- data.table::as.data.table(sf::st_drop_geometry(x))[is.na(disturbance_rc) | is.na(industry_rc),
-                                                                     .N, by = .(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE)]
+    unmatched <- data.table::as.data.table(sf::st_drop_geometry(x))[
+      is.na(disturbance_rc) | is.na(industry_rc),
+      .N,
+      by = .(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE)
+    ]
     xd <- data.table::as.data.table(sf::st_drop_geometry(x))
-    xd[, `:=`(kind = kind, k_ind = yukon_norm(TYPE_INDUSTRY), k_dist = yukon_norm(TYPE_DISTURBANCE),
-              size = yukon_size(x, kind))]
-    pt <- data.table::fread(patches, na.strings = '', colClasses = 'character')[
-      , `:=`(k_ind = yukon_norm(industry), k_dist = yukon_norm(disturbance))]
+    xd[, `:=`(
+      kind = kind,
+      k_ind = yukon_norm(TYPE_INDUSTRY),
+      k_dist = yukon_norm(TYPE_DISTURBANCE),
+      size = yukon_size(x, kind)
+    )]
+    pt <- data.table::fread(patches, na.strings = '', colClasses = 'character')[,
+      `:=`(k_ind = yukon_norm(industry), k_dist = yukon_norm(disturbance))
+    ]
     patched <- xd[pt, on = c('kind', 'schema', 'k_ind', 'k_dist'), nomatch = NULL]
     harvest <- which(is.na(x$feature_type))
     cleaning[[length(cleaning) + 1]] <- rbind(
-      dd$log, dn$log, rm$log,
-      if (nrow(patched)) patched[, .(n = .N, size = sum(size)), by = .(source, schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, note)][
-        , clean_rows('type not in the reclassification sheet: patch used', kind, source, NA_character_,
-                     paste(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, sep = ' | '), paste0(n, ' features; ', note), size)],
-      if (nrow(unmatched)) clean_rows('type not in the reclassification sheet: no patch (sorted by the other rules)', kind,
-                                      NA_character_, NA_character_,
-                                      paste(unmatched$schema, unmatched$TYPE_INDUSTRY, unmatched$TYPE_DISTURBANCE, sep = ' | '),
-                                      paste(unmatched$N, 'features')),
-      clean_rows('left out: harvest (comes from CanLaD)', kind, x$source[harvest], x$REF_ID[harvest],
-                 x$TYPE_DISTURBANCE[harvest], NA_character_, yukon_size(sf::st_geometry(x)[harvest], kind)))
+      dd$log,
+      dn$log,
+      rm$log,
+      if (nrow(patched)) {
+        patched[,
+          .(n = .N, size = sum(size)),
+          by = .(source, schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, note)
+        ][,
+          clean_rows(
+            'type not in the reclassification sheet: patch used',
+            kind,
+            source,
+            NA_character_,
+            paste(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, sep = ' | '),
+            paste0(n, ' features; ', note),
+            size
+          )
+        ]
+      },
+      if (nrow(unmatched)) {
+        clean_rows(
+          'type not in the reclassification sheet: no patch (sorted by the other rules)',
+          kind,
+          NA_character_,
+          NA_character_,
+          paste(unmatched$schema, unmatched$TYPE_INDUSTRY, unmatched$TYPE_DISTURBANCE, sep = ' | '),
+          paste(unmatched$N, 'features')
+        )
+      },
+      clean_rows(
+        'left out: harvest (comes from CanLaD)',
+        kind,
+        x$source[harvest],
+        x$REF_ID[harvest],
+        x$TYPE_DISTURBANCE[harvest],
+        NA_character_,
+        yukon_size(sf::st_geometry(x)[harvest], kind)
+      )
+    )
     x <- x[!is.na(x$feature_type), ]
-    x$year_start <- NA_integer_; x$year_end <- NA_integer_
-    x$year_rule <- NA_character_; x$year_source <- NA_character_
-    reported <- yukon_reported_years(x, kind, mines, fx, ym$mine_year_source %||% 'Reported',
-                                     unlist(ym$mine_types %||% list('quartz', 'othermines')), ym$mine_max_m %||% 200)
+    x$year_start <- NA_integer_
+    x$year_end <- NA_integer_
+    x$year_rule <- NA_character_
+    x$year_source <- NA_character_
+    reported <- yukon_reported_years(
+      x,
+      kind,
+      mines,
+      fx,
+      ym$mine_year_source %||% 'Reported',
+      unlist(ym$mine_types %||% list('quartz', 'othermines')),
+      ym$mine_max_m %||% 200
+    )
     x <- reported$x
     is_wp <- x$source != 'GeoYukon'
     np <- yukon_new_parts(x[is_wp, ], gy[[kind]], ext, kind, buffer_m, min_m)
     x <- rbind(x[!is_wp, ], np$x[, names(x)])
     if (nrow(reported$log)) {
-      cleaning[[length(cleaning) + 1]] <- clean_rows(paste('year reported:', reported$log$what), kind, NA_character_,
-                                                     reported$log$ref_id, NA_character_,
-                                                     paste0(reported$log$name, '; ', reported$log$features, ' feature(s) matched'))
+      cleaning[[length(cleaning) + 1]] <- clean_rows(
+        paste('year reported:', reported$log$what),
+        kind,
+        NA_character_,
+        reported$log$ref_id,
+        NA_character_,
+        paste0(reported$log$name, '; ', reported$log$features, ' feature(s) matched')
+      )
     }
     cleaning[[length(cleaning) + 1]] <- np$log
     x$year_rule[is.na(x$year_rule)] <- 'none'
     x$unpaved_type <- if (kind == 'lines') yukon_unpaved_type(x) else NA_character_
     x$region <- 'YT'
     x$feature_id <- paste0(if (kind == 'lines') 'YTL' else 'YTA', seq_len(nrow(x)))
-    cols <- c('feature_id', 'region', 'source', 'REF_ID', 'DATABASE', 'FEATURE_VISIBILITY', 'TYPE_INDUSTRY', 'TYPE_DISTURBANCE',
-              'industry_rc', 'disturbance_rc', 'lf_type', 'schema', 'feature_type', 'unpaved_type', 'image_year', 'image_year_first',
-              'year_start', 'year_end', 'year_rule', 'year_source', 'part')
+    cols <- c(
+      'feature_id',
+      'region',
+      'source',
+      'REF_ID',
+      'DATABASE',
+      'FEATURE_VISIBILITY',
+      'TYPE_INDUSTRY',
+      'TYPE_DISTURBANCE',
+      'industry_rc',
+      'disturbance_rc',
+      'lf_type',
+      'schema',
+      'feature_type',
+      'unpaved_type',
+      'image_year',
+      'image_year_first',
+      'year_start',
+      'year_end',
+      'year_rule',
+      'year_source',
+      'part'
+    )
     out[[kind]] <- x[, cols]
     d <- data.table::as.data.table(sf::st_drop_geometry(x))
     d[, size := as.numeric(if (kind == 'lines') sf::st_length(x) / 1000 else sf::st_area(x) / 1e6)]
     logs[[kind]] <- rbind(
-      d[, .(features = .N, size = round(sum(size), 2)), keyby = .(source, feature_type, year_rule, part)][
-        , `:=`(table = 'features', kind = kind)],
-      unmatched[, .(table = 'not in lookup', kind = kind, source = paste(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, sep = ' | '),
-                    features = N)],
-      data.table::data.table(table = c('WP copies left out', 'WP copies with no REF_ID left out',
-                                       'GeoYukon cut or left out where re-mapped', 'split new parts'),
-                             kind = kind, features = c(dd$n, dn$n, rm$n, np$n)),
-      if (nrow(reported$log)) reported$log[, .(table = paste('reported', what), kind = kind, source = name, features, ref_id)],
-      fill = TRUE)
+      d[,
+        .(features = .N, size = round(sum(size), 2)),
+        keyby = .(source, feature_type, year_rule, part)
+      ][,
+        `:=`(table = 'features', kind = kind)
+      ],
+      unmatched[, .(
+        table = 'not in lookup',
+        kind = kind,
+        source = paste(schema, TYPE_INDUSTRY, TYPE_DISTURBANCE, sep = ' | '),
+        features = N
+      )],
+      data.table::data.table(
+        table = c(
+          'WP copies left out',
+          'WP copies with no REF_ID left out',
+          'GeoYukon cut or left out where re-mapped',
+          'split new parts'
+        ),
+        kind = kind,
+        features = c(dd$n, dn$n, rm$n, np$n)
+      ),
+      if (nrow(reported$log)) {
+        reported$log[, .(
+          table = paste('reported', what),
+          kind = kind,
+          source = name,
+          features,
+          ref_id
+        )]
+      },
+      fill = TRUE
+    )
   }
-  logs$qa <- data.table::data.table(table = 'dropped by QA', kind = 'lines', features = wp$qa_dropped)
-  files <- file.path(out_dir, c('YT_linear.gpkg', 'YT_areal.gpkg', 'YT_merge_log.csv', 'YT_cleaning_log.csv'))
+  logs$qa <- data.table::data.table(
+    table = 'dropped by QA',
+    kind = 'lines',
+    features = wp$qa_dropped
+  )
+  files <- file.path(
+    out_dir,
+    c('YT_linear.gpkg', 'YT_areal.gpkg', 'YT_merge_log.csv', 'YT_cleaning_log.csv')
+  )
   unlink(files[1:2])
   sf::st_write(out$lines, files[1], layer = 'linear', quiet = TRUE)
   sf::st_write(out$polys, files[2], layer = 'areal', quiet = TRUE)
@@ -760,21 +1147,50 @@ apply_border_years <- function(merged, check, bc, out_dir) {
     cats <- unlist(bc$year_categories %||% list('paved', 'unpaved'))
     m <- min(unlist(bc$match_m %||% list(50, 500)))
     codes <- unlist(bc$sources)[unlist(bc$years_from %||% list('bc'))]
-    p <- check$pairs[from == 'YK' & to %in% codes & gap_m <= m & yk_category %in% cats & nb_category %in% cats & !is.na(nb_year)]
+    p <- check$pairs[
+      from == 'YK' &
+        to %in% codes &
+        gap_m <= m &
+        yk_category %in% cats &
+        nb_category %in% cats &
+        !is.na(nb_year)
+    ]
     p <- p[order(gap_m)][!duplicated(yk_feature_id)]
     i <- match(p$yk_feature_id, lines$feature_id)
-    was <- ifelse(is.na(lines$year_start[i]), 'none (counted in every year)',
-                  paste0(lines$year_start[i], ' (', lines$year_rule[i], ')'))
-    src <- sprintf('%s road built %d (%s), %.0f m away at the border; Yukon year was %s', p$to, p$nb_year,
-                   p$nb_file, p$gap_m, was)
+    was <- ifelse(
+      is.na(lines$year_start[i]),
+      'none (counted in every year)',
+      paste0(lines$year_start[i], ' (', lines$year_rule[i], ')')
+    )
+    src <- sprintf(
+      '%s road built %d (%s), %.0f m away at the border; Yukon year was %s',
+      p$to,
+      p$nb_year,
+      p$nb_file,
+      p$gap_m,
+      was
+    )
     lines$year_start[i] <- p$nb_year
     lines$year_rule[i] <- 'neighbour'
     lines$year_source[i] <- src
-    clean <- rbind(clean, clean_rows(paste0('year from the neighbour road at the border (', paste(codes, collapse = ', '), ')'),
-                                     'lines', lines$source[i], lines$REF_ID[i], lines$TYPE_DISTURBANCE[i], src,
-                                     yukon_size(lines[i, ], 'lines')), fill = TRUE)
+    clean <- rbind(
+      clean,
+      clean_rows(
+        paste0('year from the neighbour road at the border (', paste(codes, collapse = ', '), ')'),
+        'lines',
+        lines$source[i],
+        lines$REF_ID[i],
+        lines$TYPE_DISTURBANCE[i],
+        src,
+        yukon_size(lines[i, ], 'lines')
+      ),
+      fill = TRUE
+    )
   }
-  files <- file.path(out_dir, c('YT_linear.gpkg', 'YT_areal.gpkg', 'YT_merge_log.csv', 'YT_cleaning_log.csv'))
+  files <- file.path(
+    out_dir,
+    c('YT_linear.gpkg', 'YT_areal.gpkg', 'YT_merge_log.csv', 'YT_cleaning_log.csv')
+  )
   unlink(files[1])
   sf::st_write(lines, files[1], layer = 'linear', quiet = TRUE)
   file.copy(pick('YT_areal.gpkg'), files[2], overwrite = TRUE)
@@ -797,25 +1213,46 @@ apply_border_years <- function(merged, check, bc, out_dir) {
 #' @return data.table: `name`, `action` (updated or uploaded), `id`, `url`.
 #' @author Julie W. Turner
 #' @export
-upload_yukon_disturbance <- function(project = NULL, names = c('YT_linear', 'YT_areal'), config_dir = NULL) {
+upload_yukon_disturbance <- function(
+  project = NULL,
+  names = c('YT_linear', 'YT_areal'),
+  config_dir = NULL
+) {
   ctx <- pipeline_context(project, config_dir)
   project <- ctx$project
   cfg <- ctx$cfg
   folder <- cfg$landscape$disturbance$yukon_merge$upload_folder
   if (is.null(folder)) {
-    stop('Set landscape: disturbance: yukon_merge: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml',
-         call. = FALSE)
+    stop(
+      'Set landscape: disturbance: yukon_merge: upload_folder: in ',
+      file.path(ctx$config_dir, project),
+      '.yaml',
+      call. = FALSE
+    )
   }
-  if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
+  if (!is.null(cfg$run$google_email)) {
+    options(gargle_oauth_email = cfg$run$google_email)
+  }
   dir <- file.path(cfg$paths$outputs, project, 'derived')
   up <- reproducible::checkPath(file.path(dir, 'upload'), create = TRUE)
   zips <- file.path(up, paste0(names, '.zip'))
   for (i in seq_along(names)) {
     files <- file.path(dir, c(paste0(names[i], '.gpkg'), 'YT_cleaning_log.csv'))
-    if (!all(file.exists(files))) stop('Not found (run the pipeline first): ', paste(files[!file.exists(files)], collapse = ', '),
-                                       call. = FALSE)
-    if (file.exists(zips[i])) file.remove(zips[i])
+    if (!all(file.exists(files))) {
+      stop(
+        'Not found (run the pipeline first): ',
+        paste(files[!file.exists(files)], collapse = ', '),
+        call. = FALSE
+      )
+    }
+    if (file.exists(zips[i])) {
+      file.remove(zips[i])
+    }
     utils::zip(zips[i], files, flags = '-jq')
   }
-  upload_to_drive(zips, folder, 'The Yukon upload folder is shared with anyone with the link; the work packages are not public. Restrict it first.')
+  upload_to_drive(
+    zips,
+    folder,
+    'The Yukon upload folder is shared with anyone with the link; the work packages are not public. Restrict it first.'
+  )
 }

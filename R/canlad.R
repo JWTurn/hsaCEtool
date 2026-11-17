@@ -17,7 +17,14 @@
 #' @return data.table with columns `cell` (cell number in the template) and `year`.
 #' @author Julie W. Turner
 #' @export
-canlad_annual_harvest <- function(sourceFile, year, template, code = 2, access = 'stream', cache = 'inputs') {
+canlad_annual_harvest <- function(
+  sourceFile,
+  year,
+  template,
+  code = 2,
+  access = 'stream',
+  cache = 'inputs'
+) {
   warped <- warp_to_template(raster_source(sourceFile, access, cache), template)
   on.exit(unlink(warped), add = TRUE)
   cells <- harvest_cells(warped, code, template)
@@ -32,7 +39,14 @@ canlad_annual_harvest <- function(sourceFile, year, template, code = 2, access =
 #' @return data.table with columns `cell` and `year`.
 #' @author Julie W. Turner
 #' @export
-canlad_old_harvest <- function(typeFile, yearFile, template, code = 3, access = 'stream', cache = 'inputs') {
+canlad_old_harvest <- function(
+  typeFile,
+  yearFile,
+  template,
+  code = 3,
+  access = 'stream',
+  cache = 'inputs'
+) {
   type_file <- warp_to_template(raster_source(typeFile, access, cache), template)
   year_file <- warp_to_template(raster_source(yearFile, access, cache), template)
   on.exit(unlink(c(type_file, year_file)), add = TRUE)
@@ -47,7 +61,9 @@ canlad_old_harvest <- function(typeFile, yearFile, template, code = 3, access = 
 #' @noRd
 harvest_cells <- function(file, code, template) {
   cells <- terra::cells(terra::rast(file), code)[[1]]
-  if (length(cells) == 0) return(numeric())
+  if (length(cells) == 0) {
+    return(numeric())
+  }
   inside <- !is.na(terra::extract(terra::rast(template), cells)[[1]])
   as.numeric(cells[inside])
 }

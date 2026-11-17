@@ -18,15 +18,30 @@
 #' @export
 get_source <- function(src, paths) {
   if (!is.null(src$url) && nzchar(src$url)) {
-    dest <- if (nzchar(src$subfolder %||% '')) file.path(paths$inputs, src$subfolder) else paths$inputs
+    dest <- if (nzchar(src$subfolder %||% '')) {
+      file.path(paths$inputs, src$subfolder)
+    } else {
+      paths$inputs
+    }
     reproducible::checkPath(dest, create = TRUE)
-    if (is.null(src$target_file)) stop('Set target_file for ', src$url, call. = FALSE)
-    fun <- prep_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file)),
-                                 tif = , tiff = , grd = 'terra::rast',
-                                 shp = , gpkg = , geojson = 'sf::st_read',
-                                 rds = 'readRDS',
-                                 csv = 'data.table::fread',
-                               stop('Set fun for ', src$target_file, call. = FALSE)))
+    if (is.null(src$target_file)) {
+      stop('Set target_file for ', src$url, call. = FALSE)
+    }
+    fun <- prep_reader(
+      src$fun %||%
+        switch(
+          tolower(tools::file_ext(src$target_file)),
+          tif = ,
+          tiff = ,
+          grd = 'terra::rast',
+          shp = ,
+          gpkg = ,
+          geojson = 'sf::st_read',
+          rds = 'readRDS',
+          csv = 'data.table::fread',
+          stop('Set fun for ', src$target_file, call. = FALSE)
+        )
+    )
     get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
     get(
       url = src$url,
@@ -46,8 +61,11 @@ get_source <- function(src, paths) {
   }
 
   if (length(path) != 1 || !file.exists(path)) {
-    stop('Input not found: ', paste(c(src$path, src$url, src$target_file), collapse = ' '),
-         '. With a url, set target_file to the file wanted from the download.')
+    stop(
+      'Input not found: ',
+      paste(c(src$path, src$url, src$target_file), collapse = ' '),
+      '. With a url, set target_file to the file wanted from the download.'
+    )
   }
   path <- normalizePath(path)
   # inside the project, keep paths relative so stored results stay valid on
@@ -112,8 +130,10 @@ prep_inputs_fresh <- function(destinationPath, ...) {
   reproducible::checkPath(destinationPath, create = TRUE)
   tmp <- reproducible::checkPath(tempfile('download_'), create = TRUE)
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
-  out <- withr::with_options(list(reproducible.inputPaths = NULL),
-                             reproducible::prepInputs(..., destinationPath = tmp))
+  out <- withr::with_options(
+    list(reproducible.inputPaths = NULL),
+    reproducible::prepInputs(..., destinationPath = tmp)
+  )
   got <- setdiff(list.files(tmp), 'CHECKSUMS.txt')
   file.copy(file.path(tmp, got), destinationPath, overwrite = TRUE)
   # keep the other files' checksums; replace those of the new copies

@@ -32,23 +32,38 @@ crosswalk_cols <- c('file', 'category', 'subtype', 'notes')
 #' @author Julie W. Turner
 #' @export
 read_disturbance_crosswalk <- function(file) {
-  if (!file.exists(file)) stop('Disturbance crosswalk table not found: ', file, call. = FALSE)
+  if (!file.exists(file)) {
+    stop('Disturbance crosswalk table not found: ', file, call. = FALSE)
+  }
   tab <- data.table::fread(file, colClasses = 'character', na.strings = '')
   miss <- setdiff(c('file', 'category'), names(tab))
   if (length(miss)) {
-    stop('Disturbance crosswalk table ', file, ' needs column(s) ', paste(miss, collapse = ', '), call. = FALSE)
+    stop(
+      'Disturbance crosswalk table ',
+      file,
+      ' needs column(s) ',
+      paste(miss, collapse = ', '),
+      call. = FALSE
+    )
   }
-  for (col in setdiff(crosswalk_cols, names(tab))) tab[, (col) := NA_character_]
+  for (col in setdiff(crosswalk_cols, names(tab))) {
+    tab[, (col) := NA_character_]
+  }
   cols <- names(tab)
-  tab[, (cols) := purrr::map(.SD, function(x) {
-    x <- trimws(x)
-    x[x == ''] <- NA_character_
-    x
-  }), .SDcols = cols]
+  tab[,
+    (cols) := purrr::map(.SD, function(x) {
+      x <- trimws(x)
+      x[x == ''] <- NA_character_
+      x
+    }),
+    .SDcols = cols
+  ]
 
   problems <- character()
   add <- function(rows, msg) {
-    if (any(rows)) problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    if (any(rows)) {
+      problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    }
   }
   add(is.na(tab$file), 'no file')
   add(is.na(tab$category), 'no category')
@@ -57,13 +72,24 @@ read_disturbance_crosswalk <- function(file) {
     rows <- tab$file %in% f
     used <- crosswalk_fields(tab[rows], fields)
     if (length(used) == 0) {
-      if (sum(rows) > 1) problems <- c(problems, paste0(f, ' fills in no field, so it needs exactly one row'))
+      if (sum(rows) > 1) {
+        problems <- c(problems, paste0(f, ' fills in no field, so it needs exactly one row'))
+      }
     } else {
-      add(rows & duplicated(tab[, c('file', used), with = FALSE]), paste0(f, ': the same values listed twice'))
+      add(
+        rows & duplicated(tab[, c('file', used), with = FALSE]),
+        paste0(f, ': the same values listed twice')
+      )
     }
   }
   if (length(problems)) {
-    stop('Problems in disturbance crosswalk table ', file, ':\n  - ', paste(problems, collapse = '\n  - '), call. = FALSE)
+    stop(
+      'Problems in disturbance crosswalk table ',
+      file,
+      ':\n  - ',
+      paste(problems, collapse = '\n  - '),
+      call. = FALSE
+    )
   }
   tab[]
 }
@@ -98,14 +124,24 @@ apply_disturbance_crosswalk <- function(src, tab, name) {
   fields <- setdiff(names(tab), crosswalk_cols)
   src$files <- purrr::map(src$files, function(f) {
     if (!is.null(f$category) || length(f$rules)) {
-      stop(where, ': ', f$file, ' has a category or rules and a crosswalk table; give only one', call. = FALSE)
+      stop(
+        where,
+        ': ',
+        f$file,
+        ' has a category or rules and a crosswalk table; give only one',
+        call. = FALSE
+      )
     }
     rows <- tab[file %in% f$file]
-    if (nrow(rows) == 0) stop(where, ': ', f$file, ' has no rows in crosswalk ', src$crosswalk, call. = FALSE)
+    if (nrow(rows) == 0) {
+      stop(where, ': ', f$file, ' has no rows in crosswalk ', src$crosswalk, call. = FALSE)
+    }
     used <- crosswalk_fields(rows, fields)
     if (length(used) == 0) {
       f$category <- rows$category
-      if (!is.na(rows$subtype)) f[['subtype']] <- rows$subtype
+      if (!is.na(rows$subtype)) {
+        f[['subtype']] <- rows$subtype
+      }
       return(f)
     }
     f$rules <- purrr::map(seq_len(nrow(rows)), function(i) {
@@ -114,7 +150,9 @@ apply_disturbance_crosswalk <- function(src, tab, name) {
         if (is.na(v)) '' else v
       })
       r <- list(where = w, category = rows$category[i])
-      if (!is.na(rows$subtype[i])) r[['subtype']] <- rows$subtype[i]
+      if (!is.na(rows$subtype[i])) {
+        r[['subtype']] <- rows$subtype[i]
+      }
       r
     })
     f
@@ -132,18 +170,31 @@ apply_disturbance_crosswalk <- function(src, tab, name) {
 #' @keywords internal
 #' @noRd
 apply_disturbance_crosswalks <- function(dcfg, config_dir) {
-  cws <- purrr::map(dcfg$sources, function(s) if (is.character(s$crosswalk) && length(s$crosswalk) == 1) s$crosswalk)
+  cws <- purrr::map(dcfg$sources, function(s) {
+    if (is.character(s$crosswalk) && length(s$crosswalk) == 1) s$crosswalk
+  })
   cws <- unlist(cws[!purrr::map_lgl(cws, is.null)])
   for (cw in unique(cws)) {
     tab <- read_disturbance_crosswalk(file.path(config_dir, cw))
     users <- names(cws)[cws == cw]
-    files <- unlist(purrr::map(users, function(nm) purrr::map_chr(dcfg$sources[[nm]]$files, function(f) f$file %||% NA_character_)))
+    files <- unlist(purrr::map(users, function(nm) {
+      purrr::map_chr(dcfg$sources[[nm]]$files, function(f) f$file %||% NA_character_)
+    }))
     extra <- setdiff(unique(tab$file), files)
     if (length(extra)) {
-      stop('Disturbance crosswalk ', cw, ' lists file(s) not in the files of ', paste(users, collapse = ' or '),
-           ': ', paste(extra, collapse = ', '), call. = FALSE)
+      stop(
+        'Disturbance crosswalk ',
+        cw,
+        ' lists file(s) not in the files of ',
+        paste(users, collapse = ' or '),
+        ': ',
+        paste(extra, collapse = ', '),
+        call. = FALSE
+      )
     }
-    for (nm in users) dcfg$sources[[nm]] <- apply_disturbance_crosswalk(dcfg$sources[[nm]], tab, nm)
+    for (nm in users) {
+      dcfg$sources[[nm]] <- apply_disturbance_crosswalk(dcfg$sources[[nm]], tab, nm)
+    }
   }
   dcfg
 }
@@ -168,23 +219,36 @@ check_disturbance_coverage <- function(summary, out_dir) {
   miss <- data.table::as.data.table(summary)[category == 'none (left out)']
   # the type ("field=value; field=value") as one column per field; "NA" = missing
   parts <- purrr::map(miss$type, function(s) {
-    if (is.na(s)) return(list())
+    if (is.na(s)) {
+      return(list())
+    }
     kv <- strsplit(s, '; (?=[^;=]+=)', perl = TRUE)[[1]]
     v <- sub('^[^=]*=', '', kv)
     v[v == 'NA'] <- NA_character_
     as.list(stats::setNames(v, sub('=.*$', '', kv)))
   })
   vals <- data.table::rbindlist(parts, fill = TRUE)
-  if (nrow(vals) == 0) vals <- data.table::data.table()
+  if (nrow(vals) == 0) {
+    vals <- data.table::data.table()
+  }
   out <- data.table::data.table(source = miss$source, file = miss$file)
-  if (ncol(vals)) out <- cbind(out, vals)
+  if (ncol(vals)) {
+    out <- cbind(out, vals)
+  }
   out <- cbind(out, miss[, .(features, length_km, area_km2, first_year, last_year)])
   data.table::fwrite(out, file)
   if (nrow(out)) {
-    stop(nrow(out), ' kind(s) of disturbance feature (', sum(out$features), ' features, in source(s) ',
-         paste(unique(out$source), collapse = ', '), ') match no rule or crosswalk row and would be left out. ',
-         'Add them to the crosswalk table (or rules), with category drop to leave them out: see ', file,
-         call. = FALSE)
+    stop(
+      nrow(out),
+      ' kind(s) of disturbance feature (',
+      sum(out$features),
+      ' features, in source(s) ',
+      paste(unique(out$source), collapse = ', '),
+      ') match no rule or crosswalk row and would be left out. ',
+      'Add them to the crosswalk table (or rules), with category drop to leave them out: see ',
+      file,
+      call. = FALSE
+    )
   }
   file
 }

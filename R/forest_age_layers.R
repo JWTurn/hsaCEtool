@@ -15,16 +15,33 @@
 #' @return `out`.
 #' @author Julie W. Turner
 #' @export
-prep_forest_age_map <- function(sourceFile, templates, out, archiveFile = NULL, zero_is_na = FALSE,
-                                access = 'stream', cache = 'inputs') {
+prep_forest_age_map <- function(
+  sourceFile,
+  templates,
+  out,
+  archiveFile = NULL,
+  zero_is_na = FALSE,
+  access = 'stream',
+  cache = 'inputs'
+) {
   reproducible::checkPath(dirname(out), create = TRUE)
-  warped <- warp_resample(in_archive(raster_source(sourceFile, access, cache), archiveFile),
-                          templates[1], method = 'near')
+  warped <- warp_resample(
+    in_archive(raster_source(sourceFile, access, cache), archiveFile),
+    templates[1],
+    method = 'near'
+  )
   on.exit(unlink(warped), add = TRUE)
   r <- terra::rast(warped)
-  if (isTRUE(zero_is_na)) r <- terra::subst(r, 0, NA)
-  terra::writeRaster(terra::mask(r, terra::rast(templates[1])), out, datatype = 'INT2S',
-                     gdal = c('COMPRESS=DEFLATE', 'TILED=YES', 'BIGTIFF=IF_SAFER'), overwrite = TRUE)
+  if (isTRUE(zero_is_na)) {
+    r <- terra::subst(r, 0, NA)
+  }
+  terra::writeRaster(
+    terra::mask(r, terra::rast(templates[1])),
+    out,
+    datatype = 'INT2S',
+    gdal = c('COMPRESS=DEFLATE', 'TILED=YES', 'BIGTIFF=IF_SAFER'),
+    overwrite = TRUE
+  )
   out
 }
 
@@ -52,10 +69,18 @@ prep_forest_age_map <- function(sourceFile, templates, out, archiveFile = NULL, 
 #' @return character. Files written, named `forest_age_<res>m_<year>.tif`.
 #' @author Julie W. Turner
 #' @export
-build_forest_age_year <- function(maps, map_years, year, resets = NULL, resolutions, templates, out_dir,
-                                  margin = NULL) {
+build_forest_age_year <- function(
+  maps,
+  map_years,
+  year,
+  resets = NULL,
+  resolutions,
+  templates,
+  out_dir,
+  margin = NULL
+) {
   reproducible::checkPath(out_dir, create = TRUE)
-  yr <- year   # (data.table columns are also called year and row)
+  yr <- year # (data.table columns are also called year and row)
   m <- if (any(map_years <= year)) max(map_years[map_years <= year]) else min(map_years)
   age <- terra::rast(maps[match(m, map_years)])
   fine <- terra::rast(templates[1])
@@ -87,7 +112,9 @@ build_forest_age_year <- function(maps, map_years, year, resets = NULL, resoluti
     r0 <- (i - 1) * f + 1
     nr <- min(f, terra::nrow(fine) - r0 + 1)
     v <- terra::readValues(age, r0, nr, 1, nc) + (year - m)
-    if (year < m) v[!is.na(v) & v < 0] <- NA
+    if (year < m) {
+      v[!is.na(v) & v < 0] <- NA
+    }
     if (!is.null(rs)) {
       b <- rs[row >= r0 - 1 & row < r0 - 1 + nr]
       if (nrow(b)) {
@@ -136,8 +163,11 @@ to_fine_cells <- function(history, fine, margin = NULL) {
   base <- terra::res(fine)[1]
   off_row <- round((terra::ymax(grid) - terra::ymax(fine)) / base)
   off_col <- round((terra::xmin(fine) - terra::xmin(grid)) / base)
-  h <- data.table::as.data.table(history)[, .(row = (cell - 1) %/% terra::ncol(grid) - off_row,
-                                              col = (cell - 1) %% terra::ncol(grid) - off_col, year)]
+  h <- data.table::as.data.table(history)[, .(
+    row = (cell - 1) %/% terra::ncol(grid) - off_row,
+    col = (cell - 1) %% terra::ncol(grid) - off_col,
+    year
+  )]
   h[row >= 0 & row < terra::nrow(fine) & col >= 0 & col < terra::ncol(fine)]
 }
 

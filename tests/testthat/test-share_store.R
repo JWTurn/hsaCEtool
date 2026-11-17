@@ -13,14 +13,14 @@ test_that('sync_folder copies only new and changed files, meta last', {
   expect_length(list.files(to, recursive = TRUE), 0)
 
   expect_equal(nrow(sync_folder(from, to)), 3)
-  expect_equal(nrow(sync_folder(from, to)), 0)       # nothing changed
+  expect_equal(nrow(sync_folder(from, to)), 0) # nothing changed
 
   writeLines('a changed', file.path(from, 'objects', 'a'))
   expect_equal(sync_folder(from, to)$file, 'objects/a')
   expect_equal(readLines(file.path(to, 'objects', 'a')), 'a changed')
 
   unlink(file.path(from, 'objects', 'b'))
-  expect_equal(nrow(sync_folder(from, to)), 0)       # not deleted without prune
+  expect_equal(nrow(sync_folder(from, to)), 0) # not deleted without prune
   expect_equal(sync_folder(from, to, prune = TRUE)$action, 'delete')
   expect_false(file.exists(file.path(to, 'objects', 'b')))
 })

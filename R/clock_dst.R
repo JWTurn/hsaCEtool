@@ -11,7 +11,9 @@
 #' @noRd
 mode_value <- function(v) {
   v <- v[!is.na(v)]
-  if (!length(v)) return(v[NA_integer_])
+  if (!length(v)) {
+    return(v[NA_integer_])
+  }
   u <- unique(v)
   u[which.max(tabulate(match(v, u)))]
 }
@@ -72,33 +74,55 @@ dst_switch_shifts <- function(DT, switches, window_days = 14, min_fixes = 5) {
   out <- purrr::map(seq_len(nrow(switches)), function(i) {
     w <- switches$when[i]
     d <- DT[clk >= w - win & clk < w + win, .(id, clk)]
-    if (!nrow(d)) return(NULL)
+    if (!nrow(d)) {
+      return(NULL)
+    }
     data.table::setorder(d, id, clk)
     d[, dt_h := round(as.numeric(clk - data.table::shift(clk), units = 'hours'), 2), by = id]
     d[, k := mode_value(dt_h), by = id]
     d[, phase := round(((as.numeric(clk) %% 86400) / 3600) %% k, 1)]
-    d[, .(nb = sum(clk < w), na = sum(clk >= w), k = k[1],
-          pb = mode_value(phase[clk < w]), pa = mode_value(phase[clk >= w])), by = id
-      ][, `:=`(when = w, spring = switches$spring[i])]
+    d[,
+      .(
+        nb = sum(clk < w),
+        na = sum(clk >= w),
+        k = k[1],
+        pb = mode_value(phase[clk < w]),
+        pa = mode_value(phase[clk >= w])
+      ),
+      by = id
+    ][, `:=`(when = w, spring = switches$spring[i])]
   })
   s <- data.table::rbindlist(out)
   if (!nrow(s)) {
-    return(data.table::data.table(id = character(), when = as.POSIXct(character(), tz = 'UTC'),
-                                  spring = logical(), interval_h = numeric(), shift_h = numeric(),
-                                  result = character()))
+    return(data.table::data.table(
+      id = character(),
+      when = as.POSIXct(character(), tz = 'UTC'),
+      spring = logical(),
+      interval_h = numeric(),
+      shift_h = numeric(),
+      result = character()
+    ))
   }
-  ok <- s$nb >= min_fixes & s$na >= min_fixes & !is.na(s$k) & s$k >= 2 & s$k <= 24 &
-    s$k == round(s$k) & !is.na(s$pb) & !is.na(s$pa)
+  ok <- s$nb >= min_fixes &
+    s$na >= min_fixes &
+    !is.na(s$k) &
+    s$k >= 2 &
+    s$k <= 24 &
+    s$k == round(s$k) &
+    !is.na(s$pb) &
+    !is.na(s$pa)
   s[, shift_h := data.table::fifelse(ok, round((pa - pb + k / 2) %% k - k / 2, 1), NA_real_)]
   later <- abs(s$shift_h - 1) < 0.2 & s$k > 2
   earlier <- abs(s$shift_h + 1) < 0.2 & s$k > 2
-  s[, result := data.table::fcase(
-    is.na(shift_h), 'unclear',
-    abs(shift_h) < 0.2, 'same',
-    (spring & later) | (!spring & earlier), 'dst_clock',
-    (spring & earlier) | (!spring & later), 'local_schedule',
-    default = 'unclear'
-  )]
+  s[,
+    result := data.table::fcase(
+      is.na(shift_h)                         , 'unclear'        ,
+      abs(shift_h) < 0.2                     , 'same'           ,
+      (spring & later) | (!spring & earlier) , 'dst_clock'      ,
+      (spring & earlier) | (!spring & later) , 'local_schedule' ,
+      default = 'unclear'
+    )
+  ]
   s[, .(id, when, spring, interval_h = k, shift_h, result)]
 }
 
@@ -122,14 +146,25 @@ dst_switch_shifts <- function(DT, switches, window_days = 14, min_fixes = 5) {
 #' @noRd
 dst_periods <- function(DT, shifts, borrow_days = 365) {
   shifts <- data.table::copy(shifts)
-  shifts[, dst := data.table::fcase(result == 'dst_clock', TRUE,
-                                    result %in% c('same', 'local_schedule'), FALSE,
-                                    default = NA)]
+  shifts[,
+    dst := data.table::fcase(
+      result == 'dst_clock'                   , TRUE  ,
+      result %in% c('same', 'local_schedule') , FALSE ,
+      default = NA
+    )
+  ]
   tracks <- DT[, .(value = value[1], start = min(clk), end = max(clk)), by = id]
   shifts <- tracks[, .(id, value)][shifts, on = 'id']
-  counts <- shifts[, .(switches = .N, dst_clock = sum(result == 'dst_clock'), same = sum(result == 'same'),
-                       local_schedule = sum(result == 'local_schedule'),
-                       unclear = sum(result == 'unclear')), by = id]
+  counts <- shifts[,
+    .(
+      switches = .N,
+      dst_clock = sum(result == 'dst_clock'),
+      same = sum(result == 'same'),
+      local_schedule = sum(result == 'local_schedule'),
+      unclear = sum(result == 'unclear')
+    ),
+    by = id
+  ]
   known <- shifts[!is.na(dst)]
   data.table::setorder(known, id, when)
 
@@ -147,8 +182,14 @@ dst_periods <- function(DT, shifts, borrow_days = 365) {
       starts <- c(starts, t[which.max(diff(as.numeric(t))) + 1])
     }
     ends <- c(starts[-1], tr$end + 1)
-    data.table::data.table(id = a, value = tr$value, from = starts, to = ends,
-                           dst = k$dst[!duplicated(run)], method = 'detected')
+    data.table::data.table(
+      id = a,
+      value = tr$value,
+      from = starts,
+      to = ends,
+      dst = k$dst[!duplicated(run)],
+      method = 'detected'
+    )
   })
 
   ## animals without answers borrow from the nearest change with answers
@@ -168,7 +209,14 @@ dst_periods <- function(DT, shifts, borrow_days = 365) {
         dst <- FALSE
         method <- 'no evidence'
       }
-      data.table::data.table(id = r$id, value = r$value, from = r$start, to = r$end + 1, dst = dst, method = method)
+      data.table::data.table(
+        id = r$id,
+        value = r$value,
+        from = r$start,
+        to = r$end + 1,
+        dst = dst,
+        method = method
+      )
     })
     per <- c(per, bor)
   }

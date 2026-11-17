@@ -2,10 +2,36 @@
 # Reading `locations: sources:` from a CSV (e.g. config/locations_NMC.csv)
 
 # columns the location sources table may have
-source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 'target_file', 'archive', 'fun',
-                       'id_col', 'datetime_col', 'hour_col', 'x_col', 'y_col', 'input_crs', 'tz',
-                       'date_only', 'clock_time', 'id_from_deployment', 'refresh',
-                       'study', 'study_column', 'herd', 'herd_column', 'juris', 'provider', 'terms', 'notes')
+source_table_cols <- c(
+  'name',
+  'type',
+  'movebank_study',
+  'part',
+  'url',
+  'path',
+  'target_file',
+  'archive',
+  'fun',
+  'id_col',
+  'datetime_col',
+  'hour_col',
+  'x_col',
+  'y_col',
+  'input_crs',
+  'tz',
+  'date_only',
+  'clock_time',
+  'id_from_deployment',
+  'refresh',
+  'study',
+  'study_column',
+  'herd',
+  'herd_column',
+  'juris',
+  'provider',
+  'terms',
+  'notes'
+)
 
 #' @title Read the location sources table
 #' @description Reads a table of location sources, one row per source, in order
@@ -39,46 +65,88 @@ source_table_cols <- c('name', 'type', 'movebank_study', 'part', 'url', 'path', 
 #' @author Julie W. Turner
 #' @export
 read_location_sources <- function(file) {
-  if (!file.exists(file)) stop('Location sources table not found: ', file, call. = FALSE)
+  if (!file.exists(file)) {
+    stop('Location sources table not found: ', file, call. = FALSE)
+  }
   tab <- data.table::fread(file, colClasses = 'character', na.strings = '')
   unknown <- setdiff(names(tab), source_table_cols)
   if (length(unknown)) {
-    stop('Location sources table ', file, ' has unknown columns: ', paste(unknown, collapse = ', '),
-         '. Columns can be: ', paste(source_table_cols, collapse = ', '), call. = FALSE)
+    stop(
+      'Location sources table ',
+      file,
+      ' has unknown columns: ',
+      paste(unknown, collapse = ', '),
+      '. Columns can be: ',
+      paste(source_table_cols, collapse = ', '),
+      call. = FALSE
+    )
   }
-  for (col in setdiff(source_table_cols, names(tab))) tab[, (col) := NA_character_]
-  tab[, (source_table_cols) := purrr::map(.SD, function(x) {
-    x <- trimws(x)
-    x[x == ''] <- NA_character_
-    x
-  }), .SDcols = source_table_cols]
+  for (col in setdiff(source_table_cols, names(tab))) {
+    tab[, (col) := NA_character_]
+  }
+  tab[,
+    (source_table_cols) := purrr::map(.SD, function(x) {
+      x <- trimws(x)
+      x[x == ''] <- NA_character_
+      x
+    }),
+    .SDcols = source_table_cols
+  ]
   tab[is.na(type), type := 'file']
 
   problems <- character()
   add <- function(rows, msg) {
-    if (any(rows)) problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    if (any(rows)) {
+      problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    }
   }
   add(is.na(tab$name), 'no name')
   add(!tab$type %in% c('file', 'movebank', 'bc'), 'type must be file, movebank or bc')
   add(tab$type == 'movebank' & is.na(tab$movebank_study), 'a movebank source needs movebank_study')
   add(tab$type != 'bc' & !is.na(tab$part), 'part is only for type bc')
-  add(tab$type == 'bc' & !tab$part %in% c('new', 'old', 'reference'), 'a bc row needs part new, old or reference')
+  add(
+    tab$type == 'bc' & !tab$part %in% c('new', 'old', 'reference'),
+    'a bc row needs part new, old or reference'
+  )
   add(tab$type == 'bc' & duplicated(tab[, .(name, type, part)]), 'a bc part listed twice')
   for (col in c('date_only', 'clock_time', 'id_from_deployment', 'refresh')) {
-    add(!is.na(tab[[col]]) & !tolower(tab[[col]]) %in% c('true', 'false', 'yes', 'no'),
-        paste0(col, ' must be TRUE or FALSE'))
+    add(
+      !is.na(tab[[col]]) & !tolower(tab[[col]]) %in% c('true', 'false', 'yes', 'no'),
+      paste0(col, ' must be TRUE or FALSE')
+    )
   }
   # a bc source's rows must agree on everything but their part's file
-  file_cols <- c('part', 'url', 'path', 'target_file', 'archive', 'refresh', 'provider', 'terms', 'notes')
+  file_cols <- c(
+    'part',
+    'url',
+    'path',
+    'target_file',
+    'archive',
+    'refresh',
+    'provider',
+    'terms',
+    'notes'
+  )
   for (nm in unique(tab[type == 'bc', name])) {
     rows <- tab[type == 'bc' & name == nm, setdiff(source_table_cols, file_cols), with = FALSE]
-    differ <- names(rows)[purrr::map_lgl(rows, function(x) data.table::uniqueN(stats::na.omit(x)) > 1)]
+    differ <- names(rows)[purrr::map_lgl(rows, function(x) {
+      data.table::uniqueN(stats::na.omit(x)) > 1
+    })]
     if (length(differ)) {
-      problems <- c(problems, paste0('the rows of bc source ', nm, ' differ in: ', paste(differ, collapse = ', ')))
+      problems <- c(
+        problems,
+        paste0('the rows of bc source ', nm, ' differ in: ', paste(differ, collapse = ', '))
+      )
     }
   }
   if (length(problems)) {
-    stop('Problems in the location sources table ', file, ':\n  - ', paste(problems, collapse = '\n  - '), call. = FALSE)
+    stop(
+      'Problems in the location sources table ',
+      file,
+      ':\n  - ',
+      paste(problems, collapse = '\n  - '),
+      call. = FALSE
+    )
   }
   tab[]
 }
@@ -103,14 +171,19 @@ apply_location_sources <- function(cfg, tab) {
     has <- one[!is.na(get(what))]
     if (nrow(has)) {
       map <- stats::setNames(as.list(has[[what]]), has$name)
-      cfg$locations[[what]]$by_source <- utils::modifyList(as.list(cfg$locations[[what]]$by_source %||% list()), map)
+      cfg$locations[[what]]$by_source <- utils::modifyList(
+        as.list(cfg$locations[[what]]$by_source %||% list()),
+        map
+      )
     }
   }
   for (what in c('study', 'herd')) {
     col <- paste0(what, '_column')
     has <- one[!is.na(get(col))]
     if (nrow(has)) {
-      entries <- purrr::map(unique(has[[col]]), function(cl) list(column = cl, sources = has[get(col) == cl, name]))
+      entries <- purrr::map(unique(has[[col]]), function(cl) {
+        list(column = cl, sources = has[get(col) == cl, name])
+      })
       cfg$locations[[what]]$columns <- c(entries, as.list(cfg$locations[[what]]$columns))
     }
   }
@@ -127,15 +200,25 @@ source_list <- function(tab) {
   flag <- function(x) if (is.na(x)) NULL else tolower(x) %in% c('true', 'yes')
   # as in the YAML: whole numbers too large for R's integers stay numbers
   study_id <- function(x) {
-    if (is.na(x)) return(NULL)
+    if (is.na(x)) {
+      return(NULL)
+    }
     n <- suppressWarnings(as.numeric(x))
-    if (is.na(n)) return(x)
+    if (is.na(n)) {
+      return(x)
+    }
     i <- suppressWarnings(as.integer(x))
     if (is.na(i)) n else i
   }
   file_part <- function(r) {
-    out <- list(url = r$url, path = r$path, target_file = r$target_file, archive = r$archive, fun = r$fun,
-                refresh = flag(r$refresh))
+    out <- list(
+      url = r$url,
+      path = r$path,
+      target_file = r$target_file,
+      archive = r$archive,
+      fun = r$fun,
+      refresh = flag(r$refresh)
+    )
     purrr::compact(purrr::map(out, function(v) if (length(v) && is.na(v[1])) NULL else v))
   }
   out <- list()
@@ -143,7 +226,9 @@ source_list <- function(tab) {
   for (i in seq_len(nrow(tab))) {
     r <- as.list(tab[i])
     if (r$type == 'bc') {
-      if (r$name %in% done) next
+      if (r$name %in% done) {
+        next
+      }
       done <- c(done, r$name)
       rows <- tab[type == 'bc' & name == r$name]
       src <- list(type = 'bc', name = r$name)
@@ -152,17 +237,27 @@ source_list <- function(tab) {
       }
       first <- function(col) stats::na.omit(rows[[col]])[1]
       r <- as.list(rows[1])
-      for (col in c('id_col', 'datetime_col', 'hour_col', 'x_col', 'y_col', 'input_crs', 'tz')) r[[col]] <- first(col)
+      for (col in c('id_col', 'datetime_col', 'hour_col', 'x_col', 'y_col', 'input_crs', 'tz')) {
+        r[[col]] <- first(col)
+      }
     } else {
       src <- c(list(type = r$type, name = r$name), file_part(r))
       if (r$type == 'movebank') src$study <- study_id(r$movebank_study)
     }
     cols <- c(id = r$id_col, datetime = r$datetime_col, hour = r$hour_col, x = r$x_col, y = r$y_col)
     cols <- cols[!is.na(cols)]
-    if (length(cols)) src$columns <- as.list(cols)
-    if (!is.na(r$input_crs)) src$input_crs <- r$input_crs
-    if (!is.na(r$tz)) src$tz <- r$tz
-    for (col in c('date_only', 'clock_time', 'id_from_deployment')) src[[col]] <- flag(r[[col]])
+    if (length(cols)) {
+      src$columns <- as.list(cols)
+    }
+    if (!is.na(r$input_crs)) {
+      src$input_crs <- r$input_crs
+    }
+    if (!is.na(r$tz)) {
+      src$tz <- r$tz
+    }
+    for (col in c('date_only', 'clock_time', 'id_from_deployment')) {
+      src[[col]] <- flag(r[[col]])
+    }
     out <- c(out, list(src))
   }
   out

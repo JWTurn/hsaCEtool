@@ -24,13 +24,18 @@ download_fire <- function(url, files, dir) {
   paths <- file.path(dir, files)
   if (!all(file.exists(paths))) {
     zip <- file.path(dir, basename(url))
-    if (!file.exists(zip)) download_parallel(url, zip, connections = 4)
+    if (!file.exists(zip)) {
+      download_parallel(url, zip, connections = 4)
+    }
     utils::unzip(zip, exdir = dir)
     missing <- !file.exists(paths)
-    if (any(missing)) stop('Not in ', basename(url), ': ', paste(files[missing], collapse = ', '), call. = FALSE)
+    if (any(missing)) {
+      stop('Not in ', basename(url), ': ', paste(files[missing], collapse = ', '), call. = FALSE)
+    }
   }
-  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths),
-                                             function(b) paste0(b, c('.shx', '.dbf', '.prj', '.cpg')))))
+  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths), function(b) {
+    paste0(b, c('.shx', '.dbf', '.prj', '.cpg'))
+  })))
   c(paths, sidecars[file.exists(sidecars)])
 }
 
@@ -57,8 +62,11 @@ prep_fire_polygons <- function(nbac, nfdb = NULL, template, crs, out, pre_year =
   reproducible::checkPath(dirname(out), create = TRUE)
   read_fires <- function(file) {
     shp <- file[tolower(tools::file_ext(file)) == 'shp'][1]
-    lyr_crs <- sf::st_crs(sf::st_read(shp, query = sprintf('SELECT * FROM "%s" LIMIT 0',
-                                                            tools::file_path_sans_ext(basename(shp))), quiet = TRUE))
+    lyr_crs <- sf::st_crs(sf::st_read(
+      shp,
+      query = sprintf('SELECT * FROM "%s" LIMIT 0', tools::file_path_sans_ext(basename(shp))),
+      quiet = TRUE
+    ))
     area <- sf::st_transform(sf::st_as_sfc(sf::st_bbox(terra::rast(template))), lyr_crs)
     sf::st_read(shp, wkt_filter = sf::st_as_text(area), quiet = TRUE)
   }
@@ -69,7 +77,10 @@ prep_fire_polygons <- function(nbac, nfdb = NULL, template, crs, out, pre_year =
     yr <- suppressWarnings(as.integer(old$YEAR))
     bad <- is.na(yr) | yr < 1900
     rep_yr <- suppressWarnings(as.integer(substr(as.character(old$REP_DATE), 1, 4)))
-    id_yr <- suppressWarnings(as.integer(stringr::str_extract(as.character(old$FIRE_ID), '^(18|19|20)[0-9]{2}')))
+    id_yr <- suppressWarnings(as.integer(stringr::str_extract(
+      as.character(old$FIRE_ID),
+      '^(18|19|20)[0-9]{2}'
+    )))
     yr[bad] <- ifelse(!is.na(rep_yr[bad]) & rep_yr[bad] >= 1900, rep_yr[bad], id_yr[bad])
     old <- sf::st_sf(year = yr, geometry = sf::st_geometry(old))
     old <- old[!is.na(old$year) & old$year < pre_year, ]
@@ -95,7 +106,9 @@ prep_fire_polygons <- function(nbac, nfdb = NULL, template, crs, out, pre_year =
 #' @author Julie W. Turner
 #' @export
 fire_year_groups <- function(fires, cutoff) {
-  yrs <- sort(unique(sf::st_read(fires, query = 'SELECT DISTINCT year FROM fire', quiet = TRUE)$year))
+  yrs <- sort(unique(
+    sf::st_read(fires, query = 'SELECT DISTINCT year FROM fire', quiet = TRUE)$year
+  ))
   older <- yrs[yrs < cutoff]
   c(if (length(older)) list(older), as.list(yrs[yrs >= cutoff]))
 }
@@ -114,19 +127,48 @@ fire_cells <- function(fires, years, template) {
   empty <- data.table::data.table(cell = numeric(), year = integer())
   q <- sprintf('SELECT * FROM fire WHERE year IN (%s)', paste(years, collapse = ', '))
   x <- sf::st_read(fires, query = q, quiet = TRUE)
-  if (nrow(x) == 0) return(empty)
-  x <- x[order(x$year), ]   # most recent written last, so it is the one kept
+  if (nrow(x) == 0) {
+    return(empty)
+  }
+  x <- x[order(x$year), ] # most recent written last, so it is the one kept
   vec <- tempfile(fileext = '.gpkg')
   ras <- tempfile(fileext = '.tif')
   on.exit(unlink(c(vec, ras)), add = TRUE)
   sf::st_write(x, vec, layer = 'f', quiet = TRUE)
   tr <- terra::rast(template)
   e <- as.vector(terra::ext(tr))
-  sf::gdal_utils('rasterize', vec, ras, options = c(
-    '-l', 'f', '-a', 'year', '-te', e[1], e[3], e[2], e[4], '-tr', terra::res(tr),
-    '-ot', 'UInt16', '-init', '0', '-a_nodata', '0', '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'))
+  sf::gdal_utils(
+    'rasterize',
+    vec,
+    ras,
+    options = c(
+      '-l',
+      'f',
+      '-a',
+      'year',
+      '-te',
+      e[1],
+      e[3],
+      e[2],
+      e[4],
+      '-tr',
+      terra::res(tr),
+      '-ot',
+      'UInt16',
+      '-init',
+      '0',
+      '-a_nodata',
+      '0',
+      '-co',
+      'COMPRESS=DEFLATE',
+      '-co',
+      'TILED=YES'
+    )
+  )
   r <- terra::rast(ras)
   cells <- terra::cells(r)
-  if (length(cells) == 0) return(empty)
+  if (length(cells) == 0) {
+    return(empty)
+  }
   data.table::data.table(cell = as.numeric(cells), year = as.integer(terra::extract(r, cells)[[1]]))
 }

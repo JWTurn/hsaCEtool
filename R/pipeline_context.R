@@ -31,13 +31,25 @@
 #' @keywords internal
 #' @noRd
 pipeline_context <- function(project = NULL, config_dir = NULL) {
-  if (!is.null(project) && !nzchar(project)) project <- NULL
-  if (is.null(project) && !nzchar(Sys.getenv('TAR_PROJECT'))) {
-    stop('No project chosen. Give project = (e.g. "NMC") or set one first, e.g. Sys.setenv(TAR_PROJECT = "NMC")',
-         call. = FALSE)
+  if (!is.null(project) && !nzchar(project)) {
+    project <- NULL
   }
-  listed <- if (file.exists('_targets.yaml')) names(yaml::read_yaml('_targets.yaml')) else character()
-  tar_project <- if (!is.null(project) && project %in% listed) project else Sys.getenv('TAR_PROJECT', 'main')
+  if (is.null(project) && !nzchar(Sys.getenv('TAR_PROJECT'))) {
+    stop(
+      'No project chosen. Give project = (e.g. "NMC") or set one first, e.g. Sys.setenv(TAR_PROJECT = "NMC")',
+      call. = FALSE
+    )
+  }
+  listed <- if (file.exists('_targets.yaml')) {
+    names(yaml::read_yaml('_targets.yaml'))
+  } else {
+    character()
+  }
+  tar_project <- if (!is.null(project) && project %in% listed) {
+    project
+  } else {
+    Sys.getenv('TAR_PROJECT', 'main')
+  }
   script <- targets::tar_config_get('script', project = tar_project)
   store <- targets::tar_config_get('store', project = tar_project)
   if (is.null(config_dir)) {
@@ -47,18 +59,33 @@ pipeline_context <- function(project = NULL, config_dir = NULL) {
   has_yaml <- function(nm) file.exists(file.path(config_dir, paste0(nm, '.yaml')))
   name <- project
   if (is.null(name) || (!has_yaml(name) && name %in% listed)) {
-    yamls <- setdiff(tools::file_path_sans_ext(list.files(config_dir, pattern = '[.]yaml$')), c('local', 'default'))
+    yamls <- setdiff(
+      tools::file_path_sans_ext(list.files(config_dir, pattern = '[.]yaml$')),
+      c('local', 'default')
+    )
     name <- if (has_yaml(tar_project)) {
       tar_project
     } else if (length(yamls) == 1) {
       yamls
     } else {
-      stop('Which settings? Give project = , one of: ', paste(yamls, collapse = ', '), ' (in ', config_dir, ')',
-           call. = FALSE)
+      stop(
+        'Which settings? Give project = , one of: ',
+        paste(yamls, collapse = ', '),
+        ' (in ',
+        config_dir,
+        ')',
+        call. = FALSE
+      )
     }
   }
-  list(project = name, config_dir = config_dir, tar_project = tar_project, script = script, store = store,
-       cfg = read_config(name, config_dir = config_dir))
+  list(
+    project = name,
+    config_dir = config_dir,
+    tar_project = tar_project,
+    script = script,
+    store = store,
+    cfg = read_config(name, config_dir = config_dir)
+  )
 }
 
 #' @title Run code with `TAR_PROJECT` set to a targets project
@@ -73,7 +100,10 @@ pipeline_context <- function(project = NULL, config_dir = NULL) {
 #' @noRd
 with_tar_project <- function(tar_project, code) {
   old <- Sys.getenv('TAR_PROJECT', unset = NA)
-  on.exit(if (is.na(old)) Sys.unsetenv('TAR_PROJECT') else Sys.setenv(TAR_PROJECT = old), add = TRUE)
+  on.exit(
+    if (is.na(old)) Sys.unsetenv('TAR_PROJECT') else Sys.setenv(TAR_PROJECT = old),
+    add = TRUE
+  )
   Sys.setenv(TAR_PROJECT = tar_project)
   code
 }

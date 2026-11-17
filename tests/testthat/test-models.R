@@ -7,8 +7,14 @@ toy_model_steps <- function(ids = c('a', 'b', 'c'), n_strata = 40, n_rand = 5) {
   st[, indiv_step_id := paste(id, k, sep = '_')]
   st[, t1_ := as.POSIXct('2020-01-01', tz = 'UTC') + (k - 1) * 20 * 86400]
   d <- st[, .(case_ = c(TRUE, rep(FALSE, n_rand))), by = .(id, indiv_step_id, t1_)]
-  d[, `:=`(year = as.integer(format(t1_, '%Y')), sl_ = rgamma(.N, 2, 0.002), ta_ = runif(.N, -pi, pi),
-           x1_ = 5e5, y1_ = 6.7e6, juris = ifelse(id == 'c', 'bc', 'yt'))]
+  d[, `:=`(
+    year = as.integer(format(t1_, '%Y')),
+    sl_ = rgamma(.N, 2, 0.002),
+    ta_ = runif(.N, -pi, pi),
+    x1_ = 5e5,
+    y1_ = 6.7e6,
+    juris = ifelse(id == 'c', 'bc', 'yt')
+  )]
   d[]
 }
 
@@ -16,11 +22,15 @@ toy_model_steps <- function(ids = c('a', 'b', 'c'), n_strata = 40, n_rand = 5) {
 toy_extracted <- function(steps, dir) {
   set.seed(6)
   n <- nrow(steps)
-  v <- data.table(row = seq_len(n),
-                  prop_a_240_end = runif(n, 0, 0.5), prop_b_240_end = runif(n, 0, 0.5),
-                  dist_x_240_start = rep(runif(n / 6, 0, 40000), each = 6),
-                  dist_x_240_end = runif(n, 0, 40000), harv_dist_240_end = runif(n, 0, 40000),
-                  harv_dist_240_start = rep(runif(n / 6, 0, 40000), each = 6))
+  v <- data.table(
+    row = seq_len(n),
+    prop_a_240_end = runif(n, 0, 0.5),
+    prop_b_240_end = runif(n, 0, 0.5),
+    dist_x_240_start = rep(runif(n / 6, 0, 40000), each = 6),
+    dist_x_240_end = runif(n, 0, 40000),
+    harv_dist_240_end = runif(n, 0, 40000),
+    harv_dist_240_start = rep(runif(n / 6, 0, 40000), each = 6)
+  )
   v[, dist_x_240_end := dist_x_240_end + 0]
   dir.create(dir, showWarnings = FALSE)
   purrr::map_chr(split(v, steps$year), function(x) {
@@ -30,13 +40,21 @@ toy_extracted <- function(steps, dir) {
   })
 }
 
-common <- list(seasons = list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31')),
-               groups = list(prop_ab = list(sum = list('prop_a', 'prop_b')),
-                             dist_x = list(min = list('dist_x', 'harv_dist'))),
-               distance_cap = list(beyond_km = 20, set_to_km = 21))
+common <- list(
+  seasons = list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31')),
+  groups = list(
+    prop_ab = list(sum = list('prop_a', 'prop_b')),
+    dist_x = list(min = list('dist_x', 'harv_dist'))
+  ),
+  distance_cap = list(beyond_km = 20, set_to_km = 21)
+)
 # season table: the default set as common$seasons, and a second set
-toy_seasons <- data.table(set = c('default', 'default', 'other_set'), season = c('winter', 'summer', 'calving'),
-                          start = c('11-01', '04-16', '05-15'), end = c('04-15', '10-31', '06-15'))
+toy_seasons <- data.table(
+  set = c('default', 'default', 'other_set'),
+  season = c('winter', 'summer', 'calving'),
+  start = c('11-01', '04-16', '05-15'),
+  end = c('04-15', '10-31', '06-15')
+)
 form <- 'case_ ~ -1 + prop_ab_240_end + I(log((dist_x_240_adj_end + 1)/1000)) + (1 | indiv_step_id) + (0 + prop_ab_240_end | id)'
 
 test_that('the season table counts each day once, in the first season that holds it', {
@@ -49,7 +67,10 @@ test_that('the season table counts each day once, in the first season that holds
 })
 
 test_that('seasons follow the start date and can cross the new year', {
-  t <- as.POSIXct(c('2020-12-31', '2021-04-15', '2021-04-16', '2021-10-31', '2021-11-01'), tz = 'UTC')
+  t <- as.POSIXct(
+    c('2020-12-31', '2021-04-15', '2021-04-16', '2021-10-31', '2021-11-01'),
+    tz = 'UTC'
+  )
   expect_equal(season_of(t, common$seasons), c('winter', 'winter', 'summer', 'summer', 'winter'))
   expect_equal(season_of(t, list(summer = list('07-01', '09-30'))), rep('other', 5))
 })
@@ -57,17 +78,33 @@ test_that('seasons follow the start date and can cross the new year', {
 test_that('season tables are read and checked', {
   dir <- withr::local_tempdir()
   good <- file.path(dir, 'good.csv')
-  writeLines(c('set,season,start_month,start_day,end_month,end_day,source',
-               'simple,winter,11,1,4,15,made up', 'simple,summer,4,16,10,31,made up',
-               'bio,calving,5,15,6,15,made up'), good)
+  writeLines(
+    c(
+      'set,season,start_month,start_day,end_month,end_day,source',
+      'simple,winter,11,1,4,15,made up',
+      'simple,summer,4,16,10,31,made up',
+      'bio,calving,5,15,6,15,made up'
+    ),
+    good
+  )
   s <- read_seasons(good)
   expect_equal(s$start, c('11-01', '04-16', '05-15'))
-  expect_equal(season_dates(s, 'simple'), list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31')))
+  expect_equal(
+    season_dates(s, 'simple'),
+    list(winter = list('11-01', '04-15'), summer = list('04-16', '10-31'))
+  )
   expect_equal(names(season_dates(s, 'bio')), 'calving')
   expect_error(season_dates(s, 'nope'), 'No seasons in set "nope" \\(sets: simple, bio\\)')
   bad <- file.path(dir, 'bad.csv')
-  writeLines(c('set,season,start_month,start_day,end_month,end_day',
-               'simple,winter,13,1,4,15', 'simple,winter,4,16,2,30', 'simple,2nd,1,1,1,2'), bad)
+  writeLines(
+    c(
+      'set,season,start_month,start_day,end_month,end_day',
+      'simple,winter,13,1,4,15',
+      'simple,winter,4,16,2,30',
+      'simple,2nd,1,1,1,2'
+    ),
+    bad
+  )
   expect_error(read_seasons(bad), 'start is not a real day .*: simple winter')
   expect_error(read_seasons(bad), 'end is not a real day .*: simple winter')
   expect_error(read_seasons(bad), 'listed more than once in a set: simple winter')
@@ -78,12 +115,22 @@ test_that('season tables are read and checked', {
 })
 
 test_that('model settings are checked', {
-  ok <- list(season_set = 'default', groups = common$groups, distance_cap = common$distance_cap,
-             models = list(full = list(formula = form, n_random = 5)))
+  ok <- list(
+    season_set = 'default',
+    groups = common$groups,
+    distance_cap = common$distance_cap,
+    models = list(full = list(formula = form, n_random = 5))
+  )
   expect_length(check_model_settings(ok, 30, toy_seasons), 0)
   bad <- ok
-  bad$models <- list(`1st model` = list(formula = 'case_ ~ x + (0 + x | id)', n_random = 50, seasons = list('spring')),
-                     m2 = list(formula = 'case_ ~ x1_ + (1 | indiv_step_id)', n_random = 5))
+  bad$models <- list(
+    `1st model` = list(
+      formula = 'case_ ~ x + (0 + x | id)',
+      n_random = 50,
+      seasons = list('spring')
+    ),
+    m2 = list(formula = 'case_ ~ x1_ + (1 | indiv_step_id)', n_random = 5)
+  )
   p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('not a usable name', p)))
   expect_true(any(grepl('needs \\(1 \\| indiv_step_id\\)', p)))
@@ -93,30 +140,46 @@ test_that('model settings are checked', {
   # seasons: a known set, by default or per model, and names from that set
   sets <- ok
   sets$season_set <- 'nope'
-  sets$models <- list(m = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('calving')),
-                      m2 = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('winter')),
-                      m3 = list(formula = form, n_random = 5, season_set = 'gone'))
+  sets$models <- list(
+    m = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('calving')),
+    m2 = list(formula = form, n_random = 5, season_set = 'other_set', seasons = list('winter')),
+    m3 = list(formula = form, n_random = 5, season_set = 'gone')
+  )
   p_sets <- check_model_settings(sets, 30, toy_seasons)
   expect_true(any(grepl('season_set: "nope" is not a set', p_sets)))
   expect_false(any(grepl('models: m:', p_sets)))
-  expect_true(any(grepl('m2: seasons must be all or names from season set other_set \\(calving, other\\)', p_sets)))
+  expect_true(any(grepl(
+    'm2: seasons must be all or names from season set other_set \\(calving, other\\)',
+    p_sets
+  )))
   expect_true(any(grepl('m3: season_set "gone" is not a set', p_sets)))
   old <- ok
   old$seasons <- common$seasons
-  expect_true(any(grepl('season dates are now set in a season table', check_model_settings(old, 30, toy_seasons))))
+  expect_true(any(grepl(
+    'season dates are now set in a season table',
+    check_model_settings(old, 30, toy_seasons)
+  )))
   bad$models <- list(m3 = list(formula = form, n_random = 5, random_na = 'drop', export = 'yes'))
   p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('random_na must be', p)))
   # capped distances are named with _adj; the old columns setting is refused
   cols <- ok
   cols$distance_cap$columns <- '^dist_'
-  expect_true(any(grepl('distance_cap: columns is no longer used', check_model_settings(cols, 30, toy_seasons))))
+  expect_true(any(grepl(
+    'distance_cap: columns is no longer used',
+    check_model_settings(cols, 30, toy_seasons)
+  )))
   nocap <- ok
   nocap$distance_cap <- NULL
-  expect_true(any(grepl('dist_x_240_adj_end \\(capped distances, _adj\\) need model: distance_cap:',
-                        check_model_settings(nocap, 30, toy_seasons))))
+  expect_true(any(grepl(
+    'dist_x_240_adj_end \\(capped distances, _adj\\) need model: distance_cap:',
+    check_model_settings(nocap, 30, toy_seasons)
+  )))
   expect_true(any(grepl('export must be', p)))
-  bad$models <- list(m5 = list(formula = form, n_random = 5, upload = 'yes'), m6 = list(formula = form, n_random = 5, upload = TRUE, fit = FALSE))
+  bad$models <- list(
+    m5 = list(formula = form, n_random = 5, upload = 'yes'),
+    m6 = list(formula = form, n_random = 5, upload = TRUE, fit = FALSE)
+  )
   p <- check_model_settings(bad, 30, toy_seasons)
   expect_true(any(grepl('m5: upload must be true or false', p)))
   expect_true(any(grepl('m6: upload: true needs a fit', p)))
@@ -144,7 +207,10 @@ test_that('the model table: groups, distance cap by step start, random steps, co
   expect_equal(d[, .N, by = indiv_step_id][, unique(N)], 4L)
   expect_equal(nrow(d), 3 * 40 * 4)
   # only formula columns, coded IDs, no positions or times
-  expect_setequal(names(d), c('case_', 'indiv_step_id', 'id', 'prop_ab_240_end', 'dist_x_240_adj_end'))
+  expect_setequal(
+    names(d),
+    c('case_', 'indiv_step_id', 'id', 'prop_ab_240_end', 'dist_x_240_adj_end')
+  )
   expect_setequal(unique(d$id), codes$code)
   expect_true(all(startsWith(d$indiv_step_id, paste0(d$id, '_'))))
   # groups: sum, and min (harvest folded in)
@@ -162,66 +228,110 @@ test_that('the model table: groups, distance cap by step start, random steps, co
   expect_equal(r$log[grepl('set to 21 km', what), n], data.table::uniqueN(d$indiv_step_id[far]))
   expect_true(any(grepl('^dist_x_240_adj_end: steps starting', r$log$what)))
   # the same distance without _adj is not capped, and both can be in one model
-  both <- list(formula = sub('prop_ab_240_end \\+', 'prop_ab_240_end + I(log(dist_x_240_end + 1)) +', form), n_random = 3)
-  expect_message(d2 <- build_model_data(steps, files, codes, common, both)$data, 'not capped.*dist_x_240_end')
+  both <- list(
+    formula = sub('prop_ab_240_end \\+', 'prop_ab_240_end + I(log(dist_x_240_end + 1)) +', form),
+    n_random = 3
+  )
+  expect_message(
+    d2 <- build_model_data(steps, files, codes, common, both)$data,
+    'not capped.*dist_x_240_end'
+  )
   expect_equal(d2$dist_x_240_end, pmin(v$dist_x_240_end, v$harv_dist_240_end))
   expect_equal(d2$dist_x_240_adj_end, d$dist_x_240_adj_end)
-  expect_error(build_model_data(steps, files, codes, list(groups = common$groups, seasons = common$seasons), m),
-               'capped distances \\(dist_x_240_adj_end\\) but model: distance_cap: is null')
+  expect_error(
+    build_model_data(
+      steps,
+      files,
+      codes,
+      list(groups = common$groups, seasons = common$seasons),
+      m
+    ),
+    'capped distances \\(dist_x_240_adj_end\\) but model: distance_cap: is null'
+  )
 })
 
 test_that('subsets, seasons and missing values in the model table', {
   steps <- toy_model_steps()
   files <- toy_extracted(steps, file.path(tempdir(), 'toy_extracted2'))
   codes <- make_animal_codes(steps$id)
-  m <- list(formula = sub('-1 +', '-1 + yearseason +', form, fixed = TRUE), n_random = 5,
-            subset = "juris == 'yt'", seasons = list('winter'))
+  m <- list(
+    formula = sub('-1 +', '-1 + yearseason +', form, fixed = TRUE),
+    n_random = 5,
+    subset = "juris == 'yt'",
+    seasons = list('winter')
+  )
   r <- build_model_data(steps, files, codes, common, m)
   expect_setequal(unique(r$data$id), codes[id %in% c('a', 'b'), code])
   expect_true(all(grepl('_winter$', r$data$yearseason)))
   # a missing value at a used step drops the whole step; a random step with one is skipped
   v <- nanoparquet::read_parquet(files[1])
-  v$prop_a_240_end[c(1, 8)] <- NA        # row 1 = used step of a_1; row 8 = random step of a_2
-  v$prop_b_240_end[c(1, 8)] <- NA        # (a group is missing only where all its layers are)
+  v$prop_a_240_end[c(1, 8)] <- NA # row 1 = used step of a_1; row 8 = random step of a_2
+  v$prop_b_240_end[c(1, 8)] <- NA # (a group is missing only where all its layers are)
   nanoparquet::write_parquet(v, files[1])
-  expect_warning(r <- build_model_data(steps, files, codes, common, list(formula = form, n_random = 5)),
-                 'prop_ab_240_end \\(1 used, 1 random\\)')
+  expect_warning(
+    r <- build_model_data(steps, files, codes, common, list(formula = form, n_random = 5)),
+    'prop_ab_240_end \\(1 used, 1 random\\)'
+  )
   expect_equal(r$log[grepl('used step', what), n], 1L)
   expect_equal(r$log[grepl('^random steps skipped', what), n], 1L)
   expect_false('A0001_1' %in% r$data$indiv_step_id)
-  expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 5L)   # only 4 complete random steps left
+  expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 5L) # only 4 complete random steps left
   expect_equal(r$log[grepl('fewer than 5', what), n], 1L)
   # with fewer random steps wanted than made, the skipped one is replaced by the next
-  r <- suppressWarnings(build_model_data(steps, files, codes, common, list(formula = form, n_random = 3)))
+  r <- suppressWarnings(build_model_data(
+    steps,
+    files,
+    codes,
+    common,
+    list(formula = form, n_random = 3)
+  ))
   expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 4L)
-  expect_equal(r$data[indiv_step_id == 'A0001_2' & !case_, prop_ab_240_end],
-               v$prop_a_240_end[9:11] + v$prop_b_240_end[9:11])
+  expect_equal(
+    r$data[indiv_step_id == 'A0001_2' & !case_, prop_ab_240_end],
+    v$prop_a_240_end[9:11] + v$prop_b_240_end[9:11]
+  )
   expect_equal(r$log[grepl('fewer than 3', what), n], 0L)
   # random_na: keep takes the first random steps as they come, missing values and all
-  r <- suppressWarnings(build_model_data(steps, files, codes, common,
-                                         list(formula = form, n_random = 3, random_na = 'keep')))
+  r <- suppressWarnings(build_model_data(
+    steps,
+    files,
+    codes,
+    common,
+    list(formula = form, n_random = 3, random_na = 'keep')
+  ))
   expect_equal(r$data[indiv_step_id == 'A0001_2', .N], 4L)
-  expect_equal(r$data[indiv_step_id == 'A0001_2' & !case_, is.na(prop_ab_240_end)], c(TRUE, FALSE, FALSE))
-  expect_false('A0001_1' %in% r$data$indiv_step_id)   # a missing value at a used step still drops it
+  expect_equal(
+    r$data[indiv_step_id == 'A0001_2' & !case_, is.na(prop_ab_240_end)],
+    c(TRUE, FALSE, FALSE)
+  )
+  expect_false('A0001_1' %in% r$data$indiv_step_id) # a missing value at a used step still drops it
   expect_equal(r$log[grepl('^random steps kept', what), n], 1L)
   expect_equal(r$log[grepl('fewer than 3', what), n], 1L)
 })
 
 test_that('text and grouping columns become factors only at the end, with the levels present', {
-  d <- data.table(case_ = c(TRUE, FALSE), indiv_step_id = c('s1', 's1'), id = c('A0002', 'A0002'),
-                  herd = factor(c('Hess', 'Hess'), levels = c('Hess', 'Klaza')), x = 1:2)
+  d <- data.table(
+    case_ = c(TRUE, FALSE),
+    indiv_step_id = c('s1', 's1'),
+    id = c('A0002', 'A0002'),
+    herd = factor(c('Hess', 'Hess'), levels = c('Hess', 'Klaza')),
+    x = 1:2
+  )
   f <- model_formula('case_ ~ x + herd + (1 | indiv_step_id) + (0 + x | id)')
   out <- as_model_factors(d, f)
   expect_true(is.factor(out$indiv_step_id) && is.factor(out$id))
-  expect_equal(levels(out$herd), 'Hess')   # the empty level is gone
+  expect_equal(levels(out$herd), 'Hess') # the empty level is gone
   expect_identical(out$case_, c(1L, 0L))
-  expect_true(is.character(d$id))         # the table itself is unchanged
+  expect_true(is.character(d$id)) # the table itself is unchanged
 })
 
 test_that('model tables refuse positions, times and real IDs', {
   codes <- make_animal_codes(c('a', 'b'))
   expect_error(check_model_data(data.table(id = 'A0001', x1_ = 1), codes), 'positions or times')
-  expect_error(check_model_data(data.table(id = 'A0001', when = Sys.time()), codes), 'positions or times')
+  expect_error(
+    check_model_data(data.table(id = 'A0001', when = Sys.time()), codes),
+    'positions or times'
+  )
   expect_error(check_model_data(data.table(id = 'a'), codes), 'animal IDs')
 })
 
@@ -241,7 +351,14 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   expect_true(all(file.exists(files_out)))
   expect_false(any(grepl('_seasons.csv$', files_out)))
   # with the model's seasons, their table goes with the coefficients
-  files_s <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_models_s'), common$seasons, 'winter')
+  files_s <- write_model_coefficients(
+    cf,
+    r$log,
+    'toy',
+    file.path(tempdir(), 'toy_models_s'),
+    common$seasons,
+    'winter'
+  )
   st <- data.table::fread(files_s[grepl('toy_seasons.csv$', files_s)])
   expect_equal(st$season, c('winter', 'summer'))
   expect_equal(st$days, c(166L, 199L))
@@ -249,7 +366,10 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   # a saved table fits the same away from the pipeline, with its season table
   out_dir <- file.path(tempdir(), 'toy_models_file')
   tab <- write_model_table(r, list(formula = form), 'toy', out_dir, common$seasons)
-  expect_named(readRDS(tab), c('name', 'formula', 'step_sd', 'control', 'data', 'log', 'seasons', 'seasons_used'))
+  expect_named(
+    readRDS(tab),
+    c('name', 'formula', 'step_sd', 'control', 'data', 'log', 'seasons', 'seasons_used')
+  )
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_true(all(file.exists(got)))
   expect_true(any(grepl('toy_seasons.csv$', got)))
@@ -257,22 +377,49 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
 })
 
 test_that('a model\'s control reaches the fit, and only its own fit command', {
-  cfg <- list(model = list(models = list(
-    plain = list(formula = form, n_random = 5),
-    ctrl = list(formula = form, n_random = 5, control = list(optCtrl = list(iter.max = 7))))))
+  cfg <- list(
+    model = list(
+      models = list(
+        plain = list(formula = form, n_random = 5),
+        ctrl = list(formula = form, n_random = 5, control = list(optCtrl = list(iter.max = 7)))
+      )
+    )
+  )
   tg <- targets_models(cfg)
-  cmd <- function(nm) paste(deparse(purrr::detect(tg, function(t) t$settings$name == nm)$command$expr), collapse = ' ')
+  cmd <- function(nm) {
+    paste(
+      deparse(purrr::detect(tg, function(t) t$settings$name == nm)$command$expr),
+      collapse = ' '
+    )
+  }
   expect_false(grepl('control', cmd('model_fit_plain')))
   expect_true(grepl('control = utils::modifyList', cmd('model_fit_ctrl')))
   # the setting goes to glmmTMB: a 1-iteration limit stops the optimizer early
   steps <- toy_model_steps(n_strata = 30)
   files <- toy_extracted(steps, file.path(tempdir(), 'toy_extracted4'))
-  r <- build_model_data(steps, files, make_animal_codes(steps$id), common, list(formula = form, n_random = 5))
-  fit <- suppressWarnings(fit_issa(r$data, form, control = utils::modifyList(
-    list(rank_check = 'adjust'), list(optCtrl = list(iter.max = 1, eval.max = 1)))))
+  r <- build_model_data(
+    steps,
+    files,
+    make_animal_codes(steps$id),
+    common,
+    list(formula = form, n_random = 5)
+  )
+  fit <- suppressWarnings(fit_issa(
+    r$data,
+    form,
+    control = utils::modifyList(
+      list(rank_check = 'adjust'),
+      list(optCtrl = list(iter.max = 1, eval.max = 1))
+    )
+  ))
   expect_equal(fit$fit$convergence, 1L)
   out_dir <- file.path(tempdir(), 'toy_models_ctrl')
-  tab <- write_model_table(r, list(formula = form, control = list(optCtrl = list(iter.max = 1, eval.max = 1))), 'toy', out_dir)
+  tab <- write_model_table(
+    r,
+    list(formula = form, control = list(optCtrl = list(iter.max = 1, eval.max = 1))),
+    'toy',
+    out_dir
+  )
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_equal(readRDS(got[1])$fit$convergence, 1L)
 })
@@ -282,8 +429,14 @@ test_that('per-group coefficients add the deviation to each season\'s estimate',
   plain <- group_coefficients(dev, data.table(term = 'x', estimate = 1))
   expect_named(plain, c('group', 'level', 'term', 'coefficient', 'deviation'))
   expect_equal(plain$coefficient, c(1.1, 0.8))
-  by_season <- group_coefficients(dev, data.table(term = c('seasonsummer:x', 'seasonwinter:x'), estimate = c(1, -1)))
+  by_season <- group_coefficients(
+    dev,
+    data.table(term = c('seasonsummer:x', 'seasonwinter:x'), estimate = c(1, -1))
+  )
   expect_named(by_season, c('group', 'level', 'season', 'term', 'coefficient', 'deviation'))
-  expect_equal(by_season[level == 'A0001', setNames(coefficient, season)], c(summer = 1.1, winter = -0.9))
+  expect_equal(
+    by_season[level == 'A0001', setNames(coefficient, season)],
+    c(summer = 1.1, winter = -0.9)
+  )
   expect_equal(nrow(by_season), 4L)
 })
