@@ -44,27 +44,55 @@ upload_models <- function(project = NULL, models = NULL, force = FALSE, config_d
   project <- ctx$project
   cfg <- ctx$cfg
   folder <- cfg$model$upload_folder
-  if (!nzchar(folder %||% '')) stop('Set model: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml', call. = FALSE)
+  if (!nzchar(folder %||% '')) {
+    stop(
+      'Set model: upload_folder: in ',
+      file.path(ctx$config_dir, project),
+      '.yaml',
+      call. = FALSE
+    )
+  }
   models <- models_to_upload(cfg$model$models, models)
-  if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
+  if (!is.null(cfg$run$google_email)) {
+    options(gargle_oauth_email = cfg$run$google_email)
+  }
 
   fit_nm <- paste0('model_fit_', models)
   coefs_nm <- paste0('model_coefs_', models, '_files')
   # the model's settings, seasons, table, fit and tables, and what all models share;
   # not the steps before the model tables (shortcut), which can look out of date
   # on a computer that cannot download the locations
-  check <- c('cfg_model', 'season_table', paste0(c('cfg_model_', 'seasons_', 'model_data_'), rep(models, each = 3)),
-             fit_nm, paste0('model_coefs_', models), coefs_nm)
-  stale <- with_tar_project(ctx$tar_project, targets::tar_outdated(
-    names = targets::any_of(check), shortcut = TRUE, callr_function = NULL,
-    script = ctx$script, store = ctx$store))
+  check <- c(
+    'cfg_model',
+    'season_table',
+    paste0(c('cfg_model_', 'seasons_', 'model_data_'), rep(models, each = 3)),
+    fit_nm,
+    paste0('model_coefs_', models),
+    coefs_nm
+  )
+  stale <- with_tar_project(
+    ctx$tar_project,
+    targets::tar_outdated(
+      names = targets::any_of(check),
+      shortcut = TRUE,
+      callr_function = NULL,
+      script = ctx$script,
+      store = ctx$store
+    )
+  )
   if (length(stale)) {
     stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   }
-  meta <- targets::tar_meta(names = targets::any_of(c(fit_nm, coefs_nm)), fields = 'data', store = ctx$store)
+  meta <- targets::tar_meta(
+    names = targets::any_of(c(fit_nm, coefs_nm)),
+    fields = 'data',
+    store = ctx$store
+  )
   hash <- stats::setNames(meta$data, meta$name)
   missing <- setdiff(c(fit_nm, coefs_nm), names(hash))
-  if (length(missing)) stop('Not built yet: ', paste(missing, collapse = ', '), call. = FALSE)
+  if (length(missing)) {
+    stop('Not built yet: ', paste(missing, collapse = ', '), call. = FALSE)
+  }
 
   dir <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'upload'), create = TRUE)
   record_file <- file.path(dir, 'uploaded_models.csv')
@@ -75,22 +103,44 @@ upload_models <- function(project = NULL, models = NULL, force = FALSE, config_d
     h <- c(fit = hash[[fit_nm[i]]], coefs = hash[[coefs_nm[i]]])
     if (!force && !needs_upload(record, m, h)) {
       prev <- record[model == m]
-      out[[m]] <- data.table::data.table(model = m, action = 'skipped', fit_id = prev$fit_id, coefs_id = prev$coefs_id)
+      out[[m]] <- data.table::data.table(
+        model = m,
+        action = 'skipped',
+        fit_id = prev$fit_id,
+        coefs_id = prev$coefs_id
+      )
       message(m, ': unchanged since its last upload, skipped')
       next
     }
     fit <- targets::tar_read_raw(fit_nm[i], store = ctx$store)
     check_fit_shareable(fit, m)
-    zips <- write_model_zips(fit, targets::tar_read_raw(coefs_nm[i], store = ctx$store), m, project, dir)
-    rm(fit); gc()
+    zips <- write_model_zips(
+      fit,
+      targets::tar_read_raw(coefs_nm[i], store = ctx$store),
+      m,
+      project,
+      dir
+    )
+    rm(fit)
+    gc()
     # checked shareable above, so the folder need not be restricted
     up <- upload_to_drive(zips, folder, NULL)
-    row <- data.table::data.table(model = m, fit_hash = h[['fit']], coefs_hash = h[['coefs']],
-                                  fit_id = up$id[1], coefs_id = up$id[2],
-                                  uploaded = format(Sys.time(), '%Y-%m-%d %H:%M:%S %Z'))
+    row <- data.table::data.table(
+      model = m,
+      fit_hash = h[['fit']],
+      coefs_hash = h[['coefs']],
+      fit_id = up$id[1],
+      coefs_id = up$id[2],
+      uploaded = format(Sys.time(), '%Y-%m-%d %H:%M:%S %Z')
+    )
     record <- rbind(record[model != m], row)
     data.table::fwrite(record, record_file)
-    out[[m]] <- data.table::data.table(model = m, action = 'uploaded', fit_id = up$id[1], coefs_id = up$id[2])
+    out[[m]] <- data.table::data.table(
+      model = m,
+      action = 'uploaded',
+      fit_id = up$id[1],
+      coefs_id = up$id[2]
+    )
     message(m, ': uploaded')
   }
   data.table::rbindlist(out)
@@ -107,12 +157,22 @@ upload_models <- function(project = NULL, models = NULL, force = FALSE, config_d
 models_to_upload <- function(mods, models = NULL) {
   if (is.null(models)) {
     models <- names(mods)[purrr::map_lgl(mods, function(m) isTRUE(m$upload))]
-    if (!length(models)) stop('No models to upload: mark some with upload: true, or name them', call. = FALSE)
+    if (!length(models)) {
+      stop('No models to upload: mark some with upload: true, or name them', call. = FALSE)
+    }
   }
   unknown <- setdiff(models, names(mods))
-  if (length(unknown)) stop('Not models in the settings: ', paste(unknown, collapse = ', '), call. = FALSE)
+  if (length(unknown)) {
+    stop('Not models in the settings: ', paste(unknown, collapse = ', '), call. = FALSE)
+  }
   unfit <- models[purrr::map_lgl(mods[models], function(m) isFALSE(m$fit))]
-  if (length(unfit)) stop('Models with fit: false have no fit to upload: ', paste(unfit, collapse = ', '), call. = FALSE)
+  if (length(unfit)) {
+    stop(
+      'Models with fit: false have no fit to upload: ',
+      paste(unfit, collapse = ', '),
+      call. = FALSE
+    )
+  }
   models
 }
 
@@ -128,7 +188,15 @@ models_to_upload <- function(mods, models = NULL) {
 check_fit_shareable <- function(fit, name) {
   cols <- names(fit$frame)
   bad <- intersect(cols, model_private_columns)
-  if (length(bad)) stop(name, ': the fit holds positions or times (', paste(bad, collapse = ', '), '); not uploaded', call. = FALSE)
+  if (length(bad)) {
+    stop(
+      name,
+      ': the fit holds positions or times (',
+      paste(bad, collapse = ', '),
+      '); not uploaded',
+      call. = FALSE
+    )
+  }
   if ('id' %in% cols && !all(grepl('^A[0-9]+$', unique(as.character(fit$frame$id))))) {
     stop(name, ': the fit holds animal IDs that are not codes; not uploaded', call. = FALSE)
   }
@@ -145,13 +213,16 @@ check_fit_shareable <- function(fit, name) {
 #' @keywords internal
 #' @noRd
 write_model_zips <- function(fit, coef_files, name, project, dir) {
-  tmp <- tempfile(); reproducible::checkPath(tmp, create = TRUE)
+  tmp <- tempfile()
+  reproducible::checkPath(tmp, create = TRUE)
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
   rds <- file.path(tmp, paste0(project, '_model_fit_', name, '.rds'))
   saveRDS(fit, rds)
   reproducible::checkPath(dir, create = TRUE)
   zips <- file.path(dir, paste0(project, c('_model_fit_', '_model_'), name, '.zip'))
-  for (z in zips) if (file.exists(z)) file.remove(z)
+  for (z in zips) {
+    if (file.exists(z)) file.remove(z)
+  }
   utils::zip(zips[1], rds, flags = '-jq')
   utils::zip(zips[2], coef_files, flags = '-jq')
   zips
@@ -179,5 +250,7 @@ read_upload_record <- function(file) {
 #' @noRd
 needs_upload <- function(record, name, hash) {
   prev <- record[record$model == name]
-  nrow(prev) == 0 || !identical(prev$fit_hash[1], hash[['fit']]) || !identical(prev$coefs_hash[1], hash[['coefs']])
+  nrow(prev) == 0 ||
+    !identical(prev$fit_hash[1], hash[['fit']]) ||
+    !identical(prev$coefs_hash[1], hash[['coefs']])
 }

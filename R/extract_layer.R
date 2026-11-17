@@ -21,7 +21,9 @@
 #' @export
 make_layer_index <- function(layers, files, years = NULL) {
   layers <- data.table::as.data.table(layers)
-  if (length(files) != nrow(layers)) stop('Need one set of files per layer')
+  if (length(files) != nrow(layers)) {
+    stop('Need one set of files per layer')
+  }
   if (!is.null(years) && 'yearly' %in% names(layers)) {
     layers[yearly & is.na(first_year), first_year := as.integer(years[1])]
     layers[yearly & is.na(last_year), last_year := as.integer(years[2])]
@@ -83,7 +85,9 @@ make_step_points <- function(steps) {
 #' @keywords internal
 extract_year <- function(pts, index, where = 'both', crs = NULL) {
   yr <- unique(pts$year)
-  if (length(yr) != 1) stop('extract_year() needs the steps of one year, not ', length(yr))
+  if (length(yr) != 1) {
+    stop('extract_year() needs the steps of one year, not ', length(yr))
+  }
   ends <- switch(where, start = 'start', end = 'end', both = c('start', 'end'))
   coords <- list(start = c('x1_', 'y1_'), end = c('x2_', 'y2_'))
   n <- nrow(pts)
@@ -99,7 +103,9 @@ extract_year <- function(pts, index, where = 'both', crs = NULL) {
 
   # each layer's raster for this year, stacked by grid
   file_for <- function(files, first_year, last_year) {
-    if (is.na(first_year)) return(files[1])
+    if (is.na(first_year)) {
+      return(files[1])
+    }
     files[min(max(yr, first_year), last_year) - first_year + 1]
   }
   files <- purrr::pmap_chr(list(index$files, index$first_year, index$last_year), file_for)
@@ -158,5 +164,8 @@ write_extracted_year <- function(pts, index, where = 'both', crs = NULL, out_dir
 #' @keywords internal
 #' @noRd
 grid_key <- function(r) {
-  paste(c(as.vector(terra::ext(r)), terra::nrow(r), terra::ncol(r), terra::crs(r, proj = TRUE)), collapse = '|')
+  paste(
+    c(as.vector(terra::ext(r)), terra::nrow(r), terra::ncol(r), terra::crs(r, proj = TRUE)),
+    collapse = '|'
+  )
 }

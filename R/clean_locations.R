@@ -37,36 +37,58 @@ clean_locations <- function(DT, cleaning, crs) {
   decisions <- list()
   record <- function(step, before, after) {
     gone <- setdiff(before, after)
-    removed[[length(removed) + 1]] <<- data.table::data.table(row = gone, step = rep(step, length(gone)))
+    removed[[length(removed) + 1]] <<- data.table::data.table(
+      row = gone,
+      step = rep(step, length(gone))
+    )
     log[[length(log) + 1]] <<- data.table::data.table(step = step, removed = length(gone))
     message(sprintf('[clean %s] removed %s of %s fixes', step, length(gone), length(before)))
   }
   # named here, not looked up by name, so that targets reruns cleaning when a
   # step's code changes
-  available <- list(bounds = clean_bounds, exclude_points = clean_exclude_points,
-                    deployment = clean_deployment, source_duplicates = clean_source_duplicates,
-                    capture_effect = clean_capture_effect, dop = clean_dop,
-                    duplicates = clean_duplicates, fast_steps = clean_fast_steps,
-                    roundtrips = clean_roundtrips, clusters = clean_clusters,
-                    end_clusters = clean_end_clusters, drop_end_clusters = clean_drop_end_clusters,
-                    speed = clean_speed, min_points = clean_min_points,
-                    captures = clean_captures, mortality_records = clean_mortality_records,
-                    long_gaps = clean_long_gaps, local_times = clean_local_times)
+  available <- list(
+    bounds = clean_bounds,
+    exclude_points = clean_exclude_points,
+    deployment = clean_deployment,
+    source_duplicates = clean_source_duplicates,
+    capture_effect = clean_capture_effect,
+    dop = clean_dop,
+    duplicates = clean_duplicates,
+    fast_steps = clean_fast_steps,
+    roundtrips = clean_roundtrips,
+    clusters = clean_clusters,
+    end_clusters = clean_end_clusters,
+    drop_end_clusters = clean_drop_end_clusters,
+    speed = clean_speed,
+    min_points = clean_min_points,
+    captures = clean_captures,
+    mortality_records = clean_mortality_records,
+    long_gaps = clean_long_gaps,
+    local_times = clean_local_times
+  )
   if ('local_times' %in% unlist(cleaning$steps) && unlist(cleaning$steps)[1] != 'local_times') {
-    stop('Cleaning step local_times must be listed first, so later steps see times in UTC.', call. = FALSE)
+    stop(
+      'Cleaning step local_times must be listed first, so later steps see times in UTC.',
+      call. = FALSE
+    )
   }
   run_steps <- function(DT, steps, suffix = '') {
     for (step in unlist(steps)) {
-      fun <- cleaning$custom[[step]] %||% available[[step]] %||%
+      fun <- cleaning$custom[[step]] %||%
+        available[[step]] %||%
         stop('Unknown cleaning step: ', step, '. Add it to clean_locations() or as a custom step.')
       before <- DT$.row
       out <- fun(DT, cleaning$params[[step]], crs)
       # steps that correct animals (captures, mortality_records, long_gaps) say what they did
       d <- attr(out, 'decisions')
-      if (!is.null(d) && nrow(d)) decisions[[length(decisions) + 1]] <<- data.table::data.table(step = step, d)
+      if (!is.null(d) && nrow(d)) {
+        decisions[[length(decisions) + 1]] <<- data.table::data.table(step = step, d)
+      }
       DT <- data.table::as.data.table(out)
       data.table::setattr(DT, 'decisions', NULL)
-      if (!'.row' %in% names(DT)) stop('[clean ', step, '] the step dropped column .row; keep all columns')
+      if (!'.row' %in% names(DT)) {
+        stop('[clean ', step, '] the step dropped column .row; keep all columns')
+      }
       record(paste0(step, suffix), before, DT$.row)
     }
     DT
@@ -87,8 +109,13 @@ clean_locations <- function(DT, cleaning, crs) {
 
   same_time <- duplicated(DT, by = c('id', 't_'))
   if (any(same_time)) {
-    warning(sprintf('[clean] %s fixes share their animal and time with another fix; kept the first ',
-                    sum(same_time)), '(list the duplicates step to choose by DOP)')
+    warning(
+      sprintf(
+        '[clean] %s fixes share their animal and time with another fix; kept the first ',
+        sum(same_time)
+      ),
+      '(list the duplicates step to choose by DOP)'
+    )
     before <- DT$.row
     DT <- DT[!same_time]
     record('same_time_duplicates', before, DT$.row)
@@ -117,7 +144,9 @@ clean_locations <- function(DT, cleaning, crs) {
 #' @author Julie W. Turner
 #' @export
 drop_date_only <- function(DT) {
-  if (!'date_only' %in% names(DT)) return(DT)
+  if (!'date_only' %in% names(DT)) {
+    return(DT)
+  }
   DT <- DT[!(date_only %in% TRUE)]
   DT[, date_only := NULL]
   DT[]
@@ -144,17 +173,27 @@ drop_date_only <- function(DT) {
 finish_locations <- function(DT, fin_cfg) {
   DT <- data.table::copy(DT)
   if ('Gender' %in% names(DT)) {
-    if (!'sex' %in% names(DT)) DT[, sex := NA_character_]
+    if (!'sex' %in% names(DT)) {
+      DT[, sex := NA_character_]
+    }
     DT[is.na(sex) | !nzchar(trimws(sex)), sex := as.character(Gender)]
   }
-  if ('sex' %in% names(DT)) DT[, sex := standardize_sex(sex)]
+  if ('sex' %in% names(DT)) {
+    DT[, sex := standardize_sex(sex)]
+  }
   fill_columns(DT, fin_cfg$fill)
-  DT[, `:=`(study = make_study(DT, fin_cfg$study), herd = make_herd(DT, fin_cfg$herd),
-             juris = make_juris(DT, fin_cfg$juris))]
+  DT[, `:=`(
+    study = make_study(DT, fin_cfg$study),
+    herd = make_herd(DT, fin_cfg$herd),
+    juris = make_juris(DT, fin_cfg$juris)
+  )]
 
   keep <- unlist(fin_cfg$keep)
   if (length(keep)) {
-    DT <- DT[, unique(c('id', 'source', 't_', 'x_', 'y_', intersect(keep, names(DT)))), with = FALSE]
+    DT <- DT[,
+      unique(c('id', 'source', 't_', 'x_', 'y_', intersect(keep, names(DT)))),
+      with = FALSE
+    ]
   }
   DT[]
 }
@@ -174,9 +213,18 @@ fill_columns <- function(DT, fill_cfg) {
   for (col in names(fill_cfg)) {
     values <- unlist(fill_cfg[[col]]$values)
     by <- fill_cfg[[col]]$by %||% 'source'
-    if (!length(values)) next
-    if (!by %in% names(DT)) stop(sprintf('locations: fill: %s: by: column %s is not in the locations', col, by), call. = FALSE)
-    if (!col %in% names(DT)) DT[, (col) := NA_character_]
+    if (!length(values)) {
+      next
+    }
+    if (!by %in% names(DT)) {
+      stop(
+        sprintf('locations: fill: %s: by: column %s is not in the locations', col, by),
+        call. = FALSE
+      )
+    }
+    if (!col %in% names(DT)) {
+      DT[, (col) := NA_character_]
+    }
     now <- as.character(DT[[col]])
     key <- as.character(DT[[by]])
     blank <- (is.na(now) | !nzchar(trimws(now))) & key %in% names(values)
@@ -192,7 +240,10 @@ fill_columns <- function(DT, fill_cfg) {
 #' @noRd
 standardize_sex <- function(x) {
   x <- tolower(trimws(as.character(x)))
-  data.table::fcase(x %in% c('f', 'female'), 'f', x %in% c('m', 'male'), 'm', default = NA_character_)
+  data.table::fcase(
+    x %in% c('f', 'female') , 'f' , x %in% c('m', 'male') , 'm' ,
+    default = NA_character_
+  )
 }
 
 #' @title Study of each fix
@@ -259,15 +310,23 @@ make_herd <- function(DT, herd_cfg) {
 #' @export
 keep_herds <- function(DT, herd_cfg) {
   keep <- unlist(herd_cfg$keep)
-  if (!length(keep)) return(DT)
+  if (!length(keep)) {
+    return(DT)
+  }
   herds <- make_herd(DT, herd_cfg)
   absent <- setdiff(keep, herds)
   if (length(absent)) {
-    stop('locations: herd: keep: no fixes for herd(s) ', paste(absent, collapse = ', '),
-         ' (herd names are in CamelCase, after herd: rename)', call. = FALSE)
+    stop(
+      'locations: herd: keep: no fixes for herd(s) ',
+      paste(absent, collapse = ', '),
+      ' (herd names are in CamelCase, after herd: rename)',
+      call. = FALSE
+    )
   }
-  counts <- data.table::data.table(herd = herds, id = DT$id)[
-    , .(fixes = .N, animals = data.table::uniqueN(id)), keyby = herd][, kept := herd %in% keep][]
+  counts <- data.table::data.table(herd = herds, id = DT$id)[,
+    .(fixes = .N, animals = data.table::uniqueN(id)),
+    keyby = herd
+  ][, kept := herd %in% keep][]
   rows <- herds %in% keep
   out <- DT[rows]
   data.table::setattr(out, 'herd_selection', counts)
@@ -303,10 +362,14 @@ name_from_columns <- function(DT, columns) {
   out <- rep(NA_character_, nrow(DT))
   for (spec in as.list(columns)) {
     col <- if (is.list(spec)) spec$column else spec
-    if (!col %in% names(DT)) next
+    if (!col %in% names(DT)) {
+      next
+    }
     v <- trimws(as.character(DT[[col]]))
     fill <- is.na(out) & !is.na(v) & nzchar(v) & v != 'NA'
-    if (is.list(spec) && length(spec$sources)) fill <- fill & DT$source %in% unlist(spec$sources)
+    if (is.list(spec) && length(spec$sources)) {
+      fill <- fill & DT$source %in% unlist(spec$sources)
+    }
     out[fill] <- v[fill]
   }
   out
@@ -355,10 +418,19 @@ to_camel <- function(x) {
 #' @author Julie W. Turner
 #' @export
 check_mortality <- function(raw, clean) {
-  out <- data.table::data.table(source = character(), id = character(), step = character(), n = integer())
-  if (!'mortality' %in% names(raw)) return(out)
+  out <- data.table::data.table(
+    source = character(),
+    id = character(),
+    step = character(),
+    n = integer()
+  )
+  if (!'mortality' %in% names(raw)) {
+    return(out)
+  }
   rows <- which(raw$mortality %in% TRUE)
-  if (!length(rows)) return(out)
+  if (!length(rows)) {
+    return(out)
+  }
   removed <- attr(clean, 'removed')
   step <- removed$step[match(rows, removed$row)]
   flagged <- data.table::data.table(
@@ -413,9 +485,13 @@ tidy_text <- function(DT, keep_spaces = NULL) {
   keep <- unlist(keep_spaces)
   for (col in names(DT)) {
     x <- DT[[col]]
-    if (!is.character(x)) next
+    if (!is.character(x)) {
+      next
+    }
     bad <- !is.na(x) & !validUTF8(x)
-    if (any(bad)) x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+    if (any(bad)) {
+      x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+    }
     if (!length(keep) || !any(grepl(paste(keep, collapse = '|'), col, ignore.case = TRUE))) {
       x <- gsub('[[:space:]\u00a0]+', '', x)
     } else {
@@ -445,7 +521,9 @@ flag_source_duplicates <- function(DT, params, crs) {
   DT <- data.table::as.data.table(DT)
   DT[, dup_source := NA_character_]
   srcs <- unique(DT$source)
-  if (length(srcs) < 2) return(DT[])
+  if (length(srcs) < 2) {
+    return(DT[])
+  }
   ll <- sf::sf_project(sf::st_crs(crs), sf::st_crs('EPSG:4326'), as.matrix(DT[, .(x_, y_)]))
   fixes <- data.table::data.table(g = 1L, t = DT$t_, lat = ll[, 2], lon = ll[, 1])
   rank <- match(DT$source, srcs)
@@ -465,7 +543,9 @@ flag_source_duplicates <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_source_duplicates <- function(DT, params, crs) {
-  if (!'dup_source' %in% names(DT)) return(DT)
+  if (!'dup_source' %in% names(DT)) {
+    return(DT)
+  }
   DT[is.na(dup_source)]
 }
 
@@ -498,8 +578,12 @@ clean_bounds <- function(DT, params, crs) {
   if (!identical(sf::st_crs(box_crs), sf::st_crs(crs))) {
     xy <- sf::sf_project(sf::st_crs(crs), sf::st_crs(box_crs), xy)
   }
-  DT[xy[, 1] >= params$xmin & xy[, 1] <= params$xmax &
-       xy[, 2] >= params$ymin & xy[, 2] <= params$ymax]
+  DT[
+    xy[, 1] >= params$xmin &
+      xy[, 1] <= params$xmax &
+      xy[, 2] >= params$ymin &
+      xy[, 2] <= params$ymax
+  ]
 }
 
 #' @title Cleaning step: drop fixes near known false locations
@@ -513,7 +597,11 @@ clean_bounds <- function(DT, params, crs) {
 #' @noRd
 clean_exclude_points <- function(DT, params, crs) {
   for (pt in params) {
-    xy <- sf::sf_project(sf::st_crs('EPSG:4326'), sf::st_crs(crs), matrix(c(pt$lon, pt$lat), ncol = 2))
+    xy <- sf::sf_project(
+      sf::st_crs('EPSG:4326'),
+      sf::st_crs(crs),
+      matrix(c(pt$lon, pt$lat), ncol = 2)
+    )
     DT <- DT[sqrt((x_ - xy[1, 1])^2 + (y_ - xy[1, 2])^2) > pt$radius_m]
   }
   DT
@@ -555,14 +643,29 @@ clean_local_times <- function(DT, params, crs) {
   ds <- params$dst
   scope <- character()
   if (!is.null(ds)) {
-    if (is.null(ds$zone)) stop('[clean local_times] dst: needs a zone, e.g. America/Vancouver', call. = FALSE)
+    if (is.null(ds$zone)) {
+      stop('[clean local_times] dst: needs a zone, e.g. America/Vancouver', call. = FALSE)
+    }
     scope <- unlist(ds$values) %||% names(params$tz)
     bad <- setdiff(scope, names(params$tz))
-    if (length(bad)) stop('[clean local_times] dst: values not in tz: ', paste(bad, collapse = ', '), call. = FALSE)
+    if (length(bad)) {
+      stop(
+        '[clean local_times] dst: values not in tz: ',
+        paste(bad, collapse = ', '),
+        call. = FALSE
+      )
+    }
     for (v in scope) {
       if (std_offset(params$tz[[v]]) != std_offset(ds$zone)) {
-        stop(sprintf('[clean local_times] standard time of %s (%s) differs from %s', v, params$tz[[v]], ds$zone),
-             call. = FALSE)
+        stop(
+          sprintf(
+            '[clean local_times] standard time of %s (%s) differs from %s',
+            v,
+            params$tz[[v]],
+            ds$zone
+          ),
+          call. = FALSE
+        )
       }
     }
   }
@@ -572,14 +675,27 @@ clean_local_times <- function(DT, params, crs) {
       warning('[clean local_times] no fixes with ', params$column, ' ', v)
       next
     }
-    if (v %in% scope) next
+    if (v %in% scope) {
+      next
+    }
     data.table::set(DT, i, 't_', local_to_utc(clock_digits(DT$t_[i]), params$tz[[v]]))
-    message(sprintf('[clean local_times] %s fixes with %s %s read as %s', length(i), params$column, v, params$tz[[v]]))
+    message(sprintf(
+      '[clean local_times] %s fixes with %s %s read as %s',
+      length(i),
+      params$column,
+      v,
+      params$tz[[v]]
+    ))
   }
 
   i <- which(vals %in% scope)
   if (length(i)) {
-    d <- data.table::data.table(.i = i, id = DT$id[i], value = vals[i], clk = clock_digits(DT$t_[i]))
+    d <- data.table::data.table(
+      .i = i,
+      id = DT$id[i],
+      value = vals[i],
+      clk = clock_digits(DT$t_[i])
+    )
     data.table::setorder(d, id, clk)
     sw <- dst_switches(ds$zone, min(d$clk), max(d$clk))
     sh <- dst_switch_shifts(d, sw, ds$window_days %||% 14, ds$min_fixes %||% 5)
@@ -595,37 +711,97 @@ clean_local_times <- function(DT, params, crs) {
     d[, tz := data.table::fifelse(dst, ds$zone, std[value])]
     d[, utc := local_to_utc(clk, tz[1]), by = tz]
     ## daylight clock times that occur twice, when clocks go back; read as the first
-    d[, repeated := dst & format(utc + 3600, '%Y-%m-%d %H:%M:%S', tz = ds$zone) ==
-        format(clk, '%Y-%m-%d %H:%M:%S', tz = 'UTC')]
+    d[,
+      repeated := dst &
+        format(utc + 3600, '%Y-%m-%d %H:%M:%S', tz = ds$zone) ==
+          format(clk, '%Y-%m-%d %H:%M:%S', tz = 'UTC')
+    ]
     data.table::set(DT, d$.i, 't_', d$utc)
 
     src <- if ('source' %in% names(DT)) as.character(DT$source[d$.i]) else NA_character_
     d[, source := src]
     d[, run := data.table::rleid(id, dst, method)]
-    dec <- d[, .(source = source[1], value = value[1], tz = tz[1], dst = dst[1], method = method[1],
-                 from = min(clk), to = max(clk), fixes = .N, repeated_hour = sum(repeated)), by = .(id, run)]
+    dec <- d[,
+      .(
+        source = source[1],
+        value = value[1],
+        tz = tz[1],
+        dst = dst[1],
+        method = method[1],
+        from = min(clk),
+        to = max(clk),
+        fixes = .N,
+        repeated_hour = sum(repeated)
+      ),
+      by = .(id, run)
+    ]
     counts <- unique(per[, .(id, switches, dst_clock, same, local_schedule, unclear)])
     dec <- counts[dec, on = 'id']
     for (j in c('switches', 'dst_clock', 'same', 'local_schedule', 'unclear')) {
       data.table::set(dec, which(is.na(dec[[j]])), j, 0L)
     }
-    dec[, action := data.table::fifelse(dst, 'clock read with daylight saving', 'clock read as standard time')]
-    dec[, detail := sprintf(
-      '%s, %s to %s (clock); %s; changes spanned %d: daylight saving %d, no shift %d, local schedule %d, unclear %d',
-      method, format(from, '%Y-%m-%d'), format(to, '%Y-%m-%d'), tz, switches, dst_clock, same, local_schedule, unclear
+    dec[,
+      action := data.table::fifelse(
+        dst,
+        'clock read with daylight saving',
+        'clock read as standard time'
+      )
+    ]
+    dec[,
+      detail := sprintf(
+        '%s, %s to %s (clock); %s; changes spanned %d: daylight saving %d, no shift %d, local schedule %d, unclear %d',
+        method,
+        format(from, '%Y-%m-%d'),
+        format(to, '%Y-%m-%d'),
+        tz,
+        switches,
+        dst_clock,
+        same,
+        local_schedule,
+        unclear
+      )
+    ]
+    dec <- dec[, .(
+      source,
+      id,
+      action,
+      fixes,
+      detail,
+      value,
+      tz,
+      dst,
+      method,
+      from,
+      to,
+      switches,
+      dst_clock,
+      same,
+      local_schedule,
+      unclear,
+      repeated_hour
     )]
-    dec <- dec[, .(source, id, action, fixes, detail, value, tz, dst, method, from, to, switches, dst_clock, same,
-                   local_schedule, unclear, repeated_hour)]
     for (v in scope) {
       k <- d[value == v]
-      if (!nrow(k)) next
-      message(sprintf('[clean local_times] %s fixes with %s %s: %s read as %s, %s as %s (%s animals with daylight saving)',
-                      nrow(k), params$column, v, sum(k$dst), ds$zone, sum(!k$dst), params$tz[[v]],
-                      data.table::uniqueN(k[(dst), id])))
+      if (!nrow(k)) {
+        next
+      }
+      message(sprintf(
+        '[clean local_times] %s fixes with %s %s: %s read as %s, %s as %s (%s animals with daylight saving)',
+        nrow(k),
+        params$column,
+        v,
+        sum(k$dst),
+        ds$zone,
+        sum(!k$dst),
+        params$tz[[v]],
+        data.table::uniqueN(k[(dst), id])
+      ))
     }
   }
   data.table::setorder(DT, id, t_)
-  if (length(i)) data.table::setattr(DT, 'decisions', dec)
+  if (length(i)) {
+    data.table::setattr(DT, 'decisions', dec)
+  }
   DT
 }
 
@@ -679,7 +855,11 @@ clean_capture_effect <- function(DT, params, crs) {
 clean_dop <- function(DT, params, crs) {
   dop <- dop_values(DT, params$column)
   if (is.null(dop)) {
-    warning('[clean dop] no column ', paste0('"', unlist(params$column), '"', collapse = ' or '), '; step skipped')
+    warning(
+      '[clean dop] no column ',
+      paste0('"', unlist(params$column), '"', collapse = ' or '),
+      '; step skipped'
+    )
     return(DT)
   }
   DT[(is.na(dop) & isTRUE(params$keep_missing)) | (!is.na(dop) & dop < params$max_dop)]
@@ -693,7 +873,9 @@ clean_dop <- function(DT, params, crs) {
 #' @noRd
 dop_values <- function(DT, cols) {
   cols <- intersect(unlist(cols), names(DT))
-  if (!length(cols)) return(NULL)
+  if (!length(cols)) {
+    return(NULL)
+  }
   vals <- lapply(cols, function(col) suppressWarnings(as.numeric(DT[[col]])))
   do.call(data.table::fcoalesce, vals)
 }
@@ -737,11 +919,13 @@ flag_duplicates_fast <- function(t, x, y, dop, gamma_s) {
   t <- as.numeric(t)
   n <- length(t)
   dead <- logical(n)
-  i <- 1L      # position among the fixes not yet flagged, as in amt
+  i <- 1L # position among the fixes not yet flagged, as in amt
   cur <- 1L
   while (!is.na(cur)) {
     k <- cur + 1L
-    while (k <= n && t[k] <= t[cur] + gamma_s) k <- k + 1L
+    while (k <= n && t[k] <= t[cur] + gamma_s) {
+      k <- k + 1L
+    }
     w <- cur:(k - 1L)
     w <- w[!dead[w]]
     good <- w[dop[w] == min(dop[w])]
@@ -752,19 +936,25 @@ flag_duplicates_fast <- function(t, x, y, dop, gamma_s) {
       best <- 1L
     } else {
       p <- cur - 1L
-      while (dead[p]) p <- p - 1L
+      while (dead[p]) {
+        p <- p - 1L
+      }
       d <- sqrt((x[good] - x[p])^2 + (y[good] - y[p])^2)
       best <- good[which(d == min(d))][1]
     }
     dead[w[w != best]] <- TRUE
     if (dead[cur]) {
       cur <- cur + 1L
-      while (cur <= n && dead[cur]) cur <- cur + 1L
+      while (cur <= n && dead[cur]) {
+        cur <- cur + 1L
+      }
     }
     if (!tie && cur <= n) {
       i <- i + 1L
       cur <- cur + 1L
-      while (cur <= n && dead[cur]) cur <- cur + 1L
+      while (cur <= n && dead[cur]) {
+        cur <- cur + 1L
+      }
     }
     if (cur > n) cur <- NA_integer_
   }
@@ -794,9 +984,13 @@ clean_fast_steps <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_roundtrips <- function(DT, params, crs) {
-  drop_amt_flagged(DT, function(trk) {
-    amt::flag_roundtrips(trk, delta = params$delta, epsilon = params$epsilon)
-  }, 'fast_roundtrip_')
+  drop_amt_flagged(
+    DT,
+    function(trk) {
+      amt::flag_roundtrips(trk, delta = params$delta, epsilon = params$epsilon)
+    },
+    'fast_roundtrip_'
+  )
 }
 
 #' @title Cleaning step: flag clusters from dropped or dead collars (amt)
@@ -813,9 +1007,15 @@ clean_roundtrips <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_clusters <- function(DT, params, crs) {
-  DT[, defunct_cluster_ := amt::flag_defunct_clusters(
-    amt::make_track(.SD, x_, y_, t_, all_cols = TRUE), zeta = params$zeta, eta = params$eta,
-    theta = lubridate::hours(params$theta_hours))$defunct_cluster_, by = id]
+  DT[,
+    defunct_cluster_ := amt::flag_defunct_clusters(
+      amt::make_track(.SD, x_, y_, t_, all_cols = TRUE),
+      zeta = params$zeta,
+      eta = params$eta,
+      theta = lubridate::hours(params$theta_hours)
+    )$defunct_cluster_,
+    by = id
+  ]
   DT
 }
 
@@ -856,26 +1056,60 @@ clean_clusters <- function(DT, params, crs) {
 #' @keywords internal
 #' @noRd
 clean_end_clusters <- function(DT, params, crs) {
-  DT[, end_cluster_ := flag_end_clusters(t_, x_, y_, params$zeta, params$theta_hours * 3600,
-                                         params$max_moves %||% 2, params$transit_fixes %||% 5), by = id]
+  DT[,
+    end_cluster_ := flag_end_clusters(
+      t_,
+      x_,
+      y_,
+      params$zeta,
+      params$theta_hours * 3600,
+      params$max_moves %||% 2,
+      params$transit_fixes %||% 5
+    ),
+    by = id
+  ]
   DT[, end_of_track_ := end_cluster_ & cumsum(end_cluster_) == 1L, by = id]
   mort <- if ('mortality' %in% names(DT)) DT$mortality %in% TRUE else rep(FALSE, nrow(DT))
-  DT[, cluster_status := data.table::fcase(mort & end_cluster_, 'mortality-cluster',
-                                           end_cluster_, 'unknown-cluster',
-                                           mort, 'flag-only',
-                                           default = NA_character_)]
-  DT[, .end_type := if ('deployment_end_type' %in% names(DT)) as.character(deployment_end_type) else NA_character_]
+  DT[,
+    cluster_status := data.table::fcase(
+      mort & end_cluster_ , 'mortality-cluster' ,
+      end_cluster_        , 'unknown-cluster'   ,
+      mort                , 'flag-only'         ,
+      default = NA_character_
+    )
+  ]
+  DT[,
+    .end_type := if ('deployment_end_type' %in% names(DT)) {
+      as.character(deployment_end_type)
+    } else {
+      NA_character_
+    }
+  ]
   DT[, .recorded := if ('mortality_date' %in% names(DT)) !is.na(mortality_date) else FALSE]
   # one rule per animal; the end type of its last fix (its last deployment)
-  DT[, .rule := data.table::fcase(any(.recorded), 1L,
-                                  .end_type[.N] %in% 'dead', 2L,
-                                  any(cluster_status %in% 'mortality-cluster'), 3L,
-                                  !is.na(.end_type[.N]), 4L,
-                                  any(end_cluster_), 5L,
-                                  default = 6L), by = id]
+  DT[,
+    .rule := data.table::fcase(
+      any(.recorded)                               , 1L ,
+      .end_type[.N] %in% 'dead'                    , 2L ,
+      any(cluster_status %in% 'mortality-cluster') , 3L ,
+      !is.na(.end_type[.N])                        , 4L ,
+      any(end_cluster_)                            , 5L ,
+      default = 6L
+    ),
+    by = id
+  ]
   rules <- mortality_status_rules()
-  DT[, `:=`(mortality_status = data.table::fifelse(.rule == 4L, .end_type[.N], rules$mortality_status[.rule]),
-            mortality_basis = rules$mortality_basis[.rule]), by = id]
+  DT[,
+    `:=`(
+      mortality_status = data.table::fifelse(
+        .rule == 4L,
+        .end_type[.N],
+        rules$mortality_status[.rule]
+      ),
+      mortality_basis = rules$mortality_basis[.rule]
+    ),
+    by = id
+  ]
   DT[, c('.end_type', '.recorded', '.rule') := NULL]
   DT
 }
@@ -899,19 +1133,24 @@ mortality_status_rules <- function() {
   data.table::data.table(
     rule = 1:6,
     mortality_status = c('dead', 'dead', 'dead', '<deployment_end_type>', 'unknown', 'alive'),
-    evidence = c('a recorded death in a mortality table (step mortality_records)',
-                 'Movebank deployment_end_type is dead',
-                 'a mortality flag in the data within the stationary end of the track',
-                 'Movebank deployment_end_type, as recorded',
-                 'the track ends in a stationary stretch (end_cluster_), with no recorded outcome',
-                 'the track does not end in a stationary stretch, with no recorded outcome'),
+    evidence = c(
+      'a recorded death in a mortality table (step mortality_records)',
+      'Movebank deployment_end_type is dead',
+      'a mortality flag in the data within the stationary end of the track',
+      'Movebank deployment_end_type, as recorded',
+      'the track ends in a stationary stretch (end_cluster_), with no recorded outcome',
+      'the track does not end in a stationary stretch, with no recorded outcome'
+    ),
     kind = c('recorded', 'recorded', 'recorded', 'recorded', 'inferred', 'inferred'),
-    mortality_basis = c('recorded: mortality record',
-                        'recorded: deployment_end_type dead',
-                        'recorded: mortality flag at stationary end of track',
-                        'recorded: deployment_end_type',
-                        'inferred: stationary end of track (cluster analysis, best guess)',
-                        'inferred: no stationary end of track (cluster analysis, best guess)'))
+    mortality_basis = c(
+      'recorded: mortality record',
+      'recorded: deployment_end_type dead',
+      'recorded: mortality flag at stationary end of track',
+      'recorded: deployment_end_type',
+      'inferred: stationary end of track (cluster analysis, best guess)',
+      'inferred: no stationary end of track (cluster analysis, best guess)'
+    )
+  )
 }
 
 #' @title Cleaning step: drop the stationary end of each track
@@ -949,11 +1188,15 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
   t <- as.numeric(t)
   n <- length(t)
   flag <- logical(n)
-  if (n < 2) return(flag)
+  if (n < 2) {
+    return(flag)
+  }
   # first fix of the stationary stretch ending at fix e
   stretch_start <- function(e) {
     k <- e
-    while (k > 1 && sqrt((x[k - 1] - x[e])^2 + (y[k - 1] - y[e])^2) <= zeta) k <- k - 1
+    while (k > 1 && sqrt((x[k - 1] - x[e])^2 + (y[k - 1] - y[e])^2) <= zeta) {
+      k <- k - 1
+    }
     k
   }
   # the last stationary stretch may be followed by up to transit_fixes fixes
@@ -966,14 +1209,18 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
       break
     }
   }
-  if (!found) return(flag)
+  if (!found) {
+    return(flag)
+  }
   flag[k:n] <- TRUE
   moves <- 0
   while (moves < max_moves) {
     found <- FALSE
     for (g in 0:transit_fixes) {
       e2 <- k - 1 - g
-      if (e2 < 2) break
+      if (e2 < 2) {
+        break
+      }
       k2 <- stretch_start(e2)
       if (t[e2] - t[k2] >= theta_s) {
         flag[k2:(k - 1)] <- TRUE
@@ -982,7 +1229,9 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
         break
       }
     }
-    if (!found) break
+    if (!found) {
+      break
+    }
     moves <- moves + 1
   }
   flag
@@ -1004,32 +1253,59 @@ flag_end_clusters <- function(t, x, y, zeta, theta_s, max_moves, transit_fixes) 
 #' @author Julie W. Turner
 #' @export
 summarize_flags <- function(clean, raw = NULL) {
-  get_flag <- function(DT, col) if (col %in% names(DT)) DT[[col]] %in% TRUE else rep(FALSE, nrow(DT))
+  get_flag <- function(DT, col) {
+    if (col %in% names(DT)) DT[[col]] %in% TRUE else rep(FALSE, nrow(DT))
+  }
   src_of <- function(DT) if ('source' %in% names(DT)) DT$source else rep(NA_character_, nrow(DT))
   src <- src_of(clean)
   totals <- data.table::data.table(source = src)[, .(of_fixes = .N), by = source]
   amt_f <- get_flag(clean, 'defunct_cluster_')
   mort <- get_flag(clean, 'mortality')
-  flags <- list(`amt clusters` = amt_f, mortality = mort, `mortality and amt clusters` = mort & amt_f,
-                `cluster_status: flag-only` = clean$cluster_status %in% 'flag-only',
-                `end of track (kept)` = get_flag(clean, 'end_of_track_'))
+  flags <- list(
+    `amt clusters` = amt_f,
+    mortality = mort,
+    `mortality and amt clusters` = mort & amt_f,
+    `cluster_status: flag-only` = clean$cluster_status %in% 'flag-only',
+    `end of track (kept)` = get_flag(clean, 'end_of_track_')
+  )
   count <- function(DT, f, nm) {
-    data.table::data.table(source = src_of(DT), id = DT$id, f = f)[
-      , .(flag = nm, fixes = sum(f), animals = data.table::uniqueN(id[f])), by = source]
+    data.table::data.table(source = src_of(DT), id = DT$id, f = f)[,
+      .(flag = nm, fixes = sum(f), animals = data.table::uniqueN(id[f])),
+      by = source
+    ]
   }
   out <- purrr::imap(flags, function(f, nm) count(clean, f, nm))
   gone <- attr(clean, 'removed')
   if (!is.null(raw) && !is.null(gone)) {
     rows <- raw[gone[step == 'drop_end_clusters']$row]
-    out <- c(out, list(count(rows, rep(TRUE, nrow(rows)), 'end clusters removed'),
-                       count(rows, get_flag(rows, 'mortality'), 'mortality in end clusters removed')))
+    out <- c(
+      out,
+      list(
+        count(rows, rep(TRUE, nrow(rows)), 'end clusters removed'),
+        count(rows, get_flag(rows, 'mortality'), 'mortality in end clusters removed')
+      )
+    )
   }
   if ('mortality_status' %in% names(clean)) {
-    out <- c(out, list(data.table::data.table(source = src, id = clean$id,
-                                              s = clean$mortality_status, b = clean$mortality_basis)[
-      !is.na(s), .(flag = paste0('mortality_status: ', s[1], ' (', b[1], ')'),
-                   fixes = .N, animals = data.table::uniqueN(id)), by = .(source, s, b)][
-      , c('s', 'b') := NULL]))
+    out <- c(
+      out,
+      list(data.table::data.table(
+        source = src,
+        id = clean$id,
+        s = clean$mortality_status,
+        b = clean$mortality_basis
+      )[
+        !is.na(s),
+        .(
+          flag = paste0('mortality_status: ', s[1], ' (', b[1], ')'),
+          fixes = .N,
+          animals = data.table::uniqueN(id)
+        ),
+        by = .(source, s, b)
+      ][,
+        c('s', 'b') := NULL
+      ])
+    )
   }
   out <- data.table::rbindlist(out)
   out <- merge(out, totals, by = 'source', all.x = TRUE, sort = FALSE)
@@ -1061,11 +1337,15 @@ summarize_fix_intervals <- function(DT, by = list('source', 'herd')) {
   DT <- DT[!is.na(dt_h)]
   per_animal <- DT[, .(med = stats::median(dt_h)), by = id]
   stats_of <- function(d, meds) {
-    list(animals = data.table::uniqueN(d$id), intervals = length(d$dt_h),
-         mean_h = round(mean(d$dt_h), 2), median_h = round(stats::median(d$dt_h), 2),
-         p10_h = round(unname(stats::quantile(d$dt_h, 0.1)), 2),
-         p90_h = round(unname(stats::quantile(d$dt_h, 0.9)), 2),
-         median_of_animals_h = round(stats::median(meds[id %in% unique(d$id), med]), 2))
+    list(
+      animals = data.table::uniqueN(d$id),
+      intervals = length(d$dt_h),
+      mean_h = round(mean(d$dt_h), 2),
+      median_h = round(stats::median(d$dt_h), 2),
+      p10_h = round(unname(stats::quantile(d$dt_h, 0.1)), 2),
+      p90_h = round(unname(stats::quantile(d$dt_h, 0.9)), 2),
+      median_of_animals_h = round(stats::median(meds[id %in% unique(d$id), med]), 2)
+    )
   }
   out <- lapply(c('id', by), function(col) {
     g <- DT[, stats_of(.SD, per_animal), by = c(col), .SDcols = c('id', 'dt_h')]
@@ -1088,8 +1368,11 @@ summarize_fix_intervals <- function(DT, by = list('source', 'herd')) {
 #' @keywords internal
 #' @noRd
 clean_speed <- function(DT, params, crs) {
-  DT[, .speed := sqrt((x_ - data.table::shift(x_))^2 + (y_ - data.table::shift(y_))^2) /
-       as.numeric(difftime(t_, data.table::shift(t_), units = 'hours')), by = id]
+  DT[,
+    .speed := sqrt((x_ - data.table::shift(x_))^2 + (y_ - data.table::shift(y_))^2) /
+      as.numeric(difftime(t_, data.table::shift(t_), units = 'hours')),
+    by = id
+  ]
   DT <- DT[is.na(.speed) | .speed <= params$max_m_per_hr]
   DT[, .speed := NULL]
   DT

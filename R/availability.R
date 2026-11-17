@@ -16,11 +16,17 @@ make_step_groups <- function(steps, by = NULL) {
   by <- unlist(by)
   missing <- setdiff(by, names(steps))
   if (length(missing)) {
-    stop('extract: availability_by columns not in the steps: ', paste(missing, collapse = ', '),
-         '. Add them to locations: keep_after_cleaning.', call. = FALSE)
+    stop(
+      'extract: availability_by columns not in the steps: ',
+      paste(missing, collapse = ', '),
+      '. Add them to locations: keep_after_cleaning.',
+      call. = FALSE
+    )
   }
   g <- steps[, c('case_', by), with = FALSE]
-  for (col in by) data.table::set(g, j = col, value = as.factor(g[[col]]))
+  for (col in by) {
+    data.table::set(g, j = col, value = as.factor(g[[col]]))
+  }
   g[]
 }
 
@@ -45,7 +51,10 @@ make_step_groups <- function(steps, by = NULL) {
 summarize_availability <- function(files, name, groups, by = NULL) {
   by <- unlist(by)
   have <- nanoparquet::read_parquet_schema(files[1])$name
-  cols <- intersect(c(paste0(name, c('_start', '_end')), paste0('ts_', name, c('_start', '_end'))), have)
+  cols <- intersect(
+    c(paste0(name, c('_start', '_end')), paste0('ts_', name, c('_start', '_end'))),
+    have
+  )
   vals <- data.table::rbindlist(purrr::map(files, function(f) {
     data.table::as.data.table(nanoparquet::read_parquet(f, col_select = c('row', cols)))
   }))
@@ -57,25 +66,41 @@ summarize_availability <- function(files, name, groups, by = NULL) {
   sets <- purrr::map(0:length(by), function(k) c('case_', by[seq_len(k)]))
   out <- data.table::rbindlist(purrr::map(cols, function(col) {
     data.table::set(DT, j = '.v', value = as.numeric(vals[[col]]))
-    data.table::rbindlist(purrr::map(sets, function(s) {
-      res <- DT[, .(n = .N,
-                    min = if (all(is.na(.v))) NA_real_ else min(.v, na.rm = TRUE),
-                    mean = mean(.v, na.rm = TRUE),
-                    median = stats::median(.v, na.rm = TRUE),
-                    max = if (all(is.na(.v))) NA_real_ else max(.v, na.rm = TRUE),
-                    share_above_0 = mean(.v[!is.na(.v)] > 0),
-                    share_missing = mean(is.na(.v))), keyby = s]
-      for (b in by) {
-        if (b %in% s) data.table::set(res, j = b, value = as.character(res[[b]]))
-        else data.table::set(res, j = b, value = 'all')
-      }
-      # time since disturbance is listed as its own layer, ts_<name>
-      res[, `:=`(layer = if (startsWith(col, 'ts_')) paste0('ts_', name) else name, column = col,
-                 where = sub('.*_', '', col))]
-    }), use.names = TRUE)
+    data.table::rbindlist(
+      purrr::map(sets, function(s) {
+        res <- DT[,
+          .(
+            n = .N,
+            min = if (all(is.na(.v))) NA_real_ else min(.v, na.rm = TRUE),
+            mean = mean(.v, na.rm = TRUE),
+            median = stats::median(.v, na.rm = TRUE),
+            max = if (all(is.na(.v))) NA_real_ else max(.v, na.rm = TRUE),
+            share_above_0 = mean(.v[!is.na(.v)] > 0),
+            share_missing = mean(is.na(.v))
+          ),
+          keyby = s
+        ]
+        for (b in by) {
+          if (b %in% s) {
+            data.table::set(res, j = b, value = as.character(res[[b]]))
+          } else {
+            data.table::set(res, j = b, value = 'all')
+          }
+        }
+        # time since disturbance is listed as its own layer, ts_<name>
+        res[, `:=`(
+          layer = if (startsWith(col, 'ts_')) paste0('ts_', name) else name,
+          column = col,
+          where = sub('.*_', '', col)
+        )]
+      }),
+      use.names = TRUE
+    )
   }))
   data.table::setnames(out, 'case_', 'used')
-  for (j in c('mean', 'share_above_0')) data.table::set(out, i = which(is.nan(out[[j]])), j = j, value = NA_real_)
+  for (j in c('mean', 'share_above_0')) {
+    data.table::set(out, i = which(is.nan(out[[j]])), j = j, value = NA_real_)
+  }
   data.table::setcolorder(out, c('layer', 'column', 'where', 'used', by))
   out[]
 }

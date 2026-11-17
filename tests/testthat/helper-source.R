@@ -2,7 +2,9 @@
 library(data.table)
 
 # Settings of a made-up project (tests/testthat/fixtures/config/TEST.yaml), checked
-test_config <- function() read_config('TEST', config_dir = testthat::test_path('fixtures', 'config'))
+test_config <- function() {
+  read_config('TEST', config_dir = testthat::test_path('fixtures', 'config'))
+}
 
 # Small set of standard locations: 2 animals, fixes every 2 hours, in EPSG:3154
 toy_locations <- function(n = 50) {
@@ -19,6 +21,12 @@ toy_locations <- function(n = 50) {
 # Extract every year of made-up steps, as the extracted branches would, rows in step order
 extract_all_years <- function(steps, index, where = 'both') {
   pts <- make_step_points(steps)
-  out <- rbindlist(purrr::map(split(pts, by = 'tar_group'), extract_year, index = index, where = where, crs = 'EPSG:3154'))
+  out <- rbindlist(purrr::map(
+    split(pts, by = 'tar_group'),
+    extract_year,
+    index = index,
+    where = where,
+    crs = 'EPSG:3154'
+  ))
   out[order(row)]
 }

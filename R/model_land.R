@@ -19,7 +19,13 @@ model_land_formulas <- function(models, which = 'all') {
   which <- unlist(which %||% 'all')
   if (!identical(which, 'all')) {
     unknown <- setdiff(which, names(models))
-    if (length(unknown)) stop('model_land: models: not models in the settings: ', paste(unknown, collapse = ', '), call. = FALSE)
+    if (length(unknown)) {
+      stop(
+        'model_land: models: not models in the settings: ',
+        paste(unknown, collapse = ', '),
+        call. = FALSE
+      )
+    }
     models <- models[which]
   }
   unname(purrr::map_chr(models, 'formula'))
@@ -50,28 +56,51 @@ model_land_formulas <- function(models, which = 'all') {
 make_model_land_spec <- function(formulas, groups, cap, index) {
   vars <- unique(unlist(purrr::map(formulas, function(f) all.vars(model_formula(f)))))
   cov <- unique(sub('_(start|end)$', '', vars[grepl('_(start|end)$', vars)]))
-  if (!length(cov)) stop('The model formulas use no layers (names ending in _start or _end)', call. = FALSE)
+  if (!length(cov)) {
+    stop('The model formulas use no layers (names ending in _start or _end)', call. = FALSE)
+  }
   adj <- grepl('_adj$', cov)
   base <- sub('_adj$', '', cov)
   if (any(adj) && !length(cap)) {
-    stop('The model formulas use capped distances (', paste(cov[adj], collapse = ', '),
-         ') but model: distance_cap: is null', call. = FALSE)
+    stop(
+      'The model formulas use capped distances (',
+      paste(cov[adj], collapse = ', '),
+      ') but model: distance_cap: is null',
+      call. = FALSE
+    )
   }
   src <- covariate_sources(base, groups %||% list())
   ts_layers <- index$name[index$time_since %in% TRUE]
   spec <- data.table::rbindlist(purrr::map(seq_along(cov), function(i) {
     s <- src[[i]]
     nm <- base[i]
-    ts <- is.null(s$rule) && !nm %in% index$name && startsWith(nm, 'ts_') && sub('^ts_', '', nm) %in% ts_layers
+    ts <- is.null(s$rule) &&
+      !nm %in% index$name &&
+      startsWith(nm, 'ts_') &&
+      sub('^ts_', '', nm) %in% ts_layers
     cols <- if (ts) sub('^ts_', '', nm) else s$cols
-    data.table::data.table(name = cov[i], cols = list(cols), rule = s$rule %||% NA_character_, ts = ts, adj = adj[i])
+    data.table::data.table(
+      name = cov[i],
+      cols = list(cols),
+      rule = s$rule %||% NA_character_,
+      ts = ts,
+      adj = adj[i]
+    )
   }))
   miss <- setdiff(unlist(spec$cols), index$name)
-  if (length(miss)) stop('The model formulas use layers not in the layer table: ', paste(miss, collapse = ', '), call. = FALSE)
-  spec[, resolution := purrr::map_dbl(cols, function(cl) {
-    r <- suppressWarnings(as.numeric(sub('.*_([0-9]+)$', '\\1', cl)))
-    if (all(is.na(r))) NA_real_ else min(r, na.rm = TRUE)
-  })]
+  if (length(miss)) {
+    stop(
+      'The model formulas use layers not in the layer table: ',
+      paste(miss, collapse = ', '),
+      call. = FALSE
+    )
+  }
+  spec[,
+    resolution := purrr::map_dbl(cols, function(cl) {
+      r <- suppressWarnings(as.numeric(sub('.*_([0-9]+)$', '\\1', cl)))
+      if (all(is.na(r))) NA_real_ else min(r, na.rm = TRUE)
+    })
+  ]
   spec[]
 }
 
@@ -86,13 +115,28 @@ make_model_land_spec <- function(formulas, groups, cap, index) {
 #' @export
 write_model_land_spec <- function(spec, cap, out_dir) {
   reproducible::checkPath(out_dir, create = TRUE)
-  made <- purrr::pmap_chr(list(spec$cols, spec$rule, spec$ts, spec$adj), function(cols, rule, ts, adj) {
-    txt <- if (ts) paste0('years since the disturbance year in ', cols, '; NA where none (no ', cols, ' value, or one after the year)')
-    else if (is.na(rule)) cols
-    else paste0(rule, ' of ', paste(cols, collapse = ', '))
-    if (adj) txt <- paste0(txt, '; more than ', cap$beyond_km, ' km set to ', cap$set_to_km, ' km')
-    txt
-  })
+  made <- purrr::pmap_chr(
+    list(spec$cols, spec$rule, spec$ts, spec$adj),
+    function(cols, rule, ts, adj) {
+      txt <- if (ts) {
+        paste0(
+          'years since the disturbance year in ',
+          cols,
+          '; NA where none (no ',
+          cols,
+          ' value, or one after the year)'
+        )
+      } else if (is.na(rule)) {
+        cols
+      } else {
+        paste0(rule, ' of ', paste(cols, collapse = ', '))
+      }
+      if (adj) {
+        txt <- paste0(txt, '; more than ', cap$beyond_km, ' km set to ', cap$set_to_km, ' km')
+      }
+      txt
+    }
+  )
   out <- data.table::data.table(layer = seq_len(nrow(spec)), name = spec$name, made_from = made)
   file <- file.path(out_dir, 'model_land_layers.csv')
   data.table::fwrite(out, file)
@@ -110,7 +154,9 @@ write_model_land_spec <- function(spec, cap, out_dir) {
 #' @keywords internal
 #' @noRd
 layer_file_for_year <- function(files, first_year, last_year, year) {
-  if (is.na(first_year)) return(files[1])
+  if (is.na(first_year)) {
+    return(files[1])
+  }
   files[min(max(year, first_year), last_year) - first_year + 1]
 }
 
@@ -126,7 +172,9 @@ layer_file_for_year <- function(files, first_year, last_year, year) {
 #' @keywords internal
 #' @noRd
 combine_layers <- function(r, rule) {
-  if (!rule %in% c('sum', 'mean', 'min', 'max')) stop('Unknown rule: ', rule, call. = FALSE)
+  if (!rule %in% c('sum', 'mean', 'min', 'max')) {
+    stop('Unknown rule: ', rule, call. = FALSE)
+  }
   # the function by name, which terra runs in its compiled code
   out <- terra::app(r, rule, na.rm = TRUE)
   terra::mask(out, terra::allNA(r), maskvalues = 1)
@@ -164,10 +212,19 @@ combine_layers <- function(r, rule) {
 #' @export
 make_model_land <- function(year, index, spec, cap, templates = NULL, out_dir) {
   year <- as.integer(year)
-  if (length(year) != 1 || is.na(year)) stop('make_model_land() needs one year', call. = FALSE)
+  if (length(year) != 1 || is.na(year)) {
+    stop('make_model_land() needs one year', call. = FALSE)
+  }
   used <- unique(unlist(spec$cols))
   idx <- index[match(used, index$name)]
-  files <- stats::setNames(purrr::pmap_chr(list(idx$files, idx$first_year, idx$last_year), layer_file_for_year, year = year), used)
+  files <- stats::setNames(
+    purrr::pmap_chr(
+      list(idx$files, idx$first_year, idx$last_year),
+      layer_file_for_year,
+      year = year
+    ),
+    used
+  )
   rasts <- purrr::map(files, function(f) terra::rast(f)[[1]])
 
   # the grid: the finest layer's
@@ -182,8 +239,12 @@ make_model_land <- function(year, index, spec, cap, templates = NULL, out_dir) {
     }
   }
   on_grid <- function(r) {
-    if (!terra::same.crs(r, ref)) r <- terra::project(r, ref, method = 'near')
-    if (!isTRUE(terra::compareGeom(r, ref, stopOnError = FALSE))) r <- terra::resample(r, ref, method = 'near')
+    if (!terra::same.crs(r, ref)) {
+      r <- terra::project(r, ref, method = 'near')
+    }
+    if (!isTRUE(terra::compareGeom(r, ref, stopOnError = FALSE))) {
+      r <- terra::resample(r, ref, method = 'near')
+    }
     r
   }
   rasts <- purrr::map(rasts, on_grid)
@@ -200,15 +261,24 @@ make_model_land <- function(year, index, spec, cap, templates = NULL, out_dir) {
     } else {
       out <- combine_layers(terra::rast(unname(rasts[cols])), spec$rule[k])
     }
-    if (spec$adj[k]) out <- terra::ifel(out > cap$beyond_km * 1000, cap$set_to_km * 1000, out)
+    if (spec$adj[k]) {
+      out <- terra::ifel(out > cap$beyond_km * 1000, cap$set_to_km * 1000, out)
+    }
     out
   })
   s <- terra::rast(layers)
-  if (!is.null(mask)) s <- terra::mask(s, mask, maskvalues = c(NA, 0))
+  if (!is.null(mask)) {
+    s <- terra::mask(s, mask, maskvalues = c(NA, 0))
+  }
   names(s) <- spec$name
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, paste0('model_land_', year, '.tif'))
-  terra::writeRaster(s, file, overwrite = TRUE, datatype = 'FLT4S',
-                     gdal = c('COMPRESS=DEFLATE', 'TILED=YES', 'BIGTIFF=IF_SAFER'))
+  terra::writeRaster(
+    s,
+    file,
+    overwrite = TRUE,
+    datatype = 'FLT4S',
+    gdal = c('COMPRESS=DEFLATE', 'TILED=YES', 'BIGTIFF=IF_SAFER')
+  )
   file
 }

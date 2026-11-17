@@ -26,10 +26,23 @@
 #' @export
 read_capture_log <- function(file, cols, source, date_order = 'dmy') {
   x <- read_table_file(file)
-  get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
-  out <- data.table::data.table(source = source, id = tidy_id(get('id')), capture_id = tidy_id(get('capture_id')),
-                                capture_date = parse_record_dates(get('date'), date_order), collar = tidy_id(get('collar')),
-                                sex_raw = get('sex'), recapture = get('recapture'), herd = get('herd'))
+  get <- function(k) {
+    if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) {
+      trimws(as.character(x[[cols[[k]]]]))
+    } else {
+      NA_character_
+    }
+  }
+  out <- data.table::data.table(
+    source = source,
+    id = tidy_id(get('id')),
+    capture_id = tidy_id(get('capture_id')),
+    capture_date = parse_record_dates(get('date'), date_order),
+    collar = tidy_id(get('collar')),
+    sex_raw = get('sex'),
+    recapture = get('recapture'),
+    herd = get('herd')
+  )
   out[, sex := record_sex(sex_raw)]
   out[!is.na(id) & nzchar(id)]
 }
@@ -48,10 +61,22 @@ read_capture_log <- function(file, cols, source, date_order = 'dmy') {
 #' @export
 read_mortality_records <- function(file, cols, source, date_order = 'dmy', sheet = NULL) {
   x <- read_table_file(file, sheet)
-  get <- function(k) if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) trimws(as.character(x[[cols[[k]]]])) else NA_character_
-  out <- data.table::data.table(source = source, id = tidy_id(get('id')), mortality_date = parse_record_dates(get('date'), date_order),
-                                mortality_cause = get('cause'), mortality_outcome = get('outcome'), herd = get('herd'),
-                                sex = record_sex(get('sex')))
+  get <- function(k) {
+    if (!is.null(cols[[k]]) && cols[[k]] %in% names(x)) {
+      trimws(as.character(x[[cols[[k]]]]))
+    } else {
+      NA_character_
+    }
+  }
+  out <- data.table::data.table(
+    source = source,
+    id = tidy_id(get('id')),
+    mortality_date = parse_record_dates(get('date'), date_order),
+    mortality_cause = get('cause'),
+    mortality_outcome = get('outcome'),
+    herd = get('herd'),
+    sex = record_sex(get('sex'))
+  )
   out[!is.na(id) & nzchar(id)]
 }
 
@@ -62,8 +87,10 @@ read_mortality_records <- function(file, cols, source, date_order = 'dmy', sheet
 #' @keywords internal
 #' @noRd
 record_sex <- function(x) {
-  data.table::fcase(toupper(x) %in% c('F', 'FALSE', 'FEMALE'), 'f', toupper(x) %in% c('M', 'MALE'), 'm',
-                    default = NA_character_)
+  data.table::fcase(
+    toupper(x) %in% c('F', 'FALSE', 'FEMALE') , 'f' , toupper(x) %in% c('M', 'MALE') , 'm' ,
+    default = NA_character_
+  )
 }
 
 #' @title Trim spaces, even from text that is not valid UTF-8
@@ -85,7 +112,9 @@ trim_bytes <- function(x) gsub('^[[:space:]]+|[[:space:]]+$', '', as.character(x
 tidy_id <- function(x) {
   x <- as.character(x)
   bad <- !is.na(x) & !validUTF8(x)
-  if (any(bad)) x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+  if (any(bad)) {
+    x[bad] <- iconv(x[bad], 'latin1', 'UTF-8')
+  }
   x <- gsub('[[:space:]\u00a0]+', '', x)
   x[!is.na(x) & !nzchar(x)] <- NA_character_
   x
@@ -99,8 +128,12 @@ tidy_id <- function(x) {
 #' @noRd
 read_table_file <- function(file, sheet = NULL) {
   f <- file[grepl('[.](xlsx|xls|csv)$', file, ignore.case = TRUE)][1]
-  if (is.na(f)) stop('No xlsx, xls or csv file in: ', paste(basename(file), collapse = ', '), call. = FALSE)
-  if (grepl('csv$', f, ignore.case = TRUE)) return(data.table::fread(f, colClasses = 'character'))
+  if (is.na(f)) {
+    stop('No xlsx, xls or csv file in: ', paste(basename(file), collapse = ', '), call. = FALSE)
+  }
+  if (grepl('csv$', f, ignore.case = TRUE)) {
+    return(data.table::fread(f, colClasses = 'character'))
+  }
   rlang::check_installed('readxl', reason = 'to read xlsx tables.')
   data.table::as.data.table(readxl::read_excel(f, sheet = sheet %||% 1, col_types = 'text'))
 }
@@ -118,9 +151,18 @@ parse_record_dates <- function(x, date_order = 'dmy') {
   iso <- grepl('^[0-9]{4}-[0-9]{2}-[0-9]{2}', x)
   out[iso] <- as.Date(substr(x[iso], 1, 10))
   slash <- grepl('^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$', x)
-  out[slash] <- as.Date(x[slash], switch(match.arg(date_order, c('dmy', 'mdy')), dmy = '%d/%m/%Y', mdy = '%m/%d/%Y'))
+  out[slash] <- as.Date(
+    x[slash],
+    switch(match.arg(date_order, c('dmy', 'mdy')), dmy = '%d/%m/%Y', mdy = '%m/%d/%Y')
+  )
   rest <- is.na(out) & !is.na(x) & nzchar(x)
-  if (any(rest)) out[rest] <- as.Date(lubridate::parse_date_time(x[rest], c('dbY', 'dBY', 'bdY', 'BdY'), quiet = TRUE))
+  if (any(rest)) {
+    out[rest] <- as.Date(lubridate::parse_date_time(
+      x[rest],
+      c('dbY', 'dBY', 'bdY', 'BdY'),
+      quiet = TRUE
+    ))
+  }
   as.POSIXct(format(out), tz = 'UTC')
 }
 
@@ -151,28 +193,51 @@ parse_record_dates <- function(x, date_order = 'dmy') {
 #' @noRd
 clean_captures <- function(DT, params, crs) {
   cap <- params$table
-  if (is.null(cap) || nrow(cap) == 0) return(DT)
+  if (is.null(cap) || nrow(cap) == 0) {
+    return(DT)
+  }
   col <- params$collar_column %||% 'collar_id'
   src <- params$source
   dec <- list()
   note <- function(id, action, fixes, detail) {
-    dec[[length(dec) + 1]] <<- data.table::data.table(source = src, id = id, action = action, fixes = as.integer(fixes), detail = detail)
+    dec[[length(dec) + 1]] <<- data.table::data.table(
+      source = src,
+      id = id,
+      action = action,
+      fixes = as.integer(fixes),
+      detail = detail
+    )
   }
 
   if (any(toupper(cap$sex_raw) %in% 'FALSE')) {
-    note(NA_character_, 'capture log: sex FALSE read as female', sum(toupper(cap$sex_raw) %in% 'FALSE'),
-         'Sex was FALSE in these captures (Excel turns a typed F into FALSE); read as female')
+    note(
+      NA_character_,
+      'capture log: sex FALSE read as female',
+      sum(toupper(cap$sex_raw) %in% 'FALSE'),
+      'Sex was FALSE in these captures (Excel turns a typed F into FALSE); read as female'
+    )
   }
   bad_date <- cap[is.na(capture_date)]
   if (nrow(bad_date)) {
-    note(NA_character_, 'capture log: date not readable', nrow(bad_date),
-         paste('captures left out:', paste(unique(bad_date$id), collapse = ', ')))
+    note(
+      NA_character_,
+      'capture log: date not readable',
+      nrow(bad_date),
+      paste('captures left out:', paste(unique(bad_date$id), collapse = ', '))
+    )
   }
 
-  log <- cap[!is.na(capture_date) & !is.na(collar) & nzchar(collar), .(collar, capture_date, cap_id = id, cap_date = capture_date)]
+  log <- cap[
+    !is.na(capture_date) & !is.na(collar) & nzchar(collar),
+    .(collar, capture_date, cap_id = id, cap_date = capture_date)
+  ]
   data.table::setkey(log, collar, capture_date)
-  if (!col %in% names(DT)) DT[, (col) := NA_character_]
-  if (!'deployment_start' %in% names(DT)) DT[, deployment_start := as.POSIXct(NA, tz = 'UTC')]
+  if (!col %in% names(DT)) {
+    DT[, (col) := NA_character_]
+  }
+  if (!'deployment_start' %in% names(DT)) {
+    DT[, deployment_start := as.POSIXct(NA, tz = 'UTC')]
+  }
   DT[, .day := as.POSIXct(format(t_, '%Y-%m-%d', tz = 'UTC'), tz = 'UTC')]
   DT[, .collar := trim_bytes(get(col))]
   mine <- which(DT$source %in% src & DT$.collar %in% log$collar)
@@ -189,34 +254,80 @@ clean_captures <- function(DT, params, crs) {
   # moved: the filed animal wore the collar first, then the log puts it on another
   move <- m[!is.na(cap_id) & cap_id != id_now & !is.na(own_date) & own_date < cap_date]
   if (nrow(move)) {
-    move[, note(id_now[1], 'fixes moved to another animal', .N,
-                paste0('collar ', collar[1], ': logged on this animal first, then put on ', cap_id[1],
-                       '; fixes after that capture moved to ', cap_id[1])), by = .(id_now, cap_id, collar)]
+    move[,
+      note(
+        id_now[1],
+        'fixes moved to another animal',
+        .N,
+        paste0(
+          'collar ',
+          collar[1],
+          ': logged on this animal first, then put on ',
+          cap_id[1],
+          '; fixes after that capture moved to ',
+          cap_id[1]
+        )
+      ),
+      by = .(id_now, cap_id, collar)
+    ]
   }
   # kept: before the filed animal's own capture of this collar
   early <- m[!is.na(own_date) & (is.na(cap_id) | cap_id != id_now) & !(.r %in% move$.r)]
   if (nrow(early)) {
-    early[, note(id_now[1], 'fixes before logged capture kept (check)', .N,
-                 paste0('collar ', collar[1], ': ', .N, ' fixes up to ', round(max(as.numeric(own_date - capture_date, units = 'days'))),
-                        ' days before this animal\'s logged capture with it')), by = .(id_now, collar)]
+    early[,
+      note(
+        id_now[1],
+        'fixes before logged capture kept (check)',
+        .N,
+        paste0(
+          'collar ',
+          collar[1],
+          ': ',
+          .N,
+          ' fixes up to ',
+          round(max(as.numeric(own_date - capture_date, units = 'days'))),
+          ' days before this animal\'s logged capture with it'
+        )
+      ),
+      by = .(id_now, collar)
+    ]
   }
   # kept: the log gives the collar to another animal, without this one first
   other <- m[is.na(own_date) & !is.na(cap_id) & cap_id != id_now]
   if (nrow(other)) {
-    other[, note(id_now[1], 'capture log disagrees, fixes kept (check)', .N,
-                 paste0('collar ', collar[1], ' is logged on ', paste(unique(cap_id), collapse = '/'),
-                        ', not on this animal; fixes left under this animal')), by = .(id_now, collar)]
+    other[,
+      note(
+        id_now[1],
+        'capture log disagrees, fixes kept (check)',
+        .N,
+        paste0(
+          'collar ',
+          collar[1],
+          ' is logged on ',
+          paste(unique(cap_id), collapse = '/'),
+          ', not on this animal; fixes left under this animal'
+        )
+      ),
+      by = .(id_now, collar)
+    ]
   }
   DT[same$.r, deployment_start := same$cap_date]
   DT[move$.r, `:=`(id = move$cap_id, deployment_start = move$cap_date)]
 
   # sex from the log where missing
-  if (!'sex' %in% names(DT)) DT[, sex := NA_character_]
+  if (!'sex' %in% names(DT)) {
+    DT[, sex := NA_character_]
+  }
   sx <- unique(cap[!is.na(sex), .(id, log_sex = sex)], by = 'id')
   DT[sx, on = 'id', .fill := i.log_sex]
   fill <- DT$source %in% src & (is.na(DT$sex) | !nzchar(trim_bytes(DT$sex))) & !is.na(DT$.fill)
   if (any(fill)) {
-    note(NA_character_, 'sex filled from capture log', data.table::uniqueN(DT$id[fill]), 'animals whose sex was missing')
+    note(
+      NA_character_,
+      'sex filled from capture log',
+      data.table::uniqueN(DT$id[fill]),
+      'animals whose sex was missing'
+    )
     DT[fill, sex := .fill]
   }
   DT[, c('.day', '.collar', '.fill') := NULL]
@@ -255,32 +366,49 @@ clean_captures <- function(DT, params, crs) {
 clean_mortality_records <- function(DT, params, crs) {
   rec <- params$table
   n_other <- attr(rec, 'other_herds') %||% 0L
-  if (is.null(rec) || nrow(rec) == 0) return(DT)
+  if (is.null(rec) || nrow(rec) == 0) {
+    return(DT)
+  }
   rec <- data.table::copy(rec)
   after <- (params$after_days %||% 1) * 86400
   tz <- params$tz %||% 'UTC'
-  if (!'mortality_outcome' %in% names(rec)) rec[, mortality_outcome := NA_character_]
+  if (!'mortality_outcome' %in% names(rec)) {
+    rec[, mortality_outcome := NA_character_]
+  }
   dec <- list()
   if (n_other > 0) {
-    dec[[1]] <- data.table::data.table(source = paste(unique(rec$source), collapse = ', '), id = NA_character_,
-                                       action = 'mortality records for other herds skipped', fixes = 0L,
-                                       detail = sprintf('%s records for herds not in locations: herd: keep', n_other),
-                                       flag = 'other_herds')
+    dec[[1]] <- data.table::data.table(
+      source = paste(unique(rec$source), collapse = ', '),
+      id = NA_character_,
+      action = 'mortality records for other herds skipped',
+      fixes = 0L,
+      detail = sprintf('%s records for herds not in locations: herd: keep', n_other),
+      flag = 'other_herds'
+    )
   }
   # sex from the records where missing (any outcome: censored animals too)
   if ('sex' %in% names(rec) && any(!is.na(rec$sex))) {
-    if (!'sex' %in% names(DT)) DT[, sex := NA_character_]
+    if (!'sex' %in% names(DT)) {
+      DT[, sex := NA_character_]
+    }
     sx <- unique(rec[!is.na(sex), .(source, id, rec_sex = sex)], by = c('source', 'id'))
     DT[sx, on = c('source', 'id'), .fill := i.rec_sex]
-    if (!'.fill' %in% names(DT)) DT[, .fill := NA_character_]
+    if (!'.fill' %in% names(DT)) {
+      DT[, .fill := NA_character_]
+    }
     fill <- (is.na(DT$sex) | !nzchar(trim_bytes(DT$sex))) & !is.na(DT$.fill)
     if (any(fill)) {
-      dec[[length(dec) + 1]] <- data.table::data.table(source = paste(unique(DT$source[fill]), collapse = ', '),
-                                                       id = NA_character_, action = 'sex filled from mortality records',
-                                                       fixes = sum(fill),
-                                                       detail = sprintf('%s animals whose sex was missing',
-                                                                        data.table::uniqueN(DT[fill, .(source, id)])),
-                                                       flag = NA_character_)
+      dec[[length(dec) + 1]] <- data.table::data.table(
+        source = paste(unique(DT$source[fill]), collapse = ', '),
+        id = NA_character_,
+        action = 'sex filled from mortality records',
+        fixes = sum(fill),
+        detail = sprintf(
+          '%s animals whose sex was missing',
+          data.table::uniqueN(DT[fill, .(source, id)])
+        ),
+        flag = NA_character_
+      )
       DT[fill, sex := .fill]
     }
     DT[, .fill := NULL]
@@ -289,26 +417,44 @@ clean_mortality_records <- function(DT, params, crs) {
   if (length(dead)) {
     other <- rec[!is.na(mortality_date) & !mortality_outcome %in% dead]
     if (nrow(other)) {
-      dec[[length(dec) + 1]] <- other[, .(source, id, action = 'mortality record not applied', fixes = 0L,
-                                          detail = paste0('has a date but its outcome (', mortality_outcome, ') is not a death'),
-                                          flag = 'not_a_death')]
+      dec[[length(dec) + 1]] <- other[, .(
+        source,
+        id,
+        action = 'mortality record not applied',
+        fixes = 0L,
+        detail = paste0('has a date but its outcome (', mortality_outcome, ') is not a death'),
+        flag = 'not_a_death'
+      )]
     }
     rec <- rec[mortality_outcome %in% dead]
   }
   rec <- rec[!is.na(mortality_date)]
   multi <- rec[, .(n = .N, dates = data.table::uniqueN(mortality_date)), by = .(source, id)][n > 1]
   if (nrow(multi)) {
-    dec[[length(dec) + 1]] <- multi[, .(source, id, action = 'more than one mortality record', fixes = 0L,
-                                        detail = sprintf('%s records with %s dates; the first listed is used', n, dates),
-                                        flag = 'duplicate_records')]
+    dec[[length(dec) + 1]] <- multi[, .(
+      source,
+      id,
+      action = 'more than one mortality record',
+      fixes = 0L,
+      detail = sprintf('%s records with %s dates; the first listed is used', n, dates),
+      flag = 'duplicate_records'
+    )]
   }
   rec <- unique(rec, by = c('source', 'id'))
   missing <- rec[!DT, on = c('source', 'id')]
   if (nrow(missing)) {
-    warning(sprintf('[clean mortality_records] %s recorded deaths are for animals not in the data (skipped)', nrow(missing)))
-    dec[[length(dec) + 1]] <- missing[, .(source, id, action = 'mortality record not matched', fixes = 0L,
-                                          detail = 'animal not in the location data (e.g. never collared); record skipped',
-                                          flag = 'not_matched')]
+    warning(sprintf(
+      '[clean mortality_records] %s recorded deaths are for animals not in the data (skipped)',
+      nrow(missing)
+    ))
+    dec[[length(dec) + 1]] <- missing[, .(
+      source,
+      id,
+      action = 'mortality record not matched',
+      fixes = 0L,
+      detail = 'animal not in the location data (e.g. never collared); record skipped',
+      flag = 'not_matched'
+    )]
   }
   rec <- rec[unique(DT[, .(source, id)]), on = c('source', 'id'), nomatch = NULL]
   rec[, .death := local_to_utc(mortality_date, tz)]
@@ -321,30 +467,76 @@ clean_mortality_records <- function(DT, params, crs) {
     skip <- unlist(params$qa$skip %||% 'moves_after')
     held <- rec[flag %in% skip]
     if (nrow(held)) {
-      dec[[length(dec) + 1]] <- held[, .(source, id, action = 'mortality record not applied', fixes = 0L,
-                                         detail = sprintf('%s: %s fixes after the date, path %s m, longest step %s m; fixes kept, for review',
-                                                          flag, fixes_after_date, path_m, max_step_m),
-                                         flag, mortality_date = mortality_day, last_fix_date, fixes_after_date, path_m,
-                                         max_step_m, step_into_m, days_last_fix_minus_date)]
+      dec[[length(dec) + 1]] <- held[, .(
+        source,
+        id,
+        action = 'mortality record not applied',
+        fixes = 0L,
+        detail = sprintf(
+          '%s: %s fixes after the date, path %s m, longest step %s m; fixes kept, for review',
+          flag,
+          fixes_after_date,
+          path_m,
+          max_step_m
+        ),
+        flag,
+        mortality_date = mortality_day,
+        last_fix_date,
+        fixes_after_date,
+        path_m,
+        max_step_m,
+        step_into_m,
+        days_last_fix_minus_date
+      )]
     }
     rec <- rec[!flag %in% skip]
   }
 
-  DT[rec, on = c('source', 'id'), `:=`(mortality_date = i.mortality_date, mortality_cause = i.mortality_cause,
-                                       .death = i..death)]
-  if (!'.death' %in% names(DT)) DT[, .death := as.POSIXct(NA)]
+  DT[
+    rec,
+    on = c('source', 'id'),
+    `:=`(mortality_date = i.mortality_date, mortality_cause = i.mortality_cause, .death = i..death)
+  ]
+  if (!'.death' %in% names(DT)) {
+    DT[, .death := as.POSIXct(NA)]
+  }
   late <- !is.na(DT$.death) & DT$t_ > DT$.death + after
   hit <- DT[!is.na(.death), .(fixes = sum(t_ > .death + after)), by = .(source, id)]
   hit <- rec[hit, on = c('source', 'id')]
-  qa_cols <- intersect(c('mortality_day', 'last_fix_date', 'fixes_after_date', 'path_m', 'max_step_m', 'step_into_m',
-                         'days_last_fix_minus_date'), names(hit))
-  applied <- hit[, c(list(source = source, id = id, action = 'mortality record applied', fixes = fixes,
-                          detail = paste0('status dead; fixes more than ', after / 86400,
-                                          ' day(s) after the recorded death dropped',
-                                          data.table::fifelse(is.na(flag), '', paste0(' (', flag, ')'))),
-                          flag = flag),
-                     .SD), .SDcols = qa_cols]
-  if ('mortality_day' %in% names(applied)) data.table::setnames(applied, 'mortality_day', 'mortality_date')
+  qa_cols <- intersect(
+    c(
+      'mortality_day',
+      'last_fix_date',
+      'fixes_after_date',
+      'path_m',
+      'max_step_m',
+      'step_into_m',
+      'days_last_fix_minus_date'
+    ),
+    names(hit)
+  )
+  applied <- hit[,
+    c(
+      list(
+        source = source,
+        id = id,
+        action = 'mortality record applied',
+        fixes = fixes,
+        detail = paste0(
+          'status dead; fixes more than ',
+          after / 86400,
+          ' day(s) after the recorded death dropped',
+          data.table::fifelse(is.na(flag), '', paste0(' (', flag, ')'))
+        ),
+        flag = flag
+      ),
+      .SD
+    ),
+    .SDcols = qa_cols
+  ]
+  if ('mortality_day' %in% names(applied)) {
+    data.table::setnames(applied, 'mortality_day', 'mortality_date')
+  }
   dec[[length(dec) + 1]] <- applied
   DT <- DT[!late]
   DT[, .death := NULL]
@@ -382,24 +574,35 @@ mortality_record_flags <- function(DT, rec, tz, qa) {
   d <- DT[r, on = c('source', 'id'), nomatch = NULL, .(source, id, t_, x_, y_, mdate)]
   data.table::setorder(d, source, id, t_)
   d[, day := as.Date(format(t_, '%Y-%m-%d', tz = tz))]
-  out <- d[, {
-    aft <- which(day > mdate[1])
-    st <- if (length(aft) > 1) sqrt(diff(x_[aft])^2 + diff(y_[aft])^2) else 0
-    into <- if (length(aft) && aft[1] > 1) {
-      sqrt((x_[aft[1]] - x_[aft[1] - 1L])^2 + (y_[aft[1]] - y_[aft[1] - 1L])^2)
-    } else {
-      NA_real_
-    }
-    list(mortality_day = mdate[1], last_fix_date = max(day), fixes_after_date = length(aft),
-         path_m = round(sum(st)), max_step_m = round(max(st)), step_into_m = round(into))
-  }, by = .(source, id)]
-  out[, flag := data.table::fcase(
-    last_fix_date < mortality_day, 'ends_before',
-    fixes_after_date == 0L, 'ends_on_date',
-    path_m > max_path | max_step_m > max_step, 'moves_after',
-    fixes_after_date <= max_n, 'few_fixes_after',
-    default = 'many_fixes_no_move'
-  )]
+  out <- d[,
+    {
+      aft <- which(day > mdate[1])
+      st <- if (length(aft) > 1) sqrt(diff(x_[aft])^2 + diff(y_[aft])^2) else 0
+      into <- if (length(aft) && aft[1] > 1) {
+        sqrt((x_[aft[1]] - x_[aft[1] - 1L])^2 + (y_[aft[1]] - y_[aft[1] - 1L])^2)
+      } else {
+        NA_real_
+      }
+      list(
+        mortality_day = mdate[1],
+        last_fix_date = max(day),
+        fixes_after_date = length(aft),
+        path_m = round(sum(st)),
+        max_step_m = round(max(st)),
+        step_into_m = round(into)
+      )
+    },
+    by = .(source, id)
+  ]
+  out[,
+    flag := data.table::fcase(
+      last_fix_date < mortality_day             , 'ends_before'     ,
+      fixes_after_date == 0L                    , 'ends_on_date'    ,
+      path_m > max_path | max_step_m > max_step , 'moves_after'     ,
+      fixes_after_date <= max_n                 , 'few_fixes_after' ,
+      default = 'many_fixes_no_move'
+    )
+  ]
   out[, days_last_fix_minus_date := as.integer(last_fix_date - mortality_day)]
   out[]
 }
@@ -426,18 +629,43 @@ clean_long_gaps <- function(DT, params, crs) {
   stray <- pieces[n <= keep_min & pieces[, .N, by = id][pieces, on = 'id']$N > 1]
   dec <- list()
   if (nrow(stray)) {
-    dec[[1]] <- stray[, .(action = 'stray fixes after a long silence dropped', fixes = sum(n),
-                          detail = paste0('pieces of ', keep_min, ' fixes or fewer, separated by more than ',
-                                          gap / 86400, ' days from the rest')), by = .(source, id)]
+    dec[[1]] <- stray[,
+      .(
+        action = 'stray fixes after a long silence dropped',
+        fixes = sum(n),
+        detail = paste0(
+          'pieces of ',
+          keep_min,
+          ' fixes or fewer, separated by more than ',
+          gap / 86400,
+          ' days from the rest'
+        )
+      ),
+      by = .(source, id)
+    ]
     DT <- DT[!stray, on = c('id', '.piece')]
   }
   # renumber the remaining pieces and give later ones their own ID
   DT[, .piece := match(.piece, unique(.piece)), by = id]
   split <- DT[, .(pieces = max(.piece)), by = .(source, id)][pieces > 1]
   if (nrow(split)) {
-    dec[[length(dec) + 1]] <- split[, .(source, id, action = 'track split at a long silence', fixes = pieces,
-                                        detail = paste0('split into ', pieces, ' animals (', id, ', ', id, '_2, ...) at silences of more than ',
-                                                        gap / 86400, ' days; fixes = number of pieces'))]
+    dec[[length(dec) + 1]] <- split[, .(
+      source,
+      id,
+      action = 'track split at a long silence',
+      fixes = pieces,
+      detail = paste0(
+        'split into ',
+        pieces,
+        ' animals (',
+        id,
+        ', ',
+        id,
+        '_2, ...) at silences of more than ',
+        gap / 86400,
+        ' days; fixes = number of pieces'
+      )
+    )]
     DT[.piece > 1, id := paste0(id, '_', .piece)]
   }
   DT[, .piece := NULL]
@@ -471,18 +699,41 @@ make_animal_lookup <- function(captures, locations, collar_column = 'collar_id')
   if (!is.null(captures) && nrow(captures)) {
     src <- unique(captures$source)
     b <- loc[source %in% src]
-    b[, .collar := if (collar_column %in% names(b)) trim_bytes(get(collar_column)) else NA_character_]
+    b[,
+      .collar := if (collar_column %in% names(b)) trim_bytes(get(collar_column)) else NA_character_
+    ]
     b[, .base := base_id(id)]
-    fixes <- b[, .(fixes = .N, our_ids = paste(srt(id), collapse = '/')), by = .(.base, collar = .collar)]
+    fixes <- b[,
+      .(fixes = .N, our_ids = paste(srt(id), collapse = '/')),
+      by = .(.base, collar = .collar)
+    ]
     data.table::setnames(fixes, '.base', 'id')
-    cl <- fixes[captures[, .(source, id, capture_id, capture_date, collar, recapture, herd, sex)], on = .(id, collar)]
+    cl <- fixes[
+      captures[, .(source, id, capture_id, capture_date, collar, recapture, herd, sex)],
+      on = .(id, collar)
+    ]
     cl[, kind := 'capture log']
-    multi <- b[!is.na(.collar), .(collars = data.table::uniqueN(.collar), fixes = .N,
-                                  our_ids = paste(srt(id), collapse = '/')), by = .base][collars > 1]
+    multi <- b[
+      !is.na(.collar),
+      .(
+        collars = data.table::uniqueN(.collar),
+        fixes = .N,
+        our_ids = paste(srt(id), collapse = '/')
+      ),
+      by = .base
+    ][collars > 1]
     data.table::setnames(multi, '.base', 'id')
-    extra <- multi[!id %in% captures[recapture %in% 'Y', id],
-                   .(source = src[1], kind = 'several collars, no logged recapture', id, our_ids, fixes,
-                     note = paste0(collars, ' collars in the data; not shown as recaptured in the capture log'))]
+    extra <- multi[
+      !id %in% captures[recapture %in% 'Y', id],
+      .(
+        source = src[1],
+        kind = 'several collars, no logged recapture',
+        id,
+        our_ids,
+        fixes,
+        note = paste0(collars, ' collars in the data; not shown as recaptured in the capture log')
+      )
+    ]
     parts <- c(parts, list(cl, extra))
   }
   if (all(c('individual_local_identifier', 'deployment_id') %in% names(loc))) {
@@ -490,16 +741,44 @@ make_animal_lookup <- function(captures, locations, collar_column = 'collar_id')
     tag <- if ('tag_local_identifier' %in% names(mb)) mb$tag_local_identifier else NA_character_
     mb[, .tag := tag]
     mb[, `:=`(.animal = individual_local_identifier, .dep = as.character(deployment_id))]
-    dep <- mb[, .(fixes = .N, our_ids = paste(srt(id), collapse = '/'), collar = paste(srt(.tag), collapse = '/'),
-                  capture_date = min(t_)), by = .(source, .animal, deployment = .dep)]
+    dep <- mb[,
+      .(
+        fixes = .N,
+        our_ids = paste(srt(id), collapse = '/'),
+        collar = paste(srt(.tag), collapse = '/'),
+        capture_date = min(t_)
+      ),
+      by = .(source, .animal, deployment = .dep)
+    ]
     data.table::setnames(dep, '.animal', 'id')
     dep[, deployments := .N, by = .(source, id)]
-    parts <- c(parts, list(dep[deployments > 1, .(source, kind = 'Movebank deployments', id, our_ids, collar,
-                                                  capture_date, fixes, note = paste0('deployment ', deployment, ' of ', deployments,
-                                                                                     '; capture_date = first fix'))]))
+    parts <- c(
+      parts,
+      list(dep[
+        deployments > 1,
+        .(
+          source,
+          kind = 'Movebank deployments',
+          id,
+          our_ids,
+          collar,
+          capture_date,
+          fixes,
+          note = paste0(
+            'deployment ',
+            deployment,
+            ' of ',
+            deployments,
+            '; capture_date = first fix'
+          )
+        )
+      ])
+    )
   }
   out <- data.table::rbindlist(parts, fill = TRUE)
-  if (nrow(out)) data.table::setorder(out, source, id, capture_date)
+  if (nrow(out)) {
+    data.table::setorder(out, source, id, capture_date)
+  }
   out[]
 }
 
@@ -531,16 +810,25 @@ write_decisions <- function(x, file) {
 #' @return `cleaning`, with `params$captures` and `params$mortality_records` filled in.
 #' @author Julie W. Turner
 #' @export
-add_record_tables <- function(cleaning, captures = NULL, mortality = NULL, capture_source = NULL,
-                              collar_column = 'collar_id', herd_cfg = NULL) {
+add_record_tables <- function(
+  cleaning,
+  captures = NULL,
+  mortality = NULL,
+  capture_source = NULL,
+  collar_column = 'collar_id',
+  herd_cfg = NULL
+) {
   if (!is.null(captures)) {
-    cleaning$params$captures <- utils::modifyList(cleaning$params$captures %||% list(),
-                                                  list(table = captures, source = capture_source, collar_column = collar_column))
+    cleaning$params$captures <- utils::modifyList(
+      cleaning$params$captures %||% list(),
+      list(table = captures, source = capture_source, collar_column = collar_column)
+    )
   }
   if (length(mortality)) {
-    cleaning$params$mortality_records <- utils::modifyList(cleaning$params$mortality_records %||% list(),
-                                                           list(table = keep_record_herds(data.table::rbindlist(mortality, fill = TRUE),
-                                                                                          herd_cfg)))
+    cleaning$params$mortality_records <- utils::modifyList(
+      cleaning$params$mortality_records %||% list(),
+      list(table = keep_record_herds(data.table::rbindlist(mortality, fill = TRUE), herd_cfg))
+    )
   }
   cleaning
 }
@@ -554,7 +842,9 @@ add_record_tables <- function(cleaning, captures = NULL, mortality = NULL, captu
 #' @noRd
 keep_record_herds <- function(rec, herd_cfg) {
   keep <- unlist(herd_cfg$keep)
-  if (!length(keep) || !'herd' %in% names(rec)) return(rec)
+  if (!length(keep) || !'herd' %in% names(rec)) {
+    return(rec)
+  }
   other <- !is.na(rec$herd) & !rename_names(to_camel(rec$herd), herd_cfg$rename) %in% keep
   out <- rec[!other]
   data.table::setattr(out, 'other_herds', sum(other))

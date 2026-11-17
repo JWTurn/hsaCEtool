@@ -41,18 +41,23 @@ model_formula <- function(text) {
 model_bars <- function(f) {
   bars <- list()
   walk <- function(e) {
-    if (!is.call(e)) return(invisible())
+    if (!is.call(e)) {
+      return(invisible())
+    }
     if (identical(e[[1]], as.name('|')) || identical(e[[1]], as.name('||'))) {
       bars[[length(bars) + 1]] <<- e
       return(invisible())
     }
-    for (a in as.list(e)[-1]) walk(a)
+    for (a in as.list(e)[-1]) {
+      walk(a)
+    }
   }
   walk(f[[length(f)]])
   data.table::data.table(
     term = purrr::map_chr(bars, function(b) paste(deparse(b), collapse = '')),
     group = purrr::map_chr(bars, function(b) paste(all.vars(b[[3]]), collapse = ':')),
-    intercept_only = purrr::map_lgl(bars, function(b) identical(b[[2]], 1) || identical(b[[2]], 1L)))
+    intercept_only = purrr::map_lgl(bars, function(b) identical(b[[2]], 1) || identical(b[[2]], 1L))
+  )
 }
 
 #' @title Check the model settings
@@ -68,19 +73,32 @@ check_model_settings <- function(mcfg, n_made, seasons) {
   out <- character()
   add <- function(...) out <<- c(out, paste0('model: ', ...))
   if (!is.null(mcfg$seasons)) {
-    add('seasons: season dates are now set in a season table (model: season_table: and season_set:; ',
-        'see the package\'s config/README.md)')
+    add(
+      'seasons: season dates are now set in a season table (model: season_table: and season_set:; ',
+      'see the package\'s config/README.md)'
+    )
   }
   sets <- unique(seasons$set)
   default_set <- mcfg$season_set %||% ''
   if (!default_set %in% sets) {
-    add('season_set: "', default_set, '" is not a set in the season table (', paste(sets, collapse = ', '), ')')
+    add(
+      'season_set: "',
+      default_set,
+      '" is not a set in the season table (',
+      paste(sets, collapse = ', '),
+      ')'
+    )
   }
   rules <- c('sum', 'min', 'max', 'mean')
   for (nm in names(mcfg$groups)) {
     g <- mcfg$groups[[nm]]
     if (!is.list(g) || length(g) != 1 || !names(g) %in% rules || length(unlist(g)) < 1) {
-      add('groups: ', nm, ' must be {rule: [layers]}, with rule one of ', paste(rules, collapse = ', '))
+      add(
+        'groups: ',
+        nm,
+        ' must be {rule: [layers]}, with rule one of ',
+        paste(rules, collapse = ', ')
+      )
     }
   }
   cap <- mcfg$distance_cap
@@ -88,13 +106,19 @@ check_model_settings <- function(mcfg, n_made, seasons) {
     add('distance_cap needs numbers for beyond_km and set_to_km (or distance_cap: null)')
   }
   if (!is.null(cap$columns)) {
-    add('distance_cap: columns is no longer used: a capped distance is named with _adj in the formula ',
-        '(e.g. dist_paved_240_adj_end), so remove columns and add _adj to the capped distances')
+    add(
+      'distance_cap: columns is no longer used: a capped distance is named with _adj in the formula ',
+      '(e.g. dist_paved_240_adj_end), so remove columns and add _adj to the capped distances'
+    )
   }
   for (nm in names(mcfg$models)) {
     m <- mcfg$models[[nm]]
     if (!grepl('^[A-Za-z][A-Za-z0-9_]*$', nm)) {
-      add('models: "', nm, '" is not a usable name: use letters, numbers and _ only, starting with a letter')
+      add(
+        'models: "',
+        nm,
+        '" is not a usable name: use letters, numbers and _ only, starting with a letter'
+      )
     }
     f <- tryCatch(model_formula(m$formula %||% ''), error = function(e) conditionMessage(e))
     if (is.character(f)) {
@@ -106,11 +130,23 @@ check_model_settings <- function(mcfg, n_made, seasons) {
       }
       adj <- grep(adj_pattern, all.vars(f), value = TRUE)
       if (length(adj) && !length(cap)) {
-        add('models: ', nm, ': ', paste(adj, collapse = ', '), ' (capped distances, _adj) need model: distance_cap:')
+        add(
+          'models: ',
+          nm,
+          ': ',
+          paste(adj, collapse = ', '),
+          ' (capped distances, _adj) need model: distance_cap:'
+        )
       }
       bad <- intersect(all.vars(f), model_private_columns)
       if (length(bad)) {
-        add('models: ', nm, ': positions and times cannot be in a model (', paste(bad, collapse = ', '), ')')
+        add(
+          'models: ',
+          nm,
+          ': positions and times cannot be in a model (',
+          paste(bad, collapse = ', '),
+          ')'
+        )
       }
     }
     n <- m$n_random
@@ -119,34 +155,68 @@ check_model_settings <- function(mcfg, n_made, seasons) {
     }
     m_set <- m$season_set %||% default_set
     if (!is.null(m$season_set) && !m$season_set %in% sets) {
-      add('models: ', nm, ': season_set "', m$season_set, '" is not a set in the season table (',
-          paste(sets, collapse = ', '), ')')
+      add(
+        'models: ',
+        nm,
+        ': season_set "',
+        m$season_set,
+        '" is not a set in the season table (',
+        paste(sets, collapse = ', '),
+        ')'
+      )
     }
     s <- unlist(m$seasons %||% 'all')
     in_set <- c(seasons$season[seasons$set == m_set], 'other')
     if (!identical(s, 'all') && length(setdiff(s, in_set))) {
-      add('models: ', nm, ': seasons must be all or names from season set ', m_set, ' (',
-          paste(in_set, collapse = ', '), ')')
+      add(
+        'models: ',
+        nm,
+        ': seasons must be all or names from season set ',
+        m_set,
+        ' (',
+        paste(in_set, collapse = ', '),
+        ')'
+      )
     }
-    if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) add('models: ', nm, ': fit must be true or false')
-    if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) add('models: ', nm, ': export must be true or false')
-    if (!is.null(m$upload) && !isTRUE(m$upload) && !isFALSE(m$upload)) add('models: ', nm, ': upload must be true or false')
-    if (isTRUE(m$upload) && isFALSE(m$fit)) add('models: ', nm, ': upload: true needs a fit (not fit: false)')
+    if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) {
+      add('models: ', nm, ': fit must be true or false')
+    }
+    if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) {
+      add('models: ', nm, ': export must be true or false')
+    }
+    if (!is.null(m$upload) && !isTRUE(m$upload) && !isFALSE(m$upload)) {
+      add('models: ', nm, ': upload must be true or false')
+    }
+    if (isTRUE(m$upload) && isFALSE(m$fit)) {
+      add('models: ', nm, ': upload: true needs a fit (not fit: false)')
+    }
     if (isTRUE(m$upload) && !nzchar(mcfg$upload_folder %||% '')) {
       add('models: ', nm, ': upload: true needs model: upload_folder: (a Drive folder)')
     }
-    if (!is.null(m$random_na) && !identical(m$random_na, 'replace') && !identical(m$random_na, 'keep')) {
+    if (
+      !is.null(m$random_na) && !identical(m$random_na, 'replace') && !identical(m$random_na, 'keep')
+    ) {
       add('models: ', nm, ': random_na must be replace or keep')
     }
     if (!is.null(m$control)) {
       ctrl_ok <- names(formals(glmmTMB::glmmTMBControl))
       if (!is.list(m$control) || is.null(names(m$control)) || any(!names(m$control) %in% ctrl_ok)) {
-        add('models: ', nm, ': control must be named glmmTMBControl() settings, e.g. ',
-            '{optCtrl: {iter.max: 1000, eval.max: 1000}}')
+        add(
+          'models: ',
+          nm,
+          ': control must be named glmmTMBControl() settings, e.g. ',
+          '{optCtrl: {iter.max: 1000, eval.max: 1000}}'
+        )
       }
     }
     if (nzchar(m$subset %||% '')) {
-      ok <- tryCatch({ str2lang(m$subset); TRUE }, error = function(e) FALSE)
+      ok <- tryCatch(
+        {
+          str2lang(m$subset)
+          TRUE
+        },
+        error = function(e) FALSE
+      )
       if (!ok) add('models: ', nm, ': subset could not be read')
     }
   }
@@ -184,7 +254,10 @@ season_of <- function(t, seasons) {
 #' @export
 make_animal_codes <- function(ids) {
   u <- sort(unique(as.character(ids)))
-  data.table::data.table(id = u, code = sprintf(paste0('A%0', max(4, nchar(length(u))), 'd'), seq_along(u)))
+  data.table::data.table(
+    id = u,
+    code = sprintf(paste0('A%0', max(4, nchar(length(u))), 'd'), seq_along(u))
+  )
 }
 
 #' @title Save the animal codes (confidential)
@@ -227,7 +300,9 @@ select_model_steps <- function(steps, model, seasons, cols) {
   s[, season := season_of(t1_, seasons)]
   s[, yearseason := paste(year, season, sep = '_')]
   wanted <- unlist(model$seasons %||% 'all')
-  if (!identical(wanted, 'all')) s <- s[season %in% wanted]
+  if (!identical(wanted, 'all')) {
+    s <- s[season %in% wanted]
+  }
   s <- s[indiv_step_id %in% s[case_ == TRUE, indiv_step_id]]
   s[, t1_ := NULL]
   s[]
@@ -248,12 +323,20 @@ adj_pattern <- '_adj_(start|end)$'
 #' @keywords internal
 #' @noRd
 covariate_sources <- function(vars, groups) {
-  stats::setNames(purrr::map(vars, function(v) {
-    g <- names(groups)[startsWith(v, paste0(names(groups), '_'))]
-    if (!length(g)) return(list(cols = v, rule = NULL))
-    g <- g[which.max(nchar(g))]
-    list(cols = paste0(unlist(groups[[g]]), substring(v, nchar(g) + 1)), rule = names(groups[[g]]))
-  }), vars)
+  stats::setNames(
+    purrr::map(vars, function(v) {
+      g <- names(groups)[startsWith(v, paste0(names(groups), '_'))]
+      if (!length(g)) {
+        return(list(cols = v, rule = NULL))
+      }
+      g <- g[which.max(nchar(g))]
+      list(
+        cols = paste0(unlist(groups[[g]]), substring(v, nchar(g) + 1)),
+        rule = names(groups[[g]])
+      )
+    }),
+    vars
+  )
 }
 
 #' @title Combine columns by a rule, row by row
@@ -266,11 +349,13 @@ covariate_sources <- function(vars, groups) {
 combine_columns <- function(DT, cols, rule) {
   x <- purrr::map(cols, function(cl) as.numeric(DT[[cl]]))
   n <- Reduce(`+`, purrr::map(x, function(v) !is.na(v)))
-  out <- switch(rule,
-                sum = Reduce(`+`, purrr::map(x, function(v) data.table::fcoalesce(v, 0))),
-                mean = Reduce(`+`, purrr::map(x, function(v) data.table::fcoalesce(v, 0))) / pmax(n, 1),
-                min = Reduce(function(a, b) pmin(a, b, na.rm = TRUE), x),
-                max = Reduce(function(a, b) pmax(a, b, na.rm = TRUE), x))
+  out <- switch(
+    rule,
+    sum = Reduce(`+`, purrr::map(x, function(v) data.table::fcoalesce(v, 0))),
+    mean = Reduce(`+`, purrr::map(x, function(v) data.table::fcoalesce(v, 0))) / pmax(n, 1),
+    min = Reduce(function(a, b) pmin(a, b, na.rm = TRUE), x),
+    max = Reduce(function(a, b) pmax(a, b, na.rm = TRUE), x)
+  )
   out[n == 0] <- NA_real_
   out
 }
@@ -334,32 +419,45 @@ build_model_data <- function(steps, files, codes, common, model) {
   derived <- c('season', 'yearseason')
   cov <- setdiff(vars, c(step_vars, derived))
   s <- select_model_steps(steps, model, common$seasons %||% list(), unique(c('id', step_vars)))
-  log <- list(data.table::data.table(what = 'steps kept (used)', n = s[case_ == TRUE, .N]),
-              data.table::data.table(what = 'rows available (used + all random)', n = nrow(s)))
+  log <- list(
+    data.table::data.table(what = 'steps kept (used)', n = s[case_ == TRUE, .N]),
+    data.table::data.table(what = 'rows available (used + all random)', n = nrow(s))
+  )
 
   # covariates: extracted columns, groups made from them, and for capped distances
   # (_adj) the values they are copied from and the start values the cap uses
   cap <- common$distance_cap
   capped <- grep(adj_pattern, cov, value = TRUE)
   if (length(capped) && !length(cap)) {
-    stop('model formula uses capped distances (', paste(capped, collapse = ', '),
-         ') but model: distance_cap: is null', call. = FALSE)
+    stop(
+      'model formula uses capped distances (',
+      paste(capped, collapse = ', '),
+      ') but model: distance_cap: is null',
+      call. = FALSE
+    )
   }
   uncapped <- sub(adj_pattern, '_\\1', capped)
   starts <- sub('_(start|end)$', '_start', uncapped)
   made <- unique(c(setdiff(cov, capped), uncapped, starts))
   plain <- grep('^dist_', setdiff(cov, capped), value = TRUE)
   if (length(cap) && length(plain)) {
-    message('Distances not capped (name them with _adj to cap them): ', paste(plain, collapse = ', '))
+    message(
+      'Distances not capped (name them with _adj to cap them): ',
+      paste(plain, collapse = ', ')
+    )
   }
   src <- covariate_sources(made, common$groups %||% list())
   need <- unique(unlist(purrr::map(src, 'cols')))
   have <- nanoparquet::read_parquet_schema(files[1])$name
   miss <- setdiff(need, have)
   if (length(miss)) {
-    stop('model formula uses columns that were not extracted: ', paste(miss, collapse = ', '),
-         '. Use layer names with resolution and _start or _end (see outputs/<project>/availability.csv),',
-         ' or groups from model: groups:', call. = FALSE)
+    stop(
+      'model formula uses columns that were not extracted: ',
+      paste(miss, collapse = ', '),
+      '. Use layer names with resolution and _start or _end (see outputs/<project>/availability.csv),',
+      ' or groups from model: groups:',
+      call. = FALSE
+    )
   }
   grouped <- purrr::keep(src, function(x) !is.null(x$rule))
   keep_cols <- unique(c('case_', 'indiv_step_id', 'id', setdiff(vars, 'id')))
@@ -370,10 +468,14 @@ build_model_data <- function(steps, files, codes, common, model) {
   # one year at a time
   parts <- purrr::map(files, function(fl) {
     x <- read_extracted(fl, need, s$row)
-    if (!nrow(x)) return(NULL)
+    if (!nrow(x)) {
+      return(NULL)
+    }
     x <- x[s, on = 'row', nomatch = NULL]
     data.table::setorder(x, row)
-    for (v in names(grouped)) data.table::set(x, j = v, value = combine_columns(x, grouped[[v]]$cols, grouped[[v]]$rule))
+    for (v in names(grouped)) {
+      data.table::set(x, j = v, value = combine_columns(x, grouped[[v]]$cols, grouped[[v]]$rule))
+    }
 
     # capped distances (_adj): a copy, capped by where each step starts
     n_far <- purrr::map_int(seq_along(capped), function(i) {
@@ -388,7 +490,9 @@ build_model_data <- function(steps, files, codes, common, model) {
     # missing values: drop the step at a used step; at a random step, skip the row
     # (random_na: replace) or keep it (random_na: keep)
     na_row <- !stats::complete.cases(x[, check_cols, with = FALSE])
-    nas <- purrr::map(check_cols, function(cl) c(used = sum(is.na(x[[cl]]) & x$case_), random = sum(is.na(x[[cl]]) & !x$case_)))
+    nas <- purrr::map(check_cols, function(cl) {
+      c(used = sum(is.na(x[[cl]]) & x$case_), random = sum(is.na(x[[cl]]) & !x$case_))
+    })
     bad <- unique(x$indiv_step_id[x$case_ & na_row])
     skipped <- sum(na_row & !x$case_ & !x$indiv_step_id %in% bad)
     x <- x[(keep_na | !na_row) & !indiv_step_id %in% bad, c('row', keep_cols), with = FALSE]
@@ -397,7 +501,9 @@ build_model_data <- function(steps, files, codes, common, model) {
     x[, .k := cumsum(!case_), by = indiv_step_id]
     x <- x[case_ | .k <= n_random]
     x[, .k := NULL]
-    if (keep_na) skipped <- sum(!x$case_ & !stats::complete.cases(x[, check_cols, with = FALSE]))
+    if (keep_na) {
+      skipped <- sum(!x$case_ & !stats::complete.cases(x[, check_cols, with = FALSE]))
+    }
     list(data = x, n_far = n_far, nas = nas, bad = length(bad), skipped = skipped)
   })
   parts <- purrr::compact(parts)
@@ -407,33 +513,69 @@ build_model_data <- function(steps, files, codes, common, model) {
 
   for (i in seq_along(capped)) {
     log[[length(log) + 1]] <- data.table::data.table(
-      what = paste0(capped[i], ': steps starting > ', cap$beyond_km, ' km away, set to ', cap$set_to_km, ' km'),
-      n = sum(purrr::map_int(parts, function(p) p$n_far[i])))
+      what = paste0(
+        capped[i],
+        ': steps starting > ',
+        cap$beyond_km,
+        ' km away, set to ',
+        cap$set_to_km,
+        ' km'
+      ),
+      n = sum(purrr::map_int(parts, function(p) p$n_far[i]))
+    )
   }
-  nas <- purrr::map(seq_along(check_cols), function(j) Reduce(`+`, purrr::map(parts, function(p) p$nas[[j]])))
+  nas <- purrr::map(seq_along(check_cols), function(j) {
+    Reduce(`+`, purrr::map(parts, function(p) p$nas[[j]]))
+  })
   nas <- stats::setNames(nas, check_cols)[purrr::map_lgl(nas, function(n) sum(n) > 0)]
   if (length(nas)) {
-    warning('model table has missing values (steps dropped or random steps ',
-            if (keep_na) 'kept with them' else 'replaced', '; see the data log): ',
-            paste(sprintf('%s (%d used, %d random)', names(nas), purrr::map_int(nas, 1), purrr::map_int(nas, 2)), collapse = '; '),
-            call. = FALSE)
+    warning(
+      'model table has missing values (steps dropped or random steps ',
+      if (keep_na) 'kept with them' else 'replaced',
+      '; see the data log): ',
+      paste(
+        sprintf(
+          '%s (%d used, %d random)',
+          names(nas),
+          purrr::map_int(nas, 1),
+          purrr::map_int(nas, 2)
+        ),
+        collapse = '; '
+      ),
+      call. = FALSE
+    )
   }
   complete <- stats::complete.cases(s[, check_cols, with = FALSE])
   n_rand <- s[, .(n = sum(!case_ & complete[.I])), by = indiv_step_id]
   log[[length(log) + 1]] <- data.table::data.table(
-    what = c('steps dropped: missing value at the used step',
-             if (keep_na) 'random steps kept with a missing value (left out when fitting)'
-             else 'random steps skipped: missing value (later random steps used instead)',
-             paste0('steps with fewer than ', n_random, ' complete random steps')),
-    n = c(sum(purrr::map_int(parts, 'bad')), sum(purrr::map_int(parts, 'skipped')), n_rand[n < n_random, .N]))
+    what = c(
+      'steps dropped: missing value at the used step',
+      if (keep_na) {
+        'random steps kept with a missing value (left out when fitting)'
+      } else {
+        'random steps skipped: missing value (later random steps used instead)'
+      },
+      paste0('steps with fewer than ', n_random, ' complete random steps')
+    ),
+    n = c(
+      sum(purrr::map_int(parts, 'bad')),
+      sum(purrr::map_int(parts, 'skipped')),
+      n_rand[n < n_random, .N]
+    )
+  )
   rm(parts, n_rand, complete)
 
   # animal codes in place of IDs, also in the step IDs (<id>_<step> becomes <code>_<step>)
-  s[codes, on = 'id', `:=`(indiv_step_id = paste0(i.code, substring(indiv_step_id, nchar(id) + 1L)), id = i.code)]
+  s[
+    codes,
+    on = 'id',
+    `:=`(indiv_step_id = paste0(i.code, substring(indiv_step_id, nchar(id) + 1L)), id = i.code)
+  ]
   check_model_data(s, codes)
   log[[length(log) + 1]] <- data.table::data.table(
     what = c('animals', 'steps in the model (used)', 'rows in the model'),
-    n = c(data.table::uniqueN(s$id), s[case_ == TRUE, .N], nrow(s)))
+    n = c(data.table::uniqueN(s$id), s[case_ == TRUE, .N], nrow(s))
+  )
   list(data = s[], log = data.table::rbindlist(log))
 }
 
@@ -448,12 +590,20 @@ check_model_data <- function(DT, codes) {
   bad <- intersect(names(DT), model_private_columns)
   timed <- names(DT)[purrr::map_lgl(DT, function(x) inherits(x, c('POSIXt', 'Date')))]
   if (length(c(bad, timed))) {
-    stop('model table holds positions or times: ', paste(unique(c(bad, timed)), collapse = ', '), call. = FALSE)
+    stop(
+      'model table holds positions or times: ',
+      paste(unique(c(bad, timed)), collapse = ', '),
+      call. = FALSE
+    )
   }
-  if ('id' %in% names(DT) && (anyNA(DT$id) || any(DT$id %in% codes$id) || !all(DT$id %in% codes$code))) {
+  if (
+    'id' %in% names(DT) && (anyNA(DT$id) || any(DT$id %in% codes$id) || !all(DT$id %in% codes$code))
+  ) {
     stop('model table holds animal IDs, not codes', call. = FALSE)
   }
-  if ('indiv_step_id' %in% names(DT) && !all(sub('_[^_]*$', '', DT$indiv_step_id) %in% codes$code)) {
+  if (
+    'indiv_step_id' %in% names(DT) && !all(sub('_[^_]*$', '', DT$indiv_step_id) %in% codes$code)
+  ) {
     stop('model table step IDs (indiv_step_id) hold animal IDs, not codes', call. = FALSE)
   }
   invisible(DT)
@@ -474,9 +624,16 @@ check_model_data <- function(DT, codes) {
 as_model_factors <- function(DT, f) {
   d <- data.table::copy(DT)
   groups <- unlist(strsplit(model_bars(f)$group, ':', fixed = TRUE))
-  cols <- union(names(d)[purrr::map_lgl(d, function(x) is.character(x) || is.factor(x))], intersect(groups, names(d)))
-  for (cl in cols) data.table::set(d, j = cl, value = factor(as.character(d[[cl]])))
-  if ('case_' %in% names(d)) data.table::set(d, j = 'case_', value = as.integer(d$case_))
+  cols <- union(
+    names(d)[purrr::map_lgl(d, function(x) is.character(x) || is.factor(x))],
+    intersect(groups, names(d))
+  )
+  for (cl in cols) {
+    data.table::set(d, j = cl, value = factor(as.character(d[[cl]])))
+  }
+  if ('case_' %in% names(d)) {
+    data.table::set(d, j = 'case_', value = as.integer(d$case_))
+  }
   d
 }
 
@@ -500,7 +657,9 @@ fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 
   d <- as_model_factors(data, f)
   # random-term structure, from a small spread of steps (each term's number of variances)
   st <- levels(d$indiv_step_id)
-  probe <- droplevels(d[indiv_step_id %in% st[unique(round(seq(1, length(st), length.out = min(length(st), 2000))))]])
+  probe <- droplevels(d[
+    indiv_step_id %in% st[unique(round(seq(1, length(st), length.out = min(length(st), 2000))))]
+  ])
   p <- suppressWarnings(glmmTMB::glmmTMB(f, family = stats::poisson(), data = probe, doFit = FALSE))
   rm(probe)
   n_theta <- purrr::map_int(p$condReStruc, function(r) as.integer(r$blockNumTheta))
@@ -513,9 +672,14 @@ fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 
   fixed <- is_step[which_term]
   theta_map <- ifelse(fixed, NA_integer_, cumsum(!fixed))
   theta_start <- ifelse(fixed, log(step_sd), 0)
-  glmmTMB::glmmTMB(f, family = stats::poisson(), data = d,
-                   map = list(theta = factor(theta_map)), start = list(theta = theta_start),
-                   control = do.call(glmmTMB::glmmTMBControl, control))
+  glmmTMB::glmmTMB(
+    f,
+    family = stats::poisson(),
+    data = d,
+    map = list(theta = factor(theta_map)),
+    start = list(theta = theta_start),
+    control = do.call(glmmTMB::glmmTMBControl, control)
+  )
 }
 
 #' @title Coefficient tables of a fitted iSSA
@@ -531,9 +695,15 @@ fit_issa <- function(data, formula, step_sd = 1000, control = list(rank_check = 
 #' @export
 model_coefficients <- function(fit, step_group = 'indiv_step_id') {
   cf <- summary(fit)$coefficients$cond
-  fixed <- data.table::data.table(term = rownames(cf), estimate = cf[, 1], se = cf[, 2], z = cf[, 3], p = cf[, 4])
+  fixed <- data.table::data.table(
+    term = rownames(cf),
+    estimate = cf[, 1],
+    se = cf[, 2],
+    z = cf[, 3],
+    p = cf[, 4]
+  )
   vc <- glmmTMB::VarCorr(fit)$cond
-  base <- function(g) sub('[.][0-9]+$', '', g)   # glmmTMB names repeated groups id, id.1, id.2, ...
+  base <- function(g) sub('[.][0-9]+$', '', g) # glmmTMB names repeated groups id, id.1, id.2, ...
   random <- data.table::rbindlist(purrr::imap(vc, function(v, g) {
     sdv <- attr(v, 'stddev')
     data.table::data.table(group = base(g), term = names(sdv), sd = unname(sdv))
@@ -542,7 +712,13 @@ model_coefficients <- function(fit, step_group = 'indiv_step_id') {
   re <- re[base(names(re)) != step_group]
   by_group <- data.table::rbindlist(purrr::imap(re, function(r, g) {
     d <- data.table::as.data.table(r, keep.rownames = 'level')
-    d <- data.table::melt(d, id.vars = 'level', variable.name = 'term', value.name = 'deviation', variable.factor = FALSE)
+    d <- data.table::melt(
+      d,
+      id.vars = 'level',
+      variable.name = 'term',
+      value.name = 'deviation',
+      variable.factor = FALSE
+    )
     d[, group := base(g)]
   }))
   list(fixed = fixed, random = random, by_group = group_coefficients(by_group, fixed))
@@ -593,7 +769,9 @@ group_coefficients <- function(by_group, fixed) {
 write_model_coefficients <- function(coefs, log, name, out_dir, seasons = NULL, used = 'all') {
   reproducible::checkPath(out_dir, create = TRUE)
   tabs <- c(coefs, list(data_log = log))
-  if (length(seasons)) tabs$seasons <- model_season_table(seasons, used)
+  if (length(seasons)) {
+    tabs$seasons <- model_season_table(seasons, used)
+  }
   files <- file.path(out_dir, paste0(name, '_', names(tabs), '.csv'))
   purrr::walk2(tabs, files, function(x, f) data.table::fwrite(x, f))
   files
@@ -619,12 +797,26 @@ model_season_table <- function(seasons, used = 'all') {
   md <- function(x, i) as.integer(purrr::map_chr(x, function(s) strsplit(s, '-')[[1]][i]))
   first <- purrr::map_chr(seasons, 1)
   last <- purrr::map_chr(seasons, 2)
-  out <- data.table::data.table(season = names(seasons), start_month = md(first, 1), start_day = md(first, 2),
-                                end_month = md(last, 1), end_day = md(last, 2),
-                                days = as.integer(n[names(seasons)]))
+  out <- data.table::data.table(
+    season = names(seasons),
+    start_month = md(first, 1),
+    start_day = md(first, 2),
+    end_month = md(last, 1),
+    end_day = md(last, 2),
+    days = as.integer(n[names(seasons)])
+  )
   if (n[['other']] > 0) {
-    out <- rbind(out, data.table::data.table(season = 'other', start_month = NA_integer_, start_day = NA_integer_,
-                                             end_month = NA_integer_, end_day = NA_integer_, days = as.integer(n[['other']])))
+    out <- rbind(
+      out,
+      data.table::data.table(
+        season = 'other',
+        start_month = NA_integer_,
+        start_day = NA_integer_,
+        end_month = NA_integer_,
+        end_day = NA_integer_,
+        days = as.integer(n[['other']])
+      )
+    )
   }
   out[, used := identical(used, 'all') | season %in% used]
   out[]
@@ -646,9 +838,19 @@ model_season_table <- function(seasons, used = 'all') {
 write_model_table <- function(data, model, name, out_dir, seasons = NULL) {
   reproducible::checkPath(out_dir, create = TRUE)
   file <- file.path(out_dir, paste0(name, '_table.rds'))
-  saveRDS(list(name = name, formula = model$formula, step_sd = model$step_sd %||% 1000,
-               control = model$control, data = data$data, log = data$log,
-               seasons = seasons, seasons_used = model$seasons %||% 'all'), file)
+  saveRDS(
+    list(
+      name = name,
+      formula = model$formula,
+      step_sd = model$step_sd %||% 1000,
+      control = model$control,
+      data = data$data,
+      log = data$log,
+      seasons = seasons,
+      seasons_used = model$seasons %||% 'all'
+    ),
+    file
+  )
   file
 }
 
@@ -668,18 +870,39 @@ write_model_table <- function(data, model, name, out_dir, seasons = NULL) {
 #' @export
 fit_model_file <- function(file, out_dir, threads = 1L) {
   x <- readRDS(file)
-  message(x$name, ': ', nrow(x$data), ' rows, ', data.table::uniqueN(x$data$id), ' animals, ',
-          threads, ' thread(s)')
+  message(
+    x$name,
+    ': ',
+    nrow(x$data),
+    ' rows, ',
+    data.table::uniqueN(x$data$id),
+    ' animals, ',
+    threads,
+    ' thread(s)'
+  )
   t0 <- Sys.time()
   ctrl <- utils::modifyList(list(rank_check = 'adjust'), x$control %||% list())
   ctrl$parallel <- as.integer(threads)
   fit <- fit_issa(x$data, x$formula, step_sd = x$step_sd, control = ctrl)
-  message(x$name, ': fitted in ', format(round(difftime(Sys.time(), t0, units = 'mins'), 1)),
-          '; converged: ', fit$fit$convergence == 0, '; pdHess: ', isTRUE(fit$sdr$pdHess))
+  message(
+    x$name,
+    ': fitted in ',
+    format(round(difftime(Sys.time(), t0, units = 'mins'), 1)),
+    '; converged: ',
+    fit$fit$convergence == 0,
+    '; pdHess: ',
+    isTRUE(fit$sdr$pdHess)
+  )
   reproducible::checkPath(out_dir, create = TRUE)
   fit_file <- file.path(out_dir, paste0(x$name, '_fit.rds'))
   saveRDS(fit, fit_file)
-  files <- write_model_coefficients(model_coefficients(fit), x$log, x$name, out_dir,
-                                    x$seasons, x$seasons_used %||% 'all')
+  files <- write_model_coefficients(
+    model_coefficients(fit),
+    x$log,
+    x$name,
+    out_dir,
+    x$seasons,
+    x$seasons_used %||% 'all'
+  )
   invisible(c(fit_file, files))
 }

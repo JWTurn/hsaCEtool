@@ -14,12 +14,16 @@
 #' @export
 parallel_controller <- function(run) {
   workers <- as.integer(run$workers %||% 1)
-  if (workers <= 1) return(NULL)
+  if (workers <= 1) {
+    return(NULL)
+  }
   if (!requireNamespace('crew', quietly = TRUE)) {
     stop('run: workers is ', workers, ' but the crew package is not installed', call. = FALSE)
   }
-  setup <- sprintf('options(reproducible.useCache = FALSE, timeout = 3600); terra::terraOptions(memfrac = %s)',
-                   signif((run$memfrac %||% 0.6) / workers, 3))
+  setup <- sprintf(
+    'options(reproducible.useCache = FALSE, timeout = 3600); terra::terraOptions(memfrac = %s)',
+    signif((run$memfrac %||% 0.6) / workers, 3)
+  )
   if (!is.null(run$google_email)) {
     setup <- paste0(setup, sprintf("; options(gargle_oauth_email = '%s')", run$google_email))
   }

@@ -19,12 +19,20 @@
 #' @author Julie W. Turner
 #' @keywords internal
 raster_source <- function(sourceFile, access = 'stream', cache = 'inputs', connections = 4) {
-  if (file.exists(sourceFile)) return(sourceFile)
-  if (identical(access, 'stream')) return(paste0('/vsicurl/', sourceFile))
-  if (!identical(access, 'download')) stop('access must be "stream" or "download"', call. = FALSE)
+  if (file.exists(sourceFile)) {
+    return(sourceFile)
+  }
+  if (identical(access, 'stream')) {
+    return(paste0('/vsicurl/', sourceFile))
+  }
+  if (!identical(access, 'download')) {
+    stop('access must be "stream" or "download"', call. = FALSE)
+  }
   reproducible::checkPath(cache, create = TRUE)
   dest <- file.path(cache, basename(sourceFile))
-  if (!file.exists(dest)) download_parallel(sourceFile, dest, connections)
+  if (!file.exists(dest)) {
+    download_parallel(sourceFile, dest, connections)
+  }
   dest
 }
 
@@ -50,7 +58,9 @@ download_parallel <- function(url, dest, connections = 4, attempts = 5) {
   hdr <- curl::parse_headers_list(head$headers)
   size <- suppressWarnings(as.numeric(hdr[['content-length']]))
   part <- paste0(dest, '.part')
-  if (is.na(size) || !identical(tolower(hdr[['accept-ranges']] %||% ''), 'bytes') || connections <= 1) {
+  if (
+    is.na(size) || !identical(tolower(hdr[['accept-ranges']] %||% ''), 'bytes') || connections <= 1
+  ) {
     curl::curl_download(url, part, quiet = TRUE, handle = handle())
     file.rename(part, dest)
     return(invisible(dest))
@@ -62,20 +72,30 @@ download_parallel <- function(url, dest, connections = 4, attempts = 5) {
   piece <- sprintf('%s.%.0f-%.0f', part, from, to)
   # bits of each piece, one file per try: <piece>.1, <piece>.2, ...
   bits <- function(i) {
-    f <- list.files(dirname(dest), full.names = TRUE,
-                    pattern = paste0('^', gsub('([.+-])', '\\\\\\1', basename(piece[i])), '\\.[0-9]+$'))
+    f <- list.files(
+      dirname(dest),
+      full.names = TRUE,
+      pattern = paste0('^', gsub('([.+-])', '\\\\\\1', basename(piece[i])), '\\.[0-9]+$')
+    )
     f[order(as.integer(sub('.*\\.', '', f)))]
   }
   # pieces from an earlier download split differently cannot be resumed
-  old <- list.files(dirname(dest), full.names = TRUE,
-                    pattern = paste0('^', gsub('([.+-])', '\\\\\\1', basename(part))))
+  old <- list.files(
+    dirname(dest),
+    full.names = TRUE,
+    pattern = paste0('^', gsub('([.+-])', '\\\\\\1', basename(part)))
+  )
   unlink(setdiff(old, unlist(purrr::map(seq_along(piece), bits))))
 
   for (attempt in seq_len(attempts)) {
     have <- purrr::map_dbl(seq_along(piece), function(i) sum(file.size(bits(i))))
     todo <- which(have < to - from + 1)
-    if (length(todo) == 0) break
-    if (attempt > 1) Sys.sleep(30 * (attempt - 1))
+    if (length(todo) == 0) {
+      break
+    }
+    if (attempt > 1) {
+      Sys.sleep(30 * (attempt - 1))
+    }
     pool <- curl::new_pool()
     files <- character(length(todo))
     cons <- list()
@@ -87,10 +107,13 @@ download_parallel <- function(url, dest, connections = 4, attempts = 5) {
       local({
         jj <- j
         curl::curl_fetch_multi(
-          url, pool = pool, data = cons[[jj]],
+          url,
+          pool = pool,
+          data = cons[[jj]],
           done = function(res) status[jj] <<- res$status_code,
           fail = function(e) NULL,
-          handle = handle(range = sprintf('%.0f-%.0f', from[i] + have[i], to[i])))
+          handle = handle(range = sprintf('%.0f-%.0f', from[i] + have[i], to[i]))
+        )
       })
     }
     curl::multi_run(pool = pool)
@@ -101,8 +124,13 @@ download_parallel <- function(url, dest, connections = 4, attempts = 5) {
 
   sizes <- purrr::map_dbl(seq_along(piece), function(i) sum(file.size(bits(i))))
   if (any(sizes != to - from + 1)) {
-    stop('Download incomplete after ', attempts, ' tries (the pieces are kept and resume next run): ',
-         url, call. = FALSE)
+    stop(
+      'Download incomplete after ',
+      attempts,
+      ' tries (the pieces are kept and resume next run): ',
+      url,
+      call. = FALSE
+    )
   }
   all_bits <- unlist(purrr::map(seq_along(piece), bits))
   file.rename(all_bits[1], part)
@@ -130,10 +158,32 @@ warp_to_template <- function(src, template, dst = tempfile(fileext = '.tif')) {
     src <- clip_remote(src, tr)
     on.exit(unlink(src), add = TRUE)
   }
-  sf::gdal_utils('warp', src, dst, options = c(
-    '-t_srs', terra::crs(tr), '-te', e[1], e[3], e[2], e[4], '-tr', terra::res(tr),
-    '-r', 'near', '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES', '-overwrite',
-    '-multi', '-wo', 'NUM_THREADS=ALL_CPUS'))
+  sf::gdal_utils(
+    'warp',
+    src,
+    dst,
+    options = c(
+      '-t_srs',
+      terra::crs(tr),
+      '-te',
+      e[1],
+      e[3],
+      e[2],
+      e[4],
+      '-tr',
+      terra::res(tr),
+      '-r',
+      'near',
+      '-co',
+      'COMPRESS=DEFLATE',
+      '-co',
+      'TILED=YES',
+      '-overwrite',
+      '-multi',
+      '-wo',
+      'NUM_THREADS=ALL_CPUS'
+    )
+  )
   dst
 }
 
@@ -148,11 +198,19 @@ clip_remote <- function(src, tr) {
   area <- terra::project(terra::as.polygons(terra::ext(tr), crs = terra::crs(tr)), crs_src)
   b <- as.vector(terra::ext(terra::buffer(area, 1000)))
   out <- tempfile(fileext = '.tif')
-  sf::gdal_utils('translate', src, out,
-                 options = c('-projwin', b[1], b[4], b[2], b[3], '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'),
-                 config_options = c(GDAL_HTTP_MERGE_CONSECUTIVE_RANGES = 'YES', GDAL_HTTP_MULTIPLEX = 'YES',
-                                    GDAL_NUM_THREADS = 'ALL_CPUS', CPL_VSIL_CURL_CHUNK_SIZE = '4194304',
-                                    GDAL_DISABLE_READDIR_ON_OPEN = 'EMPTY_DIR'))
+  sf::gdal_utils(
+    'translate',
+    src,
+    out,
+    options = c('-projwin', b[1], b[4], b[2], b[3], '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'),
+    config_options = c(
+      GDAL_HTTP_MERGE_CONSECUTIVE_RANGES = 'YES',
+      GDAL_HTTP_MULTIPLEX = 'YES',
+      GDAL_NUM_THREADS = 'ALL_CPUS',
+      CPL_VSIL_CURL_CHUNK_SIZE = '4194304',
+      GDAL_DISABLE_READDIR_ON_OPEN = 'EMPTY_DIR'
+    )
+  )
   out
 }
 

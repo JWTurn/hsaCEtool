@@ -23,9 +23,16 @@
 run_pipeline <- function(project = NULL, share = TRUE, ..., config_dir = NULL) {
   ctx <- pipeline_context(project, config_dir)
   Sys.setenv(TAR_PROJECT = ctx$tar_project)
-  result <- tryCatch(targets::tar_make(..., script = ctx$script, store = ctx$store), error = function(e) e)
-  if (share) push_store(ctx$project, config_dir = ctx$config_dir)
-  if (inherits(result, 'error')) stop(result)
+  result <- tryCatch(
+    targets::tar_make(..., script = ctx$script, store = ctx$store),
+    error = function(e) e
+  )
+  if (share) {
+    push_store(ctx$project, config_dir = ctx$config_dir)
+  }
+  if (inherits(result, 'error')) {
+    stop(result)
+  }
   invisible()
 }
 
@@ -44,19 +51,37 @@ run_pipeline <- function(project = NULL, share = TRUE, ..., config_dir = NULL) {
 #' @return data.table of files copied (and deleted), invisibly.
 #' @author Julie W. Turner
 #' @export
-push_store <- function(project = NULL, prune = FALSE, force = FALSE,
-                       dry_run = FALSE, config_dir = NULL) {
+push_store <- function(
+  project = NULL,
+  prune = FALSE,
+  force = FALSE,
+  dry_run = FALSE,
+  config_dir = NULL
+) {
   loc <- store_locations(project, config_dir)
   project <- loc$name
   remote_info <- read_sync_info(file.path(loc$remote, 'sync_info.yaml'))
   local_info <- read_sync_info(loc$local_info)
-  if (!force && !is.null(remote_info) &&
+  if (
+    !force &&
+      !is.null(remote_info) &&
       !identical(remote_info$pushed_by, Sys.info()[['nodename']]) &&
-      (is.null(local_info) || remote_info$pushed_at > local_info$synced_at)) {
-    stop('The shared results for ', project, ' were updated from ', remote_info$pushed_by,
-         ' at ', remote_info$pushed_at, ', after this computer last synced. Run pull_store("',
-         project, '") first, or push_store("', project, '", force = TRUE) to replace them.',
-         call. = FALSE)
+      (is.null(local_info) || remote_info$pushed_at > local_info$synced_at)
+  ) {
+    stop(
+      'The shared results for ',
+      project,
+      ' were updated from ',
+      remote_info$pushed_by,
+      ' at ',
+      remote_info$pushed_at,
+      ', after this computer last synced. Run pull_store("',
+      project,
+      '") first, or push_store("',
+      project,
+      '", force = TRUE) to replace them.',
+      call. = FALSE
+    )
   }
 
   res <- rbind(
@@ -65,12 +90,19 @@ push_store <- function(project = NULL, prune = FALSE, force = FALSE,
   )
   if (!dry_run) {
     now <- format(Sys.time(), '%Y-%m-%d %H:%M:%S', tz = 'UTC')
-    yaml::write_yaml(list(pushed_by = Sys.info()[['nodename']], pushed_at = now),
-                     file.path(loc$remote, 'sync_info.yaml'))
+    yaml::write_yaml(
+      list(pushed_by = Sys.info()[['nodename']], pushed_at = now),
+      file.path(loc$remote, 'sync_info.yaml')
+    )
     write_sync_info(loc$local_info, now)
   }
-  message(sprintf('[push_store] %s: %s files copied%s to %s', project, sum(res$action == 'copy'),
-                  if (prune) sprintf(', %s deleted', sum(res$action == 'delete')) else '', loc$remote))
+  message(sprintf(
+    '[push_store] %s: %s files copied%s to %s',
+    project,
+    sum(res$action == 'copy'),
+    if (prune) sprintf(', %s deleted', sum(res$action == 'delete')) else '',
+    loc$remote
+  ))
   invisible(res)
 }
 
@@ -93,8 +125,15 @@ pull_store <- function(project = NULL, prune = FALSE, dry_run = FALSE, config_di
     sync_folder(file.path(loc$remote, '_targets'), loc$store, prune = prune, dry_run = dry_run),
     sync_folder(file.path(loc$remote, 'outputs'), loc$outputs, prune = prune, dry_run = dry_run)
   )
-  if (!dry_run) write_sync_info(loc$local_info, format(Sys.time(), '%Y-%m-%d %H:%M:%S', tz = 'UTC'))
-  message(sprintf('[pull_store] %s: %s files copied from %s', project, sum(res$action == 'copy'), loc$remote))
+  if (!dry_run) {
+    write_sync_info(loc$local_info, format(Sys.time(), '%Y-%m-%d %H:%M:%S', tz = 'UTC'))
+  }
+  message(sprintf(
+    '[pull_store] %s: %s files copied from %s',
+    project,
+    sum(res$action == 'copy'),
+    loc$remote
+  ))
   invisible(res)
 }
 
@@ -107,11 +146,20 @@ store_locations <- function(project = NULL, config_dir = NULL) {
   ctx <- pipeline_context(project, config_dir)
   cfg <- ctx$cfg
   if (!nzchar(cfg$paths$shared %||% '')) {
-    stop('No shared folder set. Add `paths: shared: <folder>` to ', file.path(ctx$config_dir, 'local.yaml'), '.',
-         call. = FALSE)
+    stop(
+      'No shared folder set. Add `paths: shared: <folder>` to ',
+      file.path(ctx$config_dir, 'local.yaml'),
+      '.',
+      call. = FALSE
+    )
   }
   if (!dir.exists(cfg$paths$shared)) {
-    stop('Shared folder not found: ', cfg$paths$shared, ' (is Google Drive running?)', call. = FALSE)
+    stop(
+      'Shared folder not found: ',
+      cfg$paths$shared,
+      ' (is Google Drive running?)',
+      call. = FALSE
+    )
   }
   list(
     name = ctx$tar_project,
@@ -148,14 +196,21 @@ write_sync_info <- function(file, synced_at) {
 #' @noRd
 sync_folder <- function(from, to, prune = FALSE, dry_run = FALSE) {
   out <- data.table::data.table(file = character(), action = character())
-  if (!dir.exists(from)) return(out)
+  if (!dir.exists(from)) {
+    return(out)
+  }
   src <- list.files(from, recursive = TRUE, all.files = TRUE, no.. = TRUE)
-  dst <- if (dir.exists(to)) list.files(to, recursive = TRUE, all.files = TRUE, no.. = TRUE) else character()
+  dst <- if (dir.exists(to)) {
+    list.files(to, recursive = TRUE, all.files = TRUE, no.. = TRUE)
+  } else {
+    character()
+  }
 
   si <- file.info(file.path(from, src))
   di <- file.info(file.path(to, src))
   # cloud drives can round modification times, so allow 2 seconds
-  changed <- is.na(di$size) | si$size != di$size |
+  changed <- is.na(di$size) |
+    si$size != di$size |
     abs(as.numeric(si$mtime) - as.numeric(di$mtime)) > 2
   copy <- src[changed]
   copy <- c(copy[!startsWith(copy, 'meta/')], copy[startsWith(copy, 'meta/')])
@@ -169,7 +224,9 @@ sync_folder <- function(from, to, prune = FALSE, dry_run = FALSE) {
     }
     if (length(remove)) unlink(file.path(to, remove))
   }
-  rbind(out,
-        data.table::data.table(file = copy, action = rep('copy', length(copy))),
-        data.table::data.table(file = remove, action = rep('delete', length(remove))))
+  rbind(
+    out,
+    data.table::data.table(file = copy, action = rep('copy', length(copy))),
+    data.table::data.table(file = remove, action = rep('delete', length(remove)))
+  )
 }

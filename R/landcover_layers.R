@@ -33,11 +33,26 @@
 #' @return character. Files written, named `<prefix>_<class>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
 #' @export
-build_landcover_year <- function(sourceFile, year, classes, resolutions, window_m, templates, out_dir,
-                                 access = 'stream', cache = 'inputs', archiveFile = NULL) {
+build_landcover_year <- function(
+  sourceFile,
+  year,
+  classes,
+  resolutions,
+  window_m,
+  templates,
+  out_dir,
+  access = 'stream',
+  cache = 'inputs',
+  archiveFile = NULL
+) {
   reproducible::checkPath(out_dir, create = TRUE)
-  if (!is.null(archiveFile)) archiveFile <- fill_year(archiveFile, year)
-  warped <- warp_to_template(in_archive(raster_source(sourceFile, access, cache), archiveFile), templates[1])
+  if (!is.null(archiveFile)) {
+    archiveFile <- fill_year(archiveFile, year)
+  }
+  warped <- warp_to_template(
+    in_archive(raster_source(sourceFile, access, cache), archiveFile),
+    templates[1]
+  )
   on.exit(unlink(warped), add = TRUE)
 
   resolutions <- sort(unique(resolutions))
@@ -90,11 +105,18 @@ count_classes <- function(file, templates, res, codes) {
   nc <- terra::ncol(fine)
   ncc <- terra::ncol(coarse)
   K <- length(codes)
-  cc <- (seq_len(nc) - 1) %/% f + 1            # coarse column of each fine column
+  cc <- (seq_len(nc) - 1) %/% f + 1 # coarse column of each fine column
 
   out <- terra::rast(coarse, nlyrs = K + 1)
-  terra::readStart(lc); terra::readStart(fine)
-  on.exit({terra::readStop(lc); terra::readStop(fine)}, add = TRUE)
+  terra::readStart(lc)
+  terra::readStart(fine)
+  on.exit(
+    {
+      terra::readStop(lc)
+      terra::readStop(fine)
+    },
+    add = TRUE
+  )
   out_file <- tempfile(fileext = '.tif')
   b <- terra::writeStart(out, out_file, overwrite = TRUE, datatype = 'FLT4S')
   for (i in seq_len(terra::nrow(coarse))) {

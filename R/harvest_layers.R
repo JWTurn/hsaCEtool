@@ -43,8 +43,17 @@
 #' @return character. The files written, named `<prefix>_<metric>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
 #' @export
-build_harvest_layers <- function(history, metric, resolutions, years, recent_years, templates, out_dir,
-                                 prefix = 'harvest', margin = NULL) {
+build_harvest_layers <- function(
+  history,
+  metric,
+  resolutions,
+  years,
+  recent_years,
+  templates,
+  out_dir,
+  prefix = 'harvest',
+  margin = NULL
+) {
   metric <- match.arg(metric, c('year', 'pa', 'dens', 'dist'))
   reproducible::checkPath(out_dir, create = TRUE)
   fine <- terra::rast(templates[1])
@@ -56,7 +65,10 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
   grid <- if (is.null(margin)) fine else terra::rast(margin)
   off_row <- round((terra::ymax(grid) - terra::ymax(fine)) / base)
   off_col <- round((terra::xmin(fine) - terra::xmin(grid)) / base)
-  h[, `:=`(row = (cell - 1) %/% terra::ncol(grid) - off_row, col = (cell - 1) %% terra::ncol(grid) - off_col)]
+  h[, `:=`(
+    row = (cell - 1) %/% terra::ncol(grid) - off_row,
+    col = (cell - 1) %% terra::ncol(grid) - off_col
+  )]
   h_all <- h[, .(cell, year)]
   h <- h[row >= 0 & row < terra::nrow(fine) & col >= 0 & col < terra::ncol(fine)]
   if (!is.null(margin) && nrow(h)) {
@@ -78,7 +90,9 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
   files <- character()
   for (yr in years) {
     recent <- h[year <= yr & year > yr - recent_years]
-    if (metric == 'year') year_means <- harvest_year_means(h[year <= yr], coarse)
+    if (metric == 'year') {
+      year_means <- harvest_year_means(h[year <= yr], coarse)
+    }
     if (metric == 'dist') {
       dist <- harvest_distance(h_all[year <= yr & year > yr - recent_years]$cell, fine, grid)
       # mean at the finest resolution asked for; coarser ones from those means,
@@ -89,7 +103,13 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
       out <- file.path(out_dir, sprintf('%s_%s_%sm_%d.tif', prefix, metric, cc$res, yr))
       if (metric == 'dist') {
         if (is.null(dist)) {
-          terra::writeRaster(terra::init(cc$rast, NA), out, datatype = type, gdal = gdal_opts, overwrite = TRUE)
+          terra::writeRaster(
+            terra::init(cc$rast, NA),
+            out,
+            datatype = type,
+            gdal = gdal_opts,
+            overwrite = TRUE
+          )
         } else if (cc$res == coarse[[1]]$res) {
           terra::writeRaster(dist, out, datatype = type, gdal = gdal_opts, overwrite = TRUE)
         } else {
@@ -136,7 +156,9 @@ build_harvest_layers <- function(history, metric, resolutions, years, recent_yea
 harvest_year_means <- function(h, coarse) {
   out <- list()
   if (!nrow(h)) {
-    for (cc in coarse) out[[as.character(cc$res)]] <- data.table::data.table(cell = numeric(), v = numeric())
+    for (cc in coarse) {
+      out[[as.character(cc$res)]] <- data.table::data.table(cell = numeric(), v = numeric())
+    }
     return(out)
   }
   # each 30 m cell's most recent year, then the mean of those at the finest resolution
@@ -151,10 +173,20 @@ harvest_year_means <- function(h, coarse) {
     cc <- coarse[[k]]
     step <- round(cc$res / fr$res)
     if (abs(cc$res / fr$res - step) > 1e-8) {
-      stop('harvest and fire year: ', cc$res, ' m is not a whole multiple of ', fr$res, ' m', call. = FALSE)
+      stop(
+        'harvest and fire year: ',
+        cc$res,
+        ' m is not a whole multiple of ',
+        fr$res,
+        ' m',
+        call. = FALSE
+      )
     }
     nc <- terra::ncol(fr$rast)
-    prev <- prev[, .(cell = ((cell - 1) %/% nc %/% step) * terra::ncol(cc$rast) + (cell - 1) %% nc %/% step + 1, v)]
+    prev <- prev[, .(
+      cell = ((cell - 1) %/% nc %/% step) * terra::ncol(cc$rast) + (cell - 1) %% nc %/% step + 1,
+      v
+    )]
     prev <- prev[, .(v = mean(v)), by = cell]
     out[[as.character(cc$res)]] <- prev
   }
@@ -170,7 +202,9 @@ harvest_year_means <- function(h, coarse) {
 #' @keywords internal
 #' @noRd
 harvest_distance <- function(cells, fine, grid = fine) {
-  if (length(cells) == 0) return(NULL)
+  if (length(cells) == 0) {
+    return(NULL)
+  }
   tmp <- tempfile(fileext = c('.tif', '.tif', '.tif'))
   on.exit(unlink(tmp), add = TRUE)
   pts <- terra::xyFromCell(grid, unique(cells))
@@ -197,7 +231,9 @@ pick_layer_files <- function(files, prefix, res, first_year, last_year, fill = F
   if (is.na(first_year)) {
     want <- sprintf('%s_%sm.tif', prefix, res)
     found <- files[match(want, basename(files))]
-    if (is.na(found)) stop('Not built: ', want, call. = FALSE)
+    if (is.na(found)) {
+      stop('Not built: ', want, call. = FALSE)
+    }
     return(found)
   }
   if (isTRUE(fill)) {
@@ -205,14 +241,26 @@ pick_layer_files <- function(files, prefix, res, first_year, last_year, fill = F
     mine <- files[grepl(pat, basename(files))]
     built <- as.integer(sub(pat, '\\1', basename(mine)))
     years <- first_year:last_year
-    use <- purrr::map_int(years, function(y) if (any(built <= y)) max(built[built <= y]) else NA_integer_)
+    use <- purrr::map_int(years, function(y) {
+      if (any(built <= y)) max(built[built <= y]) else NA_integer_
+    })
     if (anyNA(use)) {
-      stop('Not built: ', prefix, ' at ', res, ' m for ', paste(years[is.na(use)], collapse = ', '), call. = FALSE)
+      stop(
+        'Not built: ',
+        prefix,
+        ' at ',
+        res,
+        ' m for ',
+        paste(years[is.na(use)], collapse = ', '),
+        call. = FALSE
+      )
     }
     return(mine[match(use, built)])
   }
   want <- sprintf('%s_%sm_%d.tif', prefix, res, first_year:last_year)
   found <- files[match(want, basename(files))]
-  if (anyNA(found)) stop('Not built: ', paste(want[is.na(found)], collapse = ', '), call. = FALSE)
+  if (anyNA(found)) {
+    stop('Not built: ', paste(want[is.na(found)], collapse = ', '), call. = FALSE)
+  }
   found
 }

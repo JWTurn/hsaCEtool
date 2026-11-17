@@ -29,11 +29,18 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
   paths <- file.path(dir, files)
   missing <- !file.exists(paths)
   if (any(missing)) {
-    stop('Not in the download from ', url, ': ', paste(files[missing], collapse = ', '), call. = FALSE)
+    stop(
+      'Not in the download from ',
+      url,
+      ': ',
+      paste(files[missing], collapse = ', '),
+      call. = FALSE
+    )
   }
   shp <- tolower(tools::file_ext(paths)) == 'shp'
-  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths[shp]),
-                                             function(b) paste0(b, c('.shx', '.dbf', '.prj', '.cpg')))))
+  sidecars <- as.character(unlist(purrr::map(tools::file_path_sans_ext(paths[shp]), function(b) {
+    paste0(b, c('.shx', '.dbf', '.prj', '.cpg'))
+  })))
   c(paths, sidecars[file.exists(sidecars)])
 }
 
@@ -66,38 +73,84 @@ download_disturbance <- function(url, files, dir, refresh = FALSE) {
 prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
   reproducible::checkPath(dirname(out), create = TRUE)
   e <- unname(as.vector(terra::ext(terra::rast(template))))
-  box <- sf::st_as_sfc(sf::st_bbox(c(xmin = e[1], ymin = e[3], xmax = e[2], ymax = e[4]), crs = sf::st_crs(crs)))
+  box <- sf::st_as_sfc(sf::st_bbox(
+    c(xmin = e[1], ymin = e[3], xmax = e[2], ymax = e[4]),
+    crs = sf::st_crs(crs)
+  ))
   # extra columns kept from the source (files' keep:), blank for files without them
   extra <- unique(unlist(purrr::map(src$files, function(f) f$keep)))
   parts <- purrr::map(src$files, function(fs) {
     path <- files[basename(files) == fs$file]
-    if (length(path) != 1) stop(fs$file, ' was not downloaded', call. = FALSE)
+    if (length(path) != 1) {
+      stop(fs$file, ' was not downloaded', call. = FALSE)
+    }
     lyr <- sf::st_layers(path)
     geom <- tolower(lyr$geomtype[[1]][1])
     # read curved geometries (e.g. MULTISURFACE) as ordinary lines or polygons
-    type <- if (grepl('polygon|surface', geom)) 6 else if (grepl('line|curve', geom)) 5 else 0
+    type <- if (grepl('polygon|surface', geom)) {
+      6
+    } else if (grepl('line|curve', geom)) {
+      5
+    } else {
+      0
+    }
     src_crs <- fs$crs %||% src$crs %||% lyr$crs[[1]]
     area <- sf::st_transform(sf::st_segmentize(box, 1000), src_crs)
-    x <- sf::st_read(path, layer = lyr$name[1], wkt_filter = sf::st_as_text(area), type = type, quiet = TRUE)
-    if (is.na(sf::st_crs(x))) sf::st_crs(x) <- src_crs
+    x <- sf::st_read(
+      path,
+      layer = lyr$name[1],
+      wkt_filter = sf::st_as_text(area),
+      type = type,
+      quiet = TRUE
+    )
+    if (is.na(sf::st_crs(x))) {
+      sf::st_crs(x) <- src_crs
+    }
     d <- data.table::as.data.table(sf::st_drop_geometry(x))
-    if (!is.null(fs$lookup)) d <- add_lookup(d, fs$lookup, lookups, fs$file)
+    if (!is.null(fs$lookup)) {
+      d <- add_lookup(d, fs$lookup, lookups, fs$file)
+    }
     category <- disturbance_category(d, fs)
     subtype <- disturbance_subtype(d, fs, attr(category, 'rule'))
     year <- feature_year(d, unlist(fs$year), fs$file)
     geom <- sf::st_transform(sf::st_geometry(x), crs)
     full <- !sf::st_is_empty(geom)
     keep <- !is.na(category) & category != 'drop' & full
-    feats <- sf::st_sf(category = category[keep], subtype = subtype[keep], year = year[keep],
-                       file = rep(fs$file, sum(keep)), geometry = geom[keep])
-    for (k in extra) feats[[k]] <- if (k %in% names(d)) as.character(d[[k]])[keep] else rep(NA_character_, sum(keep))
-    list(features = feats,
-         summary = summarize_feature_types(d[full], fs, category[full], year[full], geom[full], subtype[full]))
+    feats <- sf::st_sf(
+      category = category[keep],
+      subtype = subtype[keep],
+      year = year[keep],
+      file = rep(fs$file, sum(keep)),
+      geometry = geom[keep]
+    )
+    for (k in extra) {
+      feats[[k]] <- if (k %in% names(d)) {
+        as.character(d[[k]])[keep]
+      } else {
+        rep(NA_character_, sum(keep))
+      }
+    }
+    list(
+      features = feats,
+      summary = summarize_feature_types(
+        d[full],
+        fs,
+        category[full],
+        year[full],
+        geom[full],
+        subtype[full]
+      )
+    )
   })
   feats <- purrr::reduce(purrr::map(parts, 'features'), rbind)
   unlink(out)
   sf::st_write(feats, out, layer = 'disturbance', quiet = TRUE)
-  sf::st_write(data.table::rbindlist(purrr::map(parts, 'summary')), out, layer = 'summary', quiet = TRUE)
+  sf::st_write(
+    data.table::rbindlist(purrr::map(parts, 'summary')),
+    out,
+    layer = 'summary',
+    quiet = TRUE
+  )
   out
 }
 
@@ -120,24 +173,45 @@ prep_disturbance_features <- function(files, src, lookups, template, crs, out) {
 #'   `last_year` built.
 #' @keywords internal
 #' @noRd
-summarize_feature_types <- function(d, fs, category, year, geom, subtype = rep(NA_character_, nrow(d))) {
+summarize_feature_types <- function(
+  d,
+  fs,
+  category,
+  year,
+  geom,
+  subtype = rep(NA_character_, nrow(d))
+) {
   fields <- unique(unlist(purrr::map(fs$rules, function(r) c(names(r$where), names(r$match)))))
   type <- if (length(fields)) {
-    purrr::reduce(purrr::map(fields, function(f) paste0(f, '=', trimws(as.character(d[[f]])))),
-                  paste, sep = '; ')
-  } else rep(NA_character_, nrow(d))
+    purrr::reduce(
+      purrr::map(fields, function(f) paste0(f, '=', trimws(as.character(d[[f]])))),
+      paste,
+      sep = '; '
+    )
+  } else {
+    rep(NA_character_, nrow(d))
+  }
   dt <- data.table::data.table(
-    file = rep(fs$file, nrow(d)), type = type,
-    category = data.table::fifelse(is.na(category), 'none (left out)', category), subtype = subtype,
-    year = year, dim = sf::st_dimension(geom),
-    len = as.numeric(sf::st_length(geom)), area = as.numeric(sf::st_area(geom)))
-  dt[, .(features = .N,
-         length_km = if (any(dim == 1)) round(sum(len[dim == 1]) / 1000, 2) else NA_real_,
-         area_km2 = if (any(dim == 2)) round(sum(area[dim == 2]) / 1e6, 2) else NA_real_,
-         no_year = sum(is.na(year)),
-         first_year = if (all(is.na(year))) NA_integer_ else min(year, na.rm = TRUE),
-         last_year = if (all(is.na(year))) NA_integer_ else max(year, na.rm = TRUE)),
-     by = .(file, type, category, subtype)][order(file, category, subtype, type)]
+    file = rep(fs$file, nrow(d)),
+    type = type,
+    category = data.table::fifelse(is.na(category), 'none (left out)', category),
+    subtype = subtype,
+    year = year,
+    dim = sf::st_dimension(geom),
+    len = as.numeric(sf::st_length(geom)),
+    area = as.numeric(sf::st_area(geom))
+  )
+  dt[,
+    .(
+      features = .N,
+      length_km = if (any(dim == 1)) round(sum(len[dim == 1]) / 1000, 2) else NA_real_,
+      area_km2 = if (any(dim == 2)) round(sum(area[dim == 2]) / 1e6, 2) else NA_real_,
+      no_year = sum(is.na(year)),
+      first_year = if (all(is.na(year))) NA_integer_ else min(year, na.rm = TRUE),
+      last_year = if (all(is.na(year))) NA_integer_ else max(year, na.rm = TRUE)
+    ),
+    by = .(file, type, category, subtype)
+  ][order(file, category, subtype, type)]
 }
 
 #' @title Table of the features of each type that went into each category, all sources
@@ -150,7 +224,11 @@ summarize_feature_types <- function(d, fs, category, year, geom, subtype = rep(N
 #' @export
 summarize_disturbance <- function(features) {
   data.table::rbindlist(purrr::map(features, function(f) {
-    s <- data.table::as.data.table(suppressWarnings(sf::st_read(f, layer = 'summary', quiet = TRUE)))
+    s <- data.table::as.data.table(suppressWarnings(sf::st_read(
+      f,
+      layer = 'summary',
+      quiet = TRUE
+    )))
     s[, source := sub('^features_(.*)\\.gpkg$', '\\1', basename(f))]
     data.table::setcolorder(s, 'source')
   }))
@@ -180,14 +258,19 @@ combine_disturbance_features <- function(features, cb, out_dir) {
   })
   cols <- unique(unlist(purrr::map(x, function(s) setdiff(names(s), attr(s, 'sf_column')))))
   x <- purrr::map(x, function(s) {
-    for (k in setdiff(cols, names(s))) s[[k]] <- NA_character_
+    for (k in setdiff(cols, names(s))) {
+      s[[k]] <- NA_character_
+    }
     s[, cols]
   })
   x <- purrr::reduce(x, rbind)
   first <- c('region', 'source', 'file', 'category', 'subtype', 'year')
   x <- x[, c(first, setdiff(cols, first))]
   dim <- sf::st_dimension(x)
-  files <- file.path(out_dir, c(cb$files$lines %||% 'combined_linear.gpkg', cb$files$areal %||% 'combined_areal.gpkg'))
+  files <- file.path(
+    out_dir,
+    c(cb$files$lines %||% 'combined_linear.gpkg', cb$files$areal %||% 'combined_areal.gpkg')
+  )
   unlink(files)
   sf::st_write(x[dim %in% 1, ], files[1], layer = 'linear', quiet = TRUE)
   sf::st_write(x[dim %in% 2, ], files[2], layer = 'areal', quiet = TRUE)
@@ -213,21 +296,46 @@ upload_combined_disturbance <- function(project = NULL, config_dir = NULL) {
   cfg <- ctx$cfg
   cb <- cfg$landscape$disturbance$combined
   if (is.null(cb$upload_folder)) {
-    stop('Set landscape: disturbance: combined: upload_folder: in ', file.path(ctx$config_dir, project), '.yaml',
-         call. = FALSE)
+    stop(
+      'Set landscape: disturbance: combined: upload_folder: in ',
+      file.path(ctx$config_dir, project),
+      '.yaml',
+      call. = FALSE
+    )
   }
-  if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
-  files <- file.path(cfg$paths$outputs, project, 'derived', 'combined', c(cb$files$lines, cb$files$areal))
-  if (!all(file.exists(files))) stop('Not found (run the pipeline first): ', paste(files[!file.exists(files)], collapse = ', '),
-                                     call. = FALSE)
-  up <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'derived', 'combined', 'upload'), create = TRUE)
+  if (!is.null(cfg$run$google_email)) {
+    options(gargle_oauth_email = cfg$run$google_email)
+  }
+  files <- file.path(
+    cfg$paths$outputs,
+    project,
+    'derived',
+    'combined',
+    c(cb$files$lines, cb$files$areal)
+  )
+  if (!all(file.exists(files))) {
+    stop(
+      'Not found (run the pipeline first): ',
+      paste(files[!file.exists(files)], collapse = ', '),
+      call. = FALSE
+    )
+  }
+  up <- reproducible::checkPath(
+    file.path(cfg$paths$outputs, project, 'derived', 'combined', 'upload'),
+    create = TRUE
+  )
   zips <- file.path(up, sub('[.]gpkg$', '.zip', basename(files)))
   for (i in seq_along(files)) {
-    if (file.exists(zips[i])) file.remove(zips[i])
+    if (file.exists(zips[i])) {
+      file.remove(zips[i])
+    }
     utils::zip(zips[i], files[i], flags = '-jq')
   }
-  upload_to_drive(zips, cb$upload_folder,
-                  'The combined disturbance folder is shared with anyone with the link; the Yukon work packages are not public. Restrict it first.')
+  upload_to_drive(
+    zips,
+    cb$upload_folder,
+    'The combined disturbance folder is shared with anyone with the link; the Yukon work packages are not public. Restrict it first.'
+  )
 }
 
 #' @title Write the disturbance summary table
@@ -254,8 +362,12 @@ write_disturbance_summary <- function(summary, out_dir) {
 #' @noRd
 add_lookup <- function(d, lookup, lookups, file) {
   tf <- lookups[[lookup$table]]
-  if (is.null(tf)) stop(file, ': no lookup table "', lookup$table, '"', call. = FALSE)
-  if (grepl('[.]xlsx?$', tf, ignore.case = TRUE)) rlang::check_installed('readxl', reason = 'to read xlsx lookup tables.')
+  if (is.null(tf)) {
+    stop(file, ': no lookup table "', lookup$table, '"', call. = FALSE)
+  }
+  if (grepl('[.]xlsx?$', tf, ignore.case = TRUE)) {
+    rlang::check_installed('readxl', reason = 'to read xlsx lookup tables.')
+  }
   tab <- if (grepl('[.]xlsx?$', tf, ignore.case = TRUE)) {
     data.table::as.data.table(readxl::read_excel(tf, sheet = lookup$sheet %||% 1))
   } else {
@@ -264,9 +376,13 @@ add_lookup <- function(d, lookup, lookups, file) {
   by <- unlist(lookup$by)
   add <- unlist(lookup$add)
   miss <- setdiff(c(by, add), names(tab))
-  if (length(miss)) stop('Lookup ', lookup$table, ' has no column(s) ', paste(miss, collapse = ', '), call. = FALSE)
+  if (length(miss)) {
+    stop('Lookup ', lookup$table, ' has no column(s) ', paste(miss, collapse = ', '), call. = FALSE)
+  }
   miss <- setdiff(names(by), names(d))
-  if (length(miss)) stop(file, ' has no field(s) ', paste(miss, collapse = ', '), call. = FALSE)
+  if (length(miss)) {
+    stop(file, ' has no field(s) ', paste(miss, collapse = ', '), call. = FALSE)
+  }
   tab <- unique(tab[, c(by, add), with = FALSE])
   data.table::setnames(tab, by, names(by))
   for (k in names(by)) {
@@ -275,15 +391,31 @@ add_lookup <- function(d, lookup, lookups, file) {
   }
   dup <- tab[, .N, by = c(names(by))][N > 1]
   if (nrow(dup)) {
-    stop('Lookup ', lookup$table, ' gives more than one row for: ',
-         paste(purrr::pmap_chr(dup[, names(by), with = FALSE], paste, sep = ' / '), collapse = '; '), call. = FALSE)
+    stop(
+      'Lookup ',
+      lookup$table,
+      ' gives more than one row for: ',
+      paste(purrr::pmap_chr(dup[, names(by), with = FALSE], paste, sep = ' / '), collapse = '; '),
+      call. = FALSE
+    )
   }
   d <- tab[d, on = names(by)]
   unmatched <- d[is.na(get(add[1])), .N, by = c(names(by))]
   if (nrow(unmatched)) {
-    warning(file, ': types not in lookup ', lookup$table, ' (sorted by the other rules): ',
-            paste0(purrr::pmap_chr(unmatched[, names(by), with = FALSE], paste, sep = ' / '),
-                   ' (', unmatched$N, ')', collapse = '; '), call. = FALSE)
+    warning(
+      file,
+      ': types not in lookup ',
+      lookup$table,
+      ' (sorted by the other rules): ',
+      paste0(
+        purrr::pmap_chr(unmatched[, names(by), with = FALSE], paste, sep = ' / '),
+        ' (',
+        unmatched$N,
+        ')',
+        collapse = '; '
+      ),
+      call. = FALSE
+    )
   }
   d
 }
@@ -302,14 +434,18 @@ add_lookup <- function(d, lookup, lookups, file) {
 #' @keywords internal
 #' @noRd
 disturbance_category <- function(d, fs) {
-  if (!is.null(fs$category)) return(structure(rep(fs$category, nrow(d)), rule = rep(NA_integer_, nrow(d))))
+  if (!is.null(fs$category)) {
+    return(structure(rep(fs$category, nrow(d)), rule = rep(NA_integer_, nrow(d))))
+  }
   out <- rep(NA_character_, nrow(d))
   which_rule <- rep(NA_integer_, nrow(d))
   for (k in seq_along(fs$rules)) {
     rule <- fs$rules[[k]]
     hit <- is.na(out)
     for (f in c(names(rule$where), names(rule$match))) {
-      if (!f %in% names(d)) stop(fs$file, ': no field "', f, '" for the rule giving ', rule$category, call. = FALSE)
+      if (!f %in% names(d)) {
+        stop(fs$file, ': no field "', f, '" for the rule giving ', rule$category, call. = FALSE)
+      }
     }
     for (f in names(rule$where)) {
       v <- trimws(as.character(d[[f]]))
@@ -322,7 +458,15 @@ disturbance_category <- function(d, fs) {
     out[hit] <- rule$category
     which_rule[hit] <- k
   }
-  if (anyNA(out)) warning(fs$file, ': ', sum(is.na(out)), ' features match no rule and are left out', call. = FALSE)
+  if (anyNA(out)) {
+    warning(
+      fs$file,
+      ': ',
+      sum(is.na(out)),
+      ' features match no rule and are left out',
+      call. = FALSE
+    )
+  }
   structure(out, rule = which_rule)
 }
 
@@ -343,10 +487,14 @@ disturbance_subtype <- function(d, fs, rule) {
   # [[ ]], not $: $ would also match subtype_field when looking for subtype
   field <- fs[['subtype_field']]
   if (!is.null(field)) {
-    if (!field %in% names(d)) stop(fs$file, ': no subtype_field "', field, '"', call. = FALSE)
+    if (!field %in% names(d)) {
+      stop(fs$file, ': no subtype_field "', field, '"', call. = FALSE)
+    }
     out <- as.character(d[[field]])
   }
-  if (!is.null(fs[['subtype']])) out[] <- fs[['subtype']]
+  if (!is.null(fs[['subtype']])) {
+    out[] <- fs[['subtype']]
+  }
   if (length(fs$rules) && length(rule)) {
     rt <- purrr::map_chr(fs$rules, function(r) r[['subtype']] %||% NA_character_)
     from_rule <- !is.na(rule) & !is.na(rt[rule])
@@ -367,7 +515,9 @@ disturbance_subtype <- function(d, fs, rule) {
 feature_year <- function(d, fields, file = '') {
   yr <- rep(NA_integer_, nrow(d))
   for (f in fields) {
-    if (!f %in% names(d)) stop(file, ': no year field "', f, '"', call. = FALSE)
+    if (!f %in% names(d)) {
+      stop(file, ': no year field "', f, '"', call. = FALSE)
+    }
     v <- d[[f]]
     s <- trimws(if (inherits(v, c('Date', 'POSIXt'))) format(v, '%Y') else as.character(v))
     y <- suppressWarnings(as.integer(ifelse(grepl('^[0-9]{4}', s), substr(s, 1, 4), NA)))
@@ -394,8 +544,13 @@ disturbance_cells <- function(features, category, template) {
   empty <- data.table::data.table(cell = numeric(), year = integer())
   q <- sprintf("SELECT * FROM disturbance WHERE category = '%s'", gsub("'", "''", category))
   # only the year is needed (sources can keep different extra columns)
-  x <- purrr::reduce(purrr::map(features, function(f) sf::st_read(f, query = q, quiet = TRUE)[, 'year']), rbind)
-  if (nrow(x) == 0) return(empty)
+  x <- purrr::reduce(
+    purrr::map(features, function(f) sf::st_read(f, query = q, quiet = TRUE)[, 'year']),
+    rbind
+  )
+  if (nrow(x) == 0) {
+    return(empty)
+  }
   # burn the year (1 = no year), earliest last so that it is the one kept
   x$burn <- ifelse(is.na(x$year), 1L, x$year)
   x <- x[order(-x$burn), 'burn']
@@ -406,12 +561,40 @@ disturbance_cells <- function(features, category, template) {
   tr <- terra::rast(template)
   e <- as.vector(terra::ext(tr))
   # gdal_rasterize streams to disk, so very large grids are fine
-  sf::gdal_utils('rasterize', vec, ras, options = c(
-    '-l', 'f', '-a', 'burn', '-at', '-te', e[1], e[3], e[2], e[4], '-tr', terra::res(tr),
-    '-ot', 'UInt16', '-init', '0', '-a_nodata', '0', '-co', 'COMPRESS=DEFLATE', '-co', 'TILED=YES'))
+  sf::gdal_utils(
+    'rasterize',
+    vec,
+    ras,
+    options = c(
+      '-l',
+      'f',
+      '-a',
+      'burn',
+      '-at',
+      '-te',
+      e[1],
+      e[3],
+      e[2],
+      e[4],
+      '-tr',
+      terra::res(tr),
+      '-ot',
+      'UInt16',
+      '-init',
+      '0',
+      '-a_nodata',
+      '0',
+      '-co',
+      'COMPRESS=DEFLATE',
+      '-co',
+      'TILED=YES'
+    )
+  )
   r <- terra::rast(ras)
   cells <- terra::cells(r)
-  if (length(cells) == 0) return(empty)
+  if (length(cells) == 0) {
+    return(empty)
+  }
   burn <- terra::extract(r, cells)[[1]]
   data.table::data.table(cell = as.numeric(cells), year = as.integer(ifelse(burn == 1, 0L, burn)))
 }
@@ -449,8 +632,16 @@ disturbance_years <- function(history, first_year, last_year) {
 #' @return character. The files written, named `<prefix>_<metric>_<res>m_<year>.tif`.
 #' @author Julie W. Turner
 #' @export
-build_disturbance_layers <- function(history, metric, resolutions, years, templates, out_dir, prefix, margin) {
+build_disturbance_layers <- function(
+  history,
+  metric,
+  resolutions,
+  years,
+  templates,
+  out_dir,
+  prefix,
+  margin
+) {
   metric <- match.arg(metric, c('pa', 'dens', 'dist'))
   build_harvest_layers(history, metric, resolutions, years, Inf, templates, out_dir, prefix, margin)
 }
-

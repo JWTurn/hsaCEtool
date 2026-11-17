@@ -31,8 +31,13 @@
 #' @return Named list of settings.
 #' @author Julie W. Turner
 #' @export
-read_config <- function(project, config_dir = 'config', defaults = system.file('config', 'default.yaml', package = 'hsaCEtool'),
-                        shared = NULL, project_file = NULL) {
+read_config <- function(
+  project,
+  config_dir = 'config',
+  defaults = system.file('config', 'default.yaml', package = 'hsaCEtool'),
+  shared = NULL,
+  project_file = NULL
+) {
   if (!nzchar(project)) {
     stop('No project chosen. Set one first, e.g. Sys.setenv(TAR_PROJECT = "NMC")')
   }
@@ -47,12 +52,19 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   dflt <- file.path(config_dir, 'default.yaml')
   used <- normalizePath(c(project_file, shared), mustWork = FALSE)
   if (file.exists(dflt) && !normalizePath(dflt) %in% used) {
-    warning(file.path(config_dir, 'default.yaml'), ' is not read: the defaults come from the hsaCEtool package. ',
-            'Put settings that differ in ', project_file, call. = FALSE)
+    warning(
+      file.path(config_dir, 'default.yaml'),
+      ' is not read: the defaults come from the hsaCEtool package. ',
+      'Put settings that differ in ',
+      project_file,
+      call. = FALSE
+    )
   }
   cfg <- read_settings_file(defaults)
   for (f in shared) {
-    if (!file.exists(f)) stop('Shared settings file not found: ', f, call. = FALSE)
+    if (!file.exists(f)) {
+      stop('Shared settings file not found: ', f, call. = FALSE)
+    }
     cfg <- merge_config(cfg, read_settings_file(f))
   }
   cfg <- merge_config(cfg, read_settings_file(project_file))
@@ -73,7 +85,10 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
   }
   pts_file <- cfg$locations$cleaning$params$exclude_points
   if (is.character(pts_file) && length(pts_file) == 1) {
-    cfg$locations$cleaning$params$exclude_points <- read_exclude_points(file.path(config_dir, pts_file))
+    cfg$locations$cleaning$params$exclude_points <- read_exclude_points(file.path(
+      config_dir,
+      pts_file
+    ))
   }
   if (length(cfg$landscape$disturbance$sources)) {
     cfg$landscape$disturbance <- apply_disturbance_crosswalks(cfg$landscape$disturbance, config_dir)
@@ -113,14 +128,17 @@ read_config <- function(project, config_dir = 'config', defaults = system.file('
 #' @keywords internal
 #' @noRd
 read_settings_file <- function(file) {
-  yaml::read_yaml(file, handlers = list(
-    'bool#yes' = function(x) if (x %in% c('y', 'Y')) x else TRUE,
-    'bool#no' = function(x) if (x %in% c('n', 'N')) x else FALSE,
-    'int' = function(x) {
-      i <- suppressWarnings(as.integer(x))
-      if (is.na(i)) as.numeric(x) else i
-    }
-  ))
+  yaml::read_yaml(
+    file,
+    handlers = list(
+      'bool#yes' = function(x) if (x %in% c('y', 'Y')) x else TRUE,
+      'bool#no' = function(x) if (x %in% c('n', 'N')) x else FALSE,
+      'int' = function(x) {
+        i <- suppressWarnings(as.integer(x))
+        if (is.na(i)) as.numeric(x) else i
+      }
+    )
+  )
 }
 
 #' @title Combine two sets of settings
@@ -132,7 +150,9 @@ read_settings_file <- function(file) {
 #' @keywords internal
 #' @noRd
 merge_config <- function(x, y) {
-  is_section <- function(l) is.list(l) && length(l) > 0 && !is.null(names(l)) && all(nzchar(names(l)))
+  is_section <- function(l) {
+    is.list(l) && length(l) > 0 && !is.null(names(l)) && all(nzchar(names(l)))
+  }
   for (nm in names(y)) {
     if (is_section(x[[nm]]) && is_section(y[[nm]])) {
       x[[nm]] <- merge_config(x[[nm]], y[[nm]])
@@ -190,14 +210,19 @@ check_config <- function(cfg) {
   src_nms <- purrr::imap_chr(cfg$locations$sources, function(src, i) source_target_name(src, i))
   dup <- unique(src_nms[duplicated(src_nms)])
   if (length(dup)) {
-    add('locations: sources: two sources have the same name (after replacing characters other than ',
-        'letters, digits and _): ', paste(sub('locations_source_', '', dup, fixed = TRUE), collapse = ', '))
+    add(
+      'locations: sources: two sources have the same name (after replacing characters other than ',
+      'letters, digits and _): ',
+      paste(sub('locations_source_', '', dup, fixed = TRUE), collapse = ', ')
+    )
   }
 
   # cleaning steps must exist
   for (step in unlist(cfg$locations$cleaning$steps)) {
-    if (is.null(cfg$locations$cleaning$custom[[step]]) &&
-        !exists(paste0('clean_', step), mode = 'function')) {
+    if (
+      is.null(cfg$locations$cleaning$custom[[step]]) &&
+        !exists(paste0('clean_', step), mode = 'function')
+    ) {
       add('locations: cleaning: unknown step "', step, '"')
     }
   }
@@ -213,65 +238,117 @@ check_config <- function(cfg) {
   if (!is.null(sa_add)) {
     if (sum(!is.null(sa_add$path), !is.null(sa_add$url), !is.null(sa_add[['target']])) != 1) {
       add('locations: study_area: add: give one of a path, a url or a target')
-    } else if (!is.null(sa_add[['target']]) &&
-               !(is.character(sa_add[['target']]) && length(sa_add[['target']]) == 1 &&
-                 make.names(sa_add[['target']]) == sa_add[['target']])) {
+    } else if (
+      !is.null(sa_add[['target']]) &&
+        !(is.character(sa_add[['target']]) &&
+          length(sa_add[['target']]) == 1 &&
+          make.names(sa_add[['target']]) == sa_add[['target']])
+    ) {
       add('locations: study_area: add: target must be the name of one target')
     }
     if (!is.null(cfg$locations$study_area$source)) {
-      add('locations: study_area: add: is used only when the study area is built from the fixes, ',
-          'not with study_area: source:')
+      add(
+        'locations: study_area: add: is used only when the study area is built from the fixes, ',
+        'not with study_area: source:'
+      )
     }
   }
 
   if (!cfg$locations$crop_method %in% c('bbox', 'within')) {
     add('locations: crop_method must be "bbox" or "within"')
   }
-  if (length(cfg$tracks$min_year) && length(cfg$tracks$max_year) && cfg$tracks$min_year > cfg$tracks$max_year) {
+  if (
+    length(cfg$tracks$min_year) &&
+      length(cfg$tracks$max_year) &&
+      cfg$tracks$min_year > cfg$tracks$max_year
+  ) {
     add('tracks: min_year is after max_year')
   }
   if (!cfg$landscape$access %in% c('stream', 'download')) {
     add('landscape: access must be "stream" or "download"')
   }
   if (!is.null(cfg$layers)) {
-    builds <- c('harvest_year', 'harvest_pa', 'harvest_dens', 'harvest_dist', 'landcover', 'landcover_cell',
-                'disturb_dist', 'disturb_pa', 'disturb_dens', 'elevation', 'northness',
-                'fire_year', 'fire_pa', 'fire_dens', 'fire_dist', 'forest_age')
+    builds <- c(
+      'harvest_year',
+      'harvest_pa',
+      'harvest_dens',
+      'harvest_dist',
+      'landcover',
+      'landcover_cell',
+      'disturb_dist',
+      'disturb_pa',
+      'disturb_dens',
+      'elevation',
+      'northness',
+      'fire_year',
+      'fire_pa',
+      'fire_dens',
+      'fire_dist',
+      'forest_age'
+    )
     built <- cfg$layers[!is.na(build)]
     bad <- built[!build %in% builds]$name
     if (length(bad)) {
-      add('layer table: unknown build for ', paste(bad, collapse = ', '),
-          ' (available: ', paste(builds, collapse = ', '), ')')
+      add(
+        'layer table: unknown build for ',
+        paste(bad, collapse = ', '),
+        ' (available: ',
+        paste(builds, collapse = ', '),
+        ')'
+      )
     }
     res_ok <- cfg$landscape$template$base_res * unlist(cfg$landscape$template$factors)
     bad <- built[!resolution %in% res_ok]$name
     if (length(bad)) {
-      add('layer table: built layers need a resolution of ', paste(res_ok, collapse = ', '),
-          ' m (landscape: template: base_res x factors): ', paste(bad, collapse = ', '))
+      add(
+        'layer table: built layers need a resolution of ',
+        paste(res_ok, collapse = ', '),
+        ' m (landscape: template: base_res x factors): ',
+        paste(bad, collapse = ', ')
+      )
     }
     lc <- built[build %in% c('landcover', 'landcover_cell')]
     if (nrow(lc)) {
       lcs <- cfg$landscape$landcover
       src <- lcs[[lcs$source %||% '']]
       if (is.null(src)) {
-        add('landscape: landcover: source "', lcs$source, '" has no settings (e.g. scanfi or ntems)')
+        add(
+          'landscape: landcover: source "',
+          lcs$source,
+          '" has no settings (e.g. scanfi or ntems)'
+        )
       } else {
         bad <- lc[!class %in% unlist(src$classes)]$name
         if (length(bad)) {
-          add('layer table: class not in landscape: landcover: ', lcs$source, ': classes: ',
-              paste(bad, collapse = ', '))
+          add(
+            'layer table: class not in landscape: landcover: ',
+            lcs$source,
+            ': classes: ',
+            paste(bad, collapse = ', ')
+          )
         }
         fy <- fill_years(lc$first_year, cfg$tracks$min_year %||% NA)
         ly <- fill_years(lc$last_year, cfg$tracks$max_year %||% NA)
         bad <- lc$name[(!is.na(fy) & fy < src$first_year) | (!is.na(ly) & ly > src$last_year)]
         if (length(bad)) {
-          add('layer table: ', lcs$source, ' land cover covers ', src$first_year, '-', src$last_year,
-              ' only: ', paste(bad, collapse = ', '))
+          add(
+            'layer table: ',
+            lcs$source,
+            ' land cover covers ',
+            src$first_year,
+            '-',
+            src$last_year,
+            ' only: ',
+            paste(bad, collapse = ', ')
+          )
         }
       }
       bad <- setdiff(names(lcs$window_m), as.character(res_ok))
       if (length(bad)) {
-        add('landscape: landcover: window_m has resolutions without a template: ', paste(bad, collapse = ', '))
+        add(
+          'landscape: landcover: window_m has resolutions without a template: ',
+          paste(bad, collapse = ', ')
+        )
       }
     }
     if (any(built$build %in% c('elevation', 'northness'))) {
@@ -279,19 +356,33 @@ check_config <- function(cfg) {
       if (!identical(tc$source, 'mrdem') && !is.list(tc$source)) {
         add('landscape: terrain: source must be mrdem or a source (path or url)')
       }
-      if (!tc$northness %in% c('fine', 'coarse')) add('landscape: terrain: northness must be "fine" or "coarse"')
-      if (!tc$access %in% c('stream', 'download')) add('landscape: terrain: access must be "stream" or "download"')
+      if (!tc$northness %in% c('fine', 'coarse')) {
+        add('landscape: terrain: northness must be "fine" or "coarse"')
+      }
+      if (!tc$access %in% c('stream', 'download')) {
+        add('landscape: terrain: access must be "stream" or "download"')
+      }
     }
     fr <- built[startsWith(build, 'fire_')]
     if (nrow(fr)) {
       fc <- cfg$landscape$fire
-      if (!nzchar(fc$nbac$url %||% '')) add('landscape: fire: nbac needs a url')
+      if (!nzchar(fc$nbac$url %||% '')) {
+        add('landscape: fire: nbac needs a url')
+      }
       ly <- fill_years(fr$last_year, cfg$tracks$max_year %||% NA)
       bad <- fr$name[!is.na(ly) & ly > fc$last_year]
-      if (length(bad)) add('layer table: fire layers go to ', fc$last_year, ' only (landscape: fire: last_year): ',
-                           paste(bad, collapse = ', '))
+      if (length(bad)) {
+        add(
+          'layer table: fire layers go to ',
+          fc$last_year,
+          ' only (landscape: fire: last_year): ',
+          paste(bad, collapse = ', ')
+        )
+      }
       bad <- fr[build == 'fire_year' & !is.na(class)]$name
-      if (length(bad)) add('layer table: fire_year layers take no class: ', paste(bad, collapse = ', '))
+      if (length(bad)) {
+        add('layer table: fire_year layers take no class: ', paste(bad, collapse = ', '))
+      }
     }
     ar <- built[build == 'forest_age']
     if (nrow(ar)) {
@@ -309,27 +400,46 @@ check_config <- function(cfg) {
     dr <- built[startsWith(build, 'disturb_')]
     if (nrow(dr)) {
       dcfg <- cfg$landscape$disturbance
-      if (length(dcfg$sources) == 0) add('layer table: disturbance layers need landscape: disturbance: sources')
+      if (length(dcfg$sources) == 0) {
+        add('layer table: disturbance layers need landscape: disturbance: sources')
+      }
       cats <- character()
       for (nm in names(dcfg$sources)) {
         src <- dcfg$sources[[nm]]
-        if (!nzchar(src$url %||% '')) add('landscape: disturbance: sources: ', nm, ' needs a url')
+        if (!nzchar(src$url %||% '')) {
+          add('landscape: disturbance: sources: ', nm, ' needs a url')
+        }
         for (f in src$files) {
-          if (is.null(f$file)) add('landscape: disturbance: sources: ', nm, ': each of files needs a file')
+          if (is.null(f$file)) {
+            add('landscape: disturbance: sources: ', nm, ': each of files needs a file')
+          }
           if (is.null(f$category) && length(f$rules) == 0) {
             add('landscape: disturbance: sources: ', nm, ': ', f$file, ' needs a category or rules')
           }
           if (!is.null(f$lookup) && is.null(dcfg$lookups[[f$lookup$table %||% '']])) {
-            add('landscape: disturbance: sources: ', nm, ': ', f$file, ' uses lookup "', f$lookup$table,
-                '", which is not in landscape: disturbance: lookups')
+            add(
+              'landscape: disturbance: sources: ',
+              nm,
+              ': ',
+              f$file,
+              ' uses lookup "',
+              f$lookup$table,
+              '", which is not in landscape: disturbance: lookups'
+            )
           }
-          cats <- c(cats, f$category, purrr::map_chr(f$rules, function(r) r$category %||% NA_character_))
+          cats <- c(
+            cats,
+            f$category,
+            purrr::map_chr(f$rules, function(r) r$category %||% NA_character_)
+          )
         }
       }
       bad <- dr[!class %in% setdiff(cats, 'drop')]$name
       if (length(bad)) {
-        add('layer table: class not given to any feature by landscape: disturbance: sources: ',
-            paste(bad, collapse = ', '))
+        add(
+          'layer table: class not given to any feature by landscape: disturbance: sources: ',
+          paste(bad, collapse = ', ')
+        )
       }
     }
   }
@@ -337,11 +447,18 @@ check_config <- function(cfg) {
     add('extract: where must be "start", "end" or "both"')
   }
   # iSSA models (see R/models.R)
-  for (p in check_model_settings(cfg$model %||% list(), cfg$tracks$n_random, cfg$seasons)) add(p)
+  for (p in check_model_settings(cfg$model %||% list(), cfg$tracks$n_random, cfg$seasons)) {
+    add(p)
+  }
 
   if (length(problems)) {
-    stop('Problems in the settings for project "', cfg$project$name, '":\n  - ',
-         paste(problems, collapse = '\n  - '), call. = FALSE)
+    stop(
+      'Problems in the settings for project "',
+      cfg$project$name,
+      '":\n  - ',
+      paste(problems, collapse = '\n  - '),
+      call. = FALSE
+    )
   }
   invisible(cfg)
 }

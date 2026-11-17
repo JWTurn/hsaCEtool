@@ -13,8 +13,14 @@
 #' @keywords internal
 #' @noRd
 border_points <- function(x, border, near_m) {
-  empty <- sf::st_sf(row = integer(), kind = character(), geometry = sf::st_sfc(crs = sf::st_crs(x)))
-  if (!nrow(x)) return(empty)
+  empty <- sf::st_sf(
+    row = integer(),
+    kind = character(),
+    geometry = sf::st_sfc(crs = sf::st_crs(x))
+  )
+  if (!nrow(x)) {
+    return(empty)
+  }
   g <- sf::st_sf(row = seq_len(nrow(x)), geometry = sf::st_geometry(x))
   parts <- suppressWarnings(sf::st_cast(sf::st_cast(g, 'MULTILINESTRING'), 'LINESTRING'))
   xy <- data.table::as.data.table(sf::st_coordinates(parts))
@@ -26,7 +32,9 @@ border_points <- function(x, border, near_m) {
   cr <- if (nrow(cr)) {
     cr <- suppressWarnings(sf::st_cast(sf::st_collection_extract(cr, 'POINT'), 'POINT'))
     sf::st_sf(row = cr$row, kind = rep('crossing', nrow(cr)), geometry = sf::st_geometry(cr))
-  } else empty
+  } else {
+    empty
+  }
   out <- rbind(if (nrow(ends)) ends else empty, cr)
   # one point per line and kind is enough (a line can touch the border several times)
   out[!duplicated(data.table::data.table(out$row, out$kind, round(sf::st_coordinates(out), -2))), ]
@@ -63,47 +71,94 @@ check_yukon_borders <- function(yukon, features, borders, bc, crs) {
   out <- list()
   for (nm in names(src)) {
     border <- sf::st_union(sf::st_geometry(b[b$other == src[[nm]], ]))
-    if (sf::st_is_empty(border)) next
+    if (sf::st_is_empty(border)) {
+      next
+    }
     band <- sf::st_buffer(border, near_m * 4)
     yk <- sf::st_read(yukon, wkt_filter = sf::st_as_text(band), quiet = TRUE)
-    nb <- sf::st_read(features[[nm]], query = "SELECT * FROM disturbance", wkt_filter = sf::st_as_text(band), quiet = TRUE)
+    nb <- sf::st_read(
+      features[[nm]],
+      query = "SELECT * FROM disturbance",
+      wkt_filter = sf::st_as_text(band),
+      quiet = TRUE
+    )
     nb <- nb[grepl('LINE', sf::st_geometry_type(nb)), ]
     yk_cat <- unlist(bc$yukon_types)[yk$feature_type]
     yk_cat[is.na(yk_cat)] <- yk$feature_type[is.na(yk_cat)]
     side <- function(from, to, pts, to_x) {
-      if (!nrow(pts)) return(NULL)
+      if (!nrow(pts)) {
+        return(NULL)
+      }
       nn <- if (nrow(to_x)) sf::st_nearest_feature(pts, to_x) else rep(NA_integer_, nrow(pts))
-      gap <- if (nrow(to_x)) as.numeric(sf::st_distance(pts, to_x[nn, ], by_element = TRUE)) else rep(Inf, nrow(pts))
+      gap <- if (nrow(to_x)) {
+        as.numeric(sf::st_distance(pts, to_x[nn, ], by_element = TRUE))
+      } else {
+        rep(Inf, nrow(pts))
+      }
       ll <- sf::st_coordinates(sf::st_transform(pts, 4326))
-      data.table::data.table(border = paste0('YK-', src[[nm]]), from = from, to = to, kind = pts$kind,
-                             gap_m = round(gap, 1), point = pts$row, nearest = nn,
-                             lon = round(ll[, 1], 5), lat = round(ll[, 2], 5))
+      data.table::data.table(
+        border = paste0('YK-', src[[nm]]),
+        from = from,
+        to = to,
+        kind = pts$kind,
+        gap_m = round(gap, 1),
+        point = pts$row,
+        nearest = nn,
+        lon = round(ll[, 1], 5),
+        lat = round(ll[, 2], 5)
+      )
     }
     p1 <- side('YK', src[[nm]], border_points(yk, border, near_m), nb)
     p2 <- side(src[[nm]], 'YK', border_points(nb, border, near_m), yk)
     # Yukon row and neighbour row of each pair
-    if (!is.null(p1)) p1[, `:=`(yk_row = point, nb_row = nearest)]
-    if (!is.null(p2)) p2[, `:=`(yk_row = nearest, nb_row = point)]
+    if (!is.null(p1)) {
+      p1[, `:=`(yk_row = point, nb_row = nearest)]
+    }
+    if (!is.null(p2)) {
+      p2[, `:=`(yk_row = nearest, nb_row = point)]
+    }
     p <- data.table::rbindlist(list(p1, p2))
-    if (!nrow(p)) next
+    if (!nrow(p)) {
+      next
+    }
     yd <- data.table::as.data.table(sf::st_drop_geometry(yk))
     yk_id <- if ('feature_id' %in% names(yd)) yd$feature_id else rep(NA_character_, nrow(yd))
-    p[, `:=`(yk_feature_id = yk_id[yk_row], yk_ref_id = yd$REF_ID[yk_row], yk_type = yd$feature_type[yk_row], yk_category = yk_cat[yk_row],
-             yk_year = yd$year_start[yk_row], yk_year_rule = yd$year_rule[yk_row],
-             yk_year_source = yd$year_source[yk_row],
-             nb_category = nb$category[nb_row], nb_year = nb$year[nb_row], nb_file = nb$file[nb_row])]
+    p[, `:=`(
+      yk_feature_id = yk_id[yk_row],
+      yk_ref_id = yd$REF_ID[yk_row],
+      yk_type = yd$feature_type[yk_row],
+      yk_category = yk_cat[yk_row],
+      yk_year = yd$year_start[yk_row],
+      yk_year_rule = yd$year_rule[yk_row],
+      yk_year_source = yd$year_source[yk_row],
+      nb_category = nb$category[nb_row],
+      nb_year = nb$year[nb_row],
+      nb_file = nb$file[nb_row]
+    )]
     out[[nm]] <- p
   }
   pairs <- data.table::rbindlist(out)
-  if (!nrow(pairs)) return(list(pairs = pairs, summary = data.table::data.table()))
-  pairs[, match := data.table::fcase(gap_m <= match_m[1], paste0('lines up (<= ', match_m[1], ' m)'),
-                                     gap_m <= match_m[2], paste0('possible (<= ', match_m[2], ' m)'),
-                                     default = 'no match')]
+  if (!nrow(pairs)) {
+    return(list(pairs = pairs, summary = data.table::data.table()))
+  }
+  pairs[,
+    match := data.table::fcase(
+      gap_m <= match_m[1] , paste0('lines up (<= ', match_m[1], ' m)') ,
+      gap_m <= match_m[2] , paste0('possible (<= ', match_m[2], ' m)') ,
+      default = 'no match'
+    )
+  ]
   pairs[, c('point', 'nearest', 'yk_row', 'nb_row') := NULL]
-  summary <- pairs[, .(points = .N, same_category = sum(yk_category == nb_category, na.rm = TRUE),
-                       neighbour_year = sum(!is.na(nb_year)), yukon_year = sum(!is.na(yk_year)),
-                       both = sum(!is.na(nb_year) & !is.na(yk_year))),
-                   keyby = .(border, from, match)]
+  summary <- pairs[,
+    .(
+      points = .N,
+      same_category = sum(yk_category == nb_category, na.rm = TRUE),
+      neighbour_year = sum(!is.na(nb_year)),
+      yukon_year = sum(!is.na(yk_year)),
+      both = sum(!is.na(nb_year) & !is.na(yk_year))
+    ),
+    keyby = .(border, from, match)
+  ]
   list(pairs = pairs, summary = summary)
 }
 

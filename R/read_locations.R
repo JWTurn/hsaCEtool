@@ -12,11 +12,19 @@
 #' @export
 read_locations_file <- function(file, src, loc_cfg, crs) {
   file <- file[1]
-  obj <- if (is.function(as_reader(src$fun))) as_reader(src$fun)(file) else switch(tolower(tools::file_ext(file)),
-                rds = readRDS(file),
-                csv = data.table::fread(file),
-                shp = , gpkg = , geojson = sf::st_read(file, quiet = TRUE),
-                stop('Cannot read locations from a .', tools::file_ext(file), ' file: ', file))
+  obj <- if (is.function(as_reader(src$fun))) {
+    as_reader(src$fun)(file)
+  } else {
+    switch(
+      tolower(tools::file_ext(file)),
+      rds = readRDS(file),
+      csv = data.table::fread(file),
+      shp = ,
+      gpkg = ,
+      geojson = sf::st_read(file, quiet = TRUE),
+      stop('Cannot read locations from a .', tools::file_ext(file), ' file: ', file)
+    )
+  }
   locations_from_object(obj, src, loc_cfg, crs)
 }
 
@@ -35,15 +43,27 @@ read_locations_file <- function(file, src, loc_cfg, crs) {
 #' @author Julie W. Turner
 #' @export
 download_locations <- function(src, loc_cfg, crs, paths) {
-  fun <- prep_reader(src$fun %||% switch(tolower(tools::file_ext(src$target_file %||% '')),
-                               rds = 'readRDS',
-                               csv = 'data.table::fread',
-                               shp = , gpkg = , geojson = 'sf::st_read',
-                               stop('Set target_file (or fun) for ', src$url, call. = FALSE)))
+  fun <- prep_reader(
+    src$fun %||%
+      switch(
+        tolower(tools::file_ext(src$target_file %||% '')),
+        rds = 'readRDS',
+        csv = 'data.table::fread',
+        shp = ,
+        gpkg = ,
+        geojson = 'sf::st_read',
+        stop('Set target_file (or fun) for ', src$url, call. = FALSE)
+      )
+  )
   reproducible::checkPath(paths$inputs, create = TRUE)
   get <- if (isTRUE(src$refresh)) prep_inputs_fresh else reproducible::prepInputs
-  obj <- get(url = src$url, targetFile = src$target_file, archive = src$archive,
-             destinationPath = paths$inputs, fun = fun)
+  obj <- get(
+    url = src$url,
+    targetFile = src$target_file,
+    archive = src$archive,
+    destinationPath = paths$inputs,
+    fun = fun
+  )
   locations_from_object(obj, src, loc_cfg, crs)
 }
 
@@ -88,14 +108,24 @@ download_movebank <- function(src, paths) {
   options(move2_movebank_key_name = 'movebank')
   for (wait in c(0, 60, 300)) {
     if (wait) {
-      message('[movebank ', src$name %||% src$study, '] rate limit reached; retrying in ', wait, ' s')
+      message(
+        '[movebank ',
+        src$name %||% src$study,
+        '] rate limit reached; retrying in ',
+        wait,
+        ' s'
+      )
       Sys.sleep(wait)
     }
-    dat <- tryCatch(move2::movebank_download_study(src$study, removeDuplicatedTimestamps = TRUE),
-                    error = function(e) e)
+    dat <- tryCatch(
+      move2::movebank_download_study(src$study, removeDuplicatedTimestamps = TRUE),
+      error = function(e) e
+    )
     if (!inherits(dat, 'error') || !grepl('rate limit', conditionMessage(dat))) break
   }
-  if (inherits(dat, 'error')) stop(dat)
+  if (inherits(dat, 'error')) {
+    stop(dat)
+  }
   dir <- reproducible::checkPath(file.path(paths$inputs, 'movebank'), create = TRUE)
   file <- file.path(dir, paste0(src$name %||% src$study, '.rds'))
   saveRDS(dat, file)
@@ -119,27 +149,50 @@ download_movebank <- function(src, paths) {
 read_movebank <- function(file, src, loc_cfg, crs) {
   rlang::check_installed('move2', reason = 'to read Movebank downloads.')
   dat <- readRDS(file)
-  dat <- dat[!sf::st_is_empty(dat), ]   # records without a position
+  dat <- dat[!sf::st_is_empty(dat), ] # records without a position
 
   xy <- sf::st_coordinates(dat)
   DT <- data.table::as.data.table(sf::st_drop_geometry(dat))
   DT[, `:=`(longitude = xy[, 1], latitude = xy[, 2])]
   track_col <- move2::mt_track_id_column(dat)
   meta <- data.table::as.data.table(sf::st_drop_geometry(move2::mt_track_data(dat)))
-  meta_cols <- intersect(c(track_col, 'deployment_id', 'individual_local_identifier', 'tag_local_identifier',
-                           'sex', 'deploy_on_timestamp', 'deploy_off_timestamp', 'duty_cycle',
-                           'deployment_end_type', 'individual_number_of_deployments',
-                           'study_site', 'group_id', 'individual_comments'), names(meta))
+  meta_cols <- intersect(
+    c(
+      track_col,
+      'deployment_id',
+      'individual_local_identifier',
+      'tag_local_identifier',
+      'sex',
+      'deploy_on_timestamp',
+      'deploy_off_timestamp',
+      'duty_cycle',
+      'deployment_end_type',
+      'individual_number_of_deployments',
+      'study_site',
+      'group_id',
+      'individual_comments'
+    ),
+    names(meta)
+  )
   meta <- meta[, unique(meta_cols), with = FALSE]
-  DT <- merge(DT[, setdiff(names(DT), setdiff(names(meta), track_col)), with = FALSE], meta,
-              by = track_col, all.x = TRUE)
+  DT <- merge(
+    DT[, setdiff(names(DT), setdiff(names(meta), track_col)), with = FALSE],
+    meta,
+    by = track_col,
+    all.x = TRUE
+  )
 
-  DT[, id := if (isTRUE(src$id_from_deployment) || !'individual_local_identifier' %in% names(DT)) {
-    as.character(deployment_id)
-  } else {
-    data.table::fifelse(is.na(individual_local_identifier), as.character(deployment_id),
-                        as.character(individual_local_identifier))
-  }]
+  DT[,
+    id := if (isTRUE(src$id_from_deployment) || !'individual_local_identifier' %in% names(DT)) {
+      as.character(deployment_id)
+    } else {
+      data.table::fifelse(
+        is.na(individual_local_identifier),
+        as.character(deployment_id),
+        as.character(individual_local_identifier)
+      )
+    }
+  ]
 
   src$columns <- list(id = 'id', datetime = 'timestamp', x = 'longitude', y = 'latitude')
   src$input_crs <- 'EPSG:4326'
@@ -165,14 +218,22 @@ read_movebank <- function(file, src, loc_cfg, crs) {
 read_premade_locations <- function(file, src, crs) {
   file <- file[1]
   if (tolower(tools::file_ext(file)) != 'rds') {
-    stop('locations: premade: must be a .rds file saved from locations_clean, not ', file, call. = FALSE)
+    stop(
+      'locations: premade: must be a .rds file saved from locations_clean, not ',
+      file,
+      call. = FALSE
+    )
   }
   DT <- readRDS(file)
   data.table::setDT(DT)
   missing <- setdiff(c('id', 't_', 'x_', 'y_', 'source'), names(DT))
   if (length(missing)) {
-    stop('locations: premade: columns not found: ', paste(missing, collapse = ', '),
-         '. Use a file saved from locations_clean.', call. = FALSE)
+    stop(
+      'locations: premade: columns not found: ',
+      paste(missing, collapse = ', '),
+      '. Use a file saved from locations_clean.',
+      call. = FALSE
+    )
   }
   input_crs <- src$input_crs %||% crs
   if (!identical(sf::st_crs(input_crs), sf::st_crs(crs))) {
@@ -218,18 +279,26 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
   cols <- src$columns %||% loc_cfg$columns
   missing <- setdiff(unlist(cols[c('id', 'datetime', 'x', 'y', 'hour')]), names(DT))
   if (length(missing)) {
-    stop('Location columns not found: ', paste(missing, collapse = ', '),
-         '. Set `columns:` in the settings to the names used in this data set.')
+    stop(
+      'Location columns not found: ',
+      paste(missing, collapse = ', '),
+      '. Set `columns:` in the settings to the names used in this data set.'
+    )
   }
 
   keep <- unlist(loc_cfg$keep_columns)
   if (length(keep)) {
-    DT <- DT[, unique(c(unlist(cols[c('id', 'datetime', 'x', 'y', 'hour')]), intersect(keep, names(DT)))), with = FALSE]
+    DT <- DT[,
+      unique(c(unlist(cols[c('id', 'datetime', 'x', 'y', 'hour')]), intersect(keep, names(DT)))),
+      with = FALSE
+    ]
   }
   # avoid clashes with columns that already use the standard names
   std <- c(id = 'id', datetime = 't_', x = 'x_', y = 'y_')
   clash <- setdiff(intersect(std, names(DT)), unlist(cols[c('id', 'datetime', 'x', 'y')]))
-  if (length(clash)) data.table::setnames(DT, clash, paste0(clash, '_input'))
+  if (length(clash)) {
+    data.table::setnames(DT, clash, paste0(clash, '_input'))
+  }
   data.table::setnames(DT, unlist(cols[c('id', 'datetime', 'x', 'y')]), std)
 
   DT[, id := as.character(id)]
@@ -257,7 +326,9 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
     DT[, `:=`(x_ = xy[, 1], y_ = xy[, 2])]
   }
   DT[, source := src$name %||% NA_character_]
-  if (isTRUE(src$date_only)) DT[, date_only := TRUE]
+  if (isTRUE(src$date_only)) {
+    DT[, date_only := TRUE]
+  }
   DT[]
 }
 
@@ -270,9 +341,15 @@ standardize_locations <- function(DT, src, loc_cfg, crs) {
 #' @keywords internal
 #' @noRd
 clock_digits <- function(x) {
-  if (inherits(x, 'POSIXct')) return(as.POSIXct(format(x, '%Y-%m-%d %H:%M:%OS6'), tz = 'UTC'))
+  if (inherits(x, 'POSIXct')) {
+    return(as.POSIXct(format(x, '%Y-%m-%d %H:%M:%OS6'), tz = 'UTC'))
+  }
   x <- sub('(Z|[+-][0-9]{2}:?[0-9]{2})$', '', trimws(as.character(x)))
-  as.POSIXct(sub('T', ' ', x, fixed = TRUE), tz = 'UTC', tryFormats = c('%Y-%m-%d %H:%M:%OS', '%Y-%m-%d %H:%M', '%Y-%m-%d'))
+  as.POSIXct(
+    sub('T', ' ', x, fixed = TRUE),
+    tz = 'UTC',
+    tryFormats = c('%Y-%m-%d %H:%M:%OS', '%Y-%m-%d %H:%M', '%Y-%m-%d')
+  )
 }
 
 #' @title Convert local clock times to UTC

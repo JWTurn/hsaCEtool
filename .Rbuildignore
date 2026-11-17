@@ -8,3 +8,4 @@
 ^\.Rproj\.user$
 ^\.github$
 ^air\.toml$
+^\.git-blame-ignore-revs$

@@ -9,8 +9,14 @@ test_that('readers given as text become functions, or calls for prepInputs', {
   tmp <- withr::local_tempdir()
   data.table::fwrite(data.table(a = 1:3), file.path(tmp, 'made_up.csv'))
   read <- function(fun) {
-    withr::with_options(list(reproducible.useCache = FALSE),
-      suppressMessages(reproducible::prepInputs(targetFile = 'made_up.csv', destinationPath = tmp, fun = fun)))
+    withr::with_options(
+      list(reproducible.useCache = FALSE),
+      suppressMessages(reproducible::prepInputs(
+        targetFile = 'made_up.csv',
+        destinationPath = tmp,
+        fun = fun
+      ))
+    )
   }
   expect_error(read(data.table::fread))
   expect_equal(nrow(read(prep_reader('data.table::fread'))), 3)

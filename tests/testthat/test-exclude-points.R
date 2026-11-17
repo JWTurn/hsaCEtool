@@ -3,19 +3,33 @@
 
 test_that('an exclusion points table gives the same settings as points typed in the YAML', {
   dir <- withr::local_tempdir()
-  writeLines(c('name,lon,lat,radius_m,notes',
-               'Made-up office,-120.5,60.25,10000,a note',
-               ',-121,61,500,'), file.path(dir, 'points_TEST.csv'))
-  typed <- list(list(name = 'Made-up office', lon = -120.5, lat = 60.25, radius_m = 10000L),
-                list(lon = -121L, lat = 61L, radius_m = 500L))
+  writeLines(
+    c('name,lon,lat,radius_m,notes', 'Made-up office,-120.5,60.25,10000,a note', ',-121,61,500,'),
+    file.path(dir, 'points_TEST.csv')
+  )
+  typed <- list(
+    list(name = 'Made-up office', lon = -120.5, lat = 60.25, radius_m = 10000L),
+    list(lon = -121L, lat = 61L, radius_m = 500L)
+  )
   yaml_file <- file.path(dir, 'typed.yaml')
-  writeLines(c('exclude_points:',
-               '  - {name: Made-up office, lon: -120.5, lat: 60.25, radius_m: 10000}',
-               '  - {lon: -121, lat: 61, radius_m: 500}'), yaml_file)
+  writeLines(
+    c(
+      'exclude_points:',
+      '  - {name: Made-up office, lon: -120.5, lat: 60.25, radius_m: 10000}',
+      '  - {lon: -121, lat: 61, radius_m: 500}'
+    ),
+    yaml_file
+  )
   expect_identical(read_settings_file(yaml_file)$exclude_points, typed)
-  yaml::write_yaml(list(locations = list(sources = list(list(type = 'movebank', name = 'A', study = 1L)),
-                                         cleaning = list(params = list(exclude_points = 'points_TEST.csv')))),
-                   file.path(dir, 'TEST.yaml'))
+  yaml::write_yaml(
+    list(
+      locations = list(
+        sources = list(list(type = 'movebank', name = 'A', study = 1L)),
+        cleaning = list(params = list(exclude_points = 'points_TEST.csv'))
+      )
+    ),
+    file.path(dir, 'TEST.yaml')
+  )
   cfg <- read_config('TEST', config_dir = dir)
   expect_identical(cfg$locations$cleaning$params$exclude_points, typed)
 })

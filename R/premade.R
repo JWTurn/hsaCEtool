@@ -39,22 +39,40 @@ write_premade <- function(project = NULL, config_dir = NULL) {
   project <- ctx$project
   cfg <- ctx$cfg
   dir <- reproducible::checkPath(file.path(cfg$paths$outputs, project, 'premade'), create = TRUE)
-  tmp <- tempfile(); reproducible::checkPath(tmp, create = TRUE)
+  tmp <- tempfile()
+  reproducible::checkPath(tmp, create = TRUE)
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
   km <- round((cfg$locations$study_area$buffer_m %||% 0) / 1000)
-  names <- c(clean = paste0('clean_', project), area = sprintf('clean_%s_%skmBuff', project, km),
-             extended = paste0(project, '_studyArea_extended'))
+  names <- c(
+    clean = paste0('clean_', project),
+    area = sprintf('clean_%s_%skmBuff', project, km),
+    extended = paste0(project, '_studyArea_extended')
+  )
 
-  saveRDS(targets::tar_read(locations_clean, store = ctx$store), file.path(tmp, paste0(names[['clean']], '.rds')))
-  terra::writeVector(targets::tar_read(study_area, store = ctx$store), file.path(tmp, paste0(names[['area']], '.gpkg')),
-                     overwrite = TRUE)
-  terra::writeVector(targets::tar_read(study_area_extended, store = ctx$store),
-                     file.path(tmp, paste0(names[['extended']], '.gpkg')),
-                     overwrite = TRUE)
-  files <- c(paste0(names[['clean']], '.rds'), paste0(names[['area']], '.gpkg'), paste0(names[['extended']], '.gpkg'))
+  saveRDS(
+    targets::tar_read(locations_clean, store = ctx$store),
+    file.path(tmp, paste0(names[['clean']], '.rds'))
+  )
+  terra::writeVector(
+    targets::tar_read(study_area, store = ctx$store),
+    file.path(tmp, paste0(names[['area']], '.gpkg')),
+    overwrite = TRUE
+  )
+  terra::writeVector(
+    targets::tar_read(study_area_extended, store = ctx$store),
+    file.path(tmp, paste0(names[['extended']], '.gpkg')),
+    overwrite = TRUE
+  )
+  files <- c(
+    paste0(names[['clean']], '.rds'),
+    paste0(names[['area']], '.gpkg'),
+    paste0(names[['extended']], '.gpkg')
+  )
   zips <- file.path(dir, paste0(names, '.zip'))
   for (i in seq_along(files)) {
-    if (file.exists(zips[i])) file.remove(zips[i])
+    if (file.exists(zips[i])) {
+      file.remove(zips[i])
+    }
     utils::zip(zips[i], file.path(tmp, files[i]), flags = '-jq')
   }
   zips
@@ -85,16 +103,35 @@ upload_premade <- function(project = NULL, zips = NULL, folders = NULL, config_d
   project <- ctx$project
   cfg <- ctx$cfg
   folders <- folders %||% cfg$locations$premade_folder
-  if (!length(folders)) stop('Set locations: premade_folder: in ', file.path(ctx$config_dir, project), '.yaml', call. = FALSE)
-  if (!is.null(cfg$run$google_email)) options(gargle_oauth_email = cfg$run$google_email)
-  zips <- zips %||% list.files(file.path(cfg$paths$outputs, project, 'premade'), pattern = '[.]zip$', full.names = TRUE)
+  if (!length(folders)) {
+    stop(
+      'Set locations: premade_folder: in ',
+      file.path(ctx$config_dir, project),
+      '.yaml',
+      call. = FALSE
+    )
+  }
+  if (!is.null(cfg$run$google_email)) {
+    options(gargle_oauth_email = cfg$run$google_email)
+  }
+  zips <- zips %||%
+    list.files(
+      file.path(cfg$paths$outputs, project, 'premade'),
+      pattern = '[.]zip$',
+      full.names = TRUE
+    )
   dest <- upload_destinations(basename(zips), folders)
   # only the cleaned locations must stay restricted
   locs <- basename(zips) == paste0('clean_', project, '.zip')
   out <- data.table::rbindlist(purrr::map(unique(dest), function(folder) {
     msg <- if (any(locs[dest == folder])) {
-      paste0('The Drive folder for ', paste0('clean_', project, '.zip'), ' (', folder,
-             ') is shared with anyone with the link; caribou locations must not be. Restrict it first.')
+      paste0(
+        'The Drive folder for ',
+        paste0('clean_', project, '.zip'),
+        ' (',
+        folder,
+        ') is shared with anyone with the link; caribou locations must not be. Restrict it first.'
+      )
     }
     upload_to_drive(zips[dest == folder], folder, msg)
   }))
@@ -117,9 +154,14 @@ upload_premade <- function(project = NULL, zips = NULL, folders = NULL, config_d
 #' @noRd
 upload_destinations <- function(files, folders) {
   folders <- unlist(folders)
-  if (length(folders) == 1 && is.null(names(folders))) return(rep(unname(folders), length(files)))
+  if (length(folders) == 1 && is.null(names(folders))) {
+    return(rep(unname(folders), length(files)))
+  }
   if (is.null(names(folders)) || any(!nzchar(names(folders)))) {
-    stop('Give one Drive folder, or folders named by file name pattern (e.g. "*.zip")', call. = FALSE)
+    stop(
+      'Give one Drive folder, or folders named by file name pattern (e.g. "*.zip")',
+      call. = FALSE
+    )
   }
   dest <- rep(NA_character_, length(files))
   for (pat in names(folders)) {
@@ -127,8 +169,12 @@ upload_destinations <- function(files, folders) {
     dest[hit] <- folders[[pat]]
   }
   if (anyNA(dest)) {
-    stop('No Drive folder for: ', paste(files[is.na(dest)], collapse = ', '),
-         ' (add a pattern that matches, or "*" for everything else)', call. = FALSE)
+    stop(
+      'No Drive folder for: ',
+      paste(files[is.na(dest)], collapse = ', '),
+      ' (add a pattern that matches, or "*" for everything else)',
+      call. = FALSE
+    )
   }
   dest
 }
@@ -154,9 +200,17 @@ upload_to_drive <- function(files, folder, public_msg) {
   have <- googledrive::drive_ls(folder)
   out <- data.table::rbindlist(purrr::map(files, function(z) {
     hit <- have[have$name == basename(z), ]
-    f <- if (nrow(hit) == 1) googledrive::drive_update(hit, media = z) else googledrive::drive_upload(z, path = folder)
-    data.table::data.table(name = basename(z), action = if (nrow(hit) == 1) 'updated' else 'uploaded',
-                           id = as.character(f$id), url = googledrive::drive_link(f))
+    f <- if (nrow(hit) == 1) {
+      googledrive::drive_update(hit, media = z)
+    } else {
+      googledrive::drive_upload(z, path = folder)
+    }
+    data.table::data.table(
+      name = basename(z),
+      action = if (nrow(hit) == 1) 'updated' else 'uploaded',
+      id = as.character(f$id),
+      url = googledrive::drive_link(f)
+    )
   }))
   out[]
 }

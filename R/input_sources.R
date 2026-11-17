@@ -3,8 +3,19 @@
 # from and on what terms, and referred to by name in the YAML
 
 # columns the inputs table may have
-input_table_cols <- c('name', 'title', 'theme', 'url', 'path', 'target_file', 'archive',
-                      'access', 'provider', 'terms', 'notes')
+input_table_cols <- c(
+  'name',
+  'title',
+  'theme',
+  'url',
+  'path',
+  'target_file',
+  'archive',
+  'access',
+  'provider',
+  'terms',
+  'notes'
+)
 
 # the columns that say where the file is, put into the settings
 input_file_cols <- c('url', 'path', 'target_file', 'archive')
@@ -35,24 +46,40 @@ input_file_cols <- c('url', 'path', 'target_file', 'archive')
 #' @author Julie W. Turner
 #' @export
 read_inputs_table <- function(file) {
-  if (!file.exists(file)) stop('Inputs table not found: ', file, call. = FALSE)
+  if (!file.exists(file)) {
+    stop('Inputs table not found: ', file, call. = FALSE)
+  }
   tab <- data.table::fread(file, colClasses = 'character', na.strings = '')
   unknown <- setdiff(names(tab), input_table_cols)
   if (length(unknown)) {
-    stop('Inputs table ', file, ' has unknown columns: ', paste(unknown, collapse = ', '),
-         '. Columns can be: ', paste(input_table_cols, collapse = ', '), call. = FALSE)
+    stop(
+      'Inputs table ',
+      file,
+      ' has unknown columns: ',
+      paste(unknown, collapse = ', '),
+      '. Columns can be: ',
+      paste(input_table_cols, collapse = ', '),
+      call. = FALSE
+    )
   }
-  for (col in setdiff(input_table_cols, names(tab))) tab[, (col) := NA_character_]
-  tab[, (input_table_cols) := purrr::map(.SD, function(x) {
-    x <- trimws(x)
-    x[x == ''] <- NA_character_
-    x
-  }), .SDcols = input_table_cols]
+  for (col in setdiff(input_table_cols, names(tab))) {
+    tab[, (col) := NA_character_]
+  }
+  tab[,
+    (input_table_cols) := purrr::map(.SD, function(x) {
+      x <- trimws(x)
+      x[x == ''] <- NA_character_
+      x
+    }),
+    .SDcols = input_table_cols
+  ]
   data.table::setcolorder(tab, input_table_cols)
 
   problems <- character()
   add <- function(rows, msg) {
-    if (any(rows)) problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    if (any(rows)) {
+      problems <<- c(problems, paste0(msg, ': rows ', paste(which(rows) + 1L, collapse = ', ')))
+    }
   }
   add(is.na(tab$name), 'no name')
   add(!is.na(tab$name) & duplicated(tab$name), 'name listed twice')
@@ -60,7 +87,13 @@ read_inputs_table <- function(file) {
   add(!is.na(tab$url) & !is.na(tab$path), 'give a url or a path, not both')
   add(!tab$access %in% c('public', 'restricted'), 'access must be public or restricted')
   if (length(problems)) {
-    stop('Problems in the inputs table ', file, ':\n  - ', paste(problems, collapse = '\n  - '), call. = FALSE)
+    stop(
+      'Problems in the inputs table ',
+      file,
+      ':\n  - ',
+      paste(problems, collapse = '\n  - '),
+      call. = FALSE
+    )
   }
   tab[]
 }
@@ -73,7 +106,9 @@ read_inputs_table <- function(file) {
 #' @keywords internal
 #' @noRd
 merge_inputs_tables <- function(defaults, project = NULL) {
-  if (is.null(project) || !nrow(project)) return(defaults)
+  if (is.null(project) || !nrow(project)) {
+    return(defaults)
+  }
   data.table::rbindlist(list(defaults[!name %in% project$name], project), use.names = TRUE)
 }
 
@@ -105,7 +140,9 @@ apply_inputs_table <- function(cfg, tab) {
     as.list(tab[i, input_file_cols, with = FALSE])
   }
   expand <- function(x, where) {
-    if (!is.list(x) || is.data.frame(x) || !length(x)) return(x)
+    if (!is.list(x) || is.data.frame(x) || !length(x)) {
+      return(x)
+    }
     nms <- names(x)
     if (is.null(nms)) {
       return(purrr::imap(x, function(el, i) expand(el, paste0(where, '/', i))))
@@ -120,16 +157,24 @@ apply_inputs_table <- function(cfg, tab) {
       }
       if (nm == 'input') {
         # settings given beside input: win
-        if (any(c('url', 'path') %in% nms)) next
+        if (any(c('url', 'path') %in% nms)) {
+          next
+        }
         r <- row_of(val, where)
-        if (is.null(r)) next
+        if (is.null(r)) {
+          next
+        }
         r <- r[!purrr::map_lgl(r, is.na) & !names(r) %in% nms]
         out <- c(out, r)
       } else {
         url_nm <- sub('_input$', '_url', nm)
-        if (url_nm %in% nms) next
+        if (url_nm %in% nms) {
+          next
+        }
         r <- row_of(val, paste0(where, '/', url_nm))
-        if (is.null(r)) next
+        if (is.null(r)) {
+          next
+        }
         if (is.na(r$url)) {
           missing <<- c(missing, paste0(val, ' (', where, '/', nm, ': needs a url)'))
           next
@@ -144,12 +189,18 @@ apply_inputs_table <- function(cfg, tab) {
     cfg[nm] <- list(expand(cfg[[nm]], nm))
   }
   if (length(missing)) {
-    stop('These inputs are not in the inputs table: ', paste(unique(missing), collapse = ', '), call. = FALSE)
+    stop(
+      'These inputs are not in the inputs table: ',
+      paste(unique(missing), collapse = ', '),
+      call. = FALSE
+    )
   }
   tab <- data.table::copy(tab)
-  tab[, used_in := purrr::map_chr(name, function(n) {
-    if (is.null(used[[n]])) NA_character_ else paste(used[[n]], collapse = '; ')
-  })]
+  tab[,
+    used_in := purrr::map_chr(name, function(n) {
+      if (is.null(used[[n]])) NA_character_ else paste(used[[n]], collapse = '; ')
+    })
+  ]
   cfg$inputs_table <- tab
   cfg
 }
