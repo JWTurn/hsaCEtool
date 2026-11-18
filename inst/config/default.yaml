@@ -402,6 +402,16 @@ landscape:
       years: [2019]
       zero_is_na: true    # 0 means not forest
 
+  # Tree species: crown closure by species (SCANFI) and species composition (BC VRI),
+  # read for an area by read_scanfi_species() and read_vri_species(). Species layers
+  # built from them come later.
+  species:
+    scanfi:
+      input: scanfi_species  # per-species SCANFI v2 files ({species}: SCANFI names, e.g. ABIE_LAS)
+      years: [1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
+    vri:
+      input: vri_r1          # BC VRI rank 1 layer (zipped file geodatabase)
+
   # Human disturbance: roads, trails, seismic lines, mines, clearings... from one
   # or more sources, each sorted into categories (e.g. paved, unpaved, lfother) by
   # rules, and counted from the year each feature was built (build: disturb_dist,

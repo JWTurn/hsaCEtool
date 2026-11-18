@@ -712,6 +712,24 @@ or harvested (CanLaD) after the map's year gets the years since that
 disturbance instead; going back before a map, a cell disturbed in between is
 blank, as its age then is unknown.
 
+### Tree species (`landscape: species:`)
+
+Tree species cover from two sources, each read for an area (e.g. a study area)
+and written to files, for a project to summarize (e.g. to choose which species
+to model). Layers on the project's grid built from them are still to come.
+
+- `scanfi:` SCANFI v2 crown closure by species (`input: scanfi_species`): the
+  percent of the ground covered by each species' crowns, one 30 m raster per
+  species and year (`years:`). `read_scanfi_species()` cuts each to the area on
+  the source's own grid. NRCan's public SCANFI v2 release has only 10 species
+  groups; the per-species files are the copy LandR reads (its
+  `sppEquivalencies_CA` table, column `SCANFI`, names them).
+- `vri:` the BC Vegetation Resources Inventory rank 1 layer (`input: vri_r1`):
+  polygons with up to six species (BC species codes) and their percent of the
+  stand. `read_vri_species()` downloads it once (about 4.2 GB) and keeps the
+  polygons overlapping the area, with only the species, crown closure and age
+  columns.
+
 ### Terrain (`build: elevation` or `northness`)
 
 From a 30 m elevation model, `landscape: terrain: source:` either `mrdem`
