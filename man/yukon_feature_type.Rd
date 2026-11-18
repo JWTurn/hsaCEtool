@@ -16,8 +16,13 @@ character.
 }
 \description{
 The rules of prep-disturb-cleaned.R. Lines: paved (Highway,
-Railway, Paved Road), unpaved (linear feature type Unpaved Road), otherwise
-otherlf. Polygons: othermines (v4 Mining/Mining; v5 Mining/Unknown),
-placer, quartz, NA for harvest (left out; it comes from CanLaD), otherwise otherpoly.
+Railway, Paved Road), unpaved (linear feature type Unpaved Road, or type
+Unknown NRN from the National Road Network), otherwise otherlf. Polygons:
+othermines (types Gravel Pit / Quarry, Gravel and Tailing Pond; v4
+Mining/Mining; v5 Mining/Unknown), quartz (type Drill Pad, or reclassified
+Quartz Mining), placer, NA for harvest (left out; it comes from CanLaD),
+otherwise otherpoly. The type rules override the Yukon reclassification
+sheet, which calls gravel pits and drill pads Clearing and Unknown NRN
+lines Trail.
 }
 \keyword{internal}

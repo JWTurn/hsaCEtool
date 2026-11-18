@@ -81,20 +81,41 @@ test_that('standardise_yukon reads the three schemas and joins the reclassificat
 
 test_that('yukon_feature_type follows the merge rules', {
   l <- data.frame(
-    disturbance_rc = c('Highway', 'Railway', 'Unpaved Road', 'Trail'),
-    lf_type = c('Highway', 'Other LF', 'Unpaved Road', 'Other LF')
+    TYPE_DISTURBANCE = c('Highway', 'Railway', 'Unpaved Road', 'Trail', 'Unknown NRN'),
+    disturbance_rc = c('Highway', 'Railway', 'Unpaved Road', 'Trail', 'Trail'),
+    lf_type = c('Highway', 'Other LF', 'Unpaved Road', 'Other LF', 'Other LF')
   )
-  expect_equal(yukon_feature_type(l, 'lines'), c('paved', 'paved', 'unpaved', 'otherlf'))
+  expect_equal(
+    yukon_feature_type(l, 'lines'),
+    c('paved', 'paved', 'unpaved', 'otherlf', 'unpaved')
+  )
   p <- data.frame(
-    schema = c('v4', 'v5', 'v4', 'v5', 'v4', 'v4'),
-    TYPE_INDUSTRY = c('Mining', 'Mining', 'Mining', 'Mining', 'Forestry', 'Urban'),
+    schema = c('v4', 'v5', 'v4', 'v5', 'v4', 'v4', 'v4', 'v5', 'v4', 'v4', 'v4'),
+    TYPE_INDUSTRY = c(
+      'Mining',
+      'Mining',
+      'Mining',
+      'Mining',
+      'Forestry',
+      'Urban',
+      'Transportation',
+      'Mining',
+      'Mining',
+      'Mining',
+      'Mining'
+    ),
     TYPE_DISTURBANCE = c(
       'Mining',
       'Unknown',
       'Placer Mining - Minor',
       'Quartz mine',
       'Clearing',
-      'Building'
+      'Building',
+      'Gravel Pit / Quarry',
+      'Gravel',
+      'Tailing Pond',
+      'Drill Pad',
+      'Roadside Gravel'
     ),
     disturbance_rc = c(
       'Clearing',
@@ -102,12 +123,30 @@ test_that('yukon_feature_type follows the merge rules', {
       'Placer mining',
       'Quartz Mining',
       'Harvest',
-      'Building'
+      'Building',
+      'Clearing',
+      'Clearing',
+      'Pond',
+      'Clearing',
+      'Clearing'
     )
   )
+  # Roadside Gravel stays otherpoly until Yukon says whether it is gravel extraction
   expect_equal(
     yukon_feature_type(p, 'polys'),
-    c('othermines', 'othermines', 'placer', 'quartz', NA, 'otherpoly')
+    c(
+      'othermines',
+      'othermines',
+      'placer',
+      'quartz',
+      NA,
+      'otherpoly',
+      'othermines',
+      'othermines',
+      'othermines',
+      'quartz',
+      'otherpoly'
+    )
   )
 })
 
