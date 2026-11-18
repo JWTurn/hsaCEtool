@@ -804,9 +804,14 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
 
 #' @title Disturbance type of merged Yukon features
 #' @description The rules of prep-disturb-cleaned.R. Lines: paved (Highway,
-#'   Railway, Paved Road), unpaved (linear feature type Unpaved Road), otherwise
-#'   otherlf. Polygons: othermines (v4 Mining/Mining; v5 Mining/Unknown),
-#'   placer, quartz, NA for harvest (left out; it comes from CanLaD), otherwise otherpoly.
+#'   Railway, Paved Road), unpaved (linear feature type Unpaved Road, or type
+#'   Unknown NRN from the National Road Network), otherwise otherlf. Polygons:
+#'   othermines (types Gravel Pit / Quarry, Gravel and Tailing Pond; v4
+#'   Mining/Mining; v5 Mining/Unknown), quartz (type Drill Pad, or reclassified
+#'   Quartz Mining), placer, NA for harvest (left out; it comes from CanLaD),
+#'   otherwise otherpoly. The type rules override the Yukon reclassification
+#'   sheet, which calls gravel pits and drill pads Clearing and Unknown NRN
+#'   lines Trail.
 #' @param x sf or data.frame. Merged features.
 #' @param kind character. "lines" or "polys".
 #' @return character.
@@ -814,21 +819,24 @@ yukon_new_parts <- function(x, old, extent, kind, buffer_m, min_m) {
 #' @export
 yukon_feature_type <- function(x, kind) {
   drc <- yukon_norm(x$disturbance_rc)
+  dist <- yukon_norm(x$TYPE_DISTURBANCE)
   if (kind == 'lines') {
     return(data.table::fcase(
       drc %in% c('highway', 'railway', 'paved road') , 'paved'   ,
       yukon_norm(x$lf_type) %in% 'unpaved road'      , 'unpaved' ,
+      dist %in% 'unknown nrn'                        , 'unpaved' ,
       default = 'otherlf'
     ))
   }
   ind <- yukon_norm(x$TYPE_INDUSTRY)
-  dist <- yukon_norm(x$TYPE_DISTURBANCE)
   data.table::fcase(
-    x$schema == 'v4' & dist == 'mining'                    , 'othermines'  ,
-    x$schema == 'v5' & ind == 'mining' & dist == 'unknown' , 'othermines'  ,
-    drc %in% 'placer mining'                               , 'placer'      ,
-    drc %in% 'quartz mining'                               , 'quartz'      ,
-    drc %in% 'harvest'                                     , NA_character_ ,
+    dist %in% c('gravel pit / quarry', 'gravel', 'tailing pond') , 'othermines'  ,
+    dist %in% 'drill pad'                                        , 'quartz'      ,
+    x$schema == 'v4' & dist == 'mining'                          , 'othermines'  ,
+    x$schema == 'v5' & ind == 'mining' & dist == 'unknown'       , 'othermines'  ,
+    drc %in% 'placer mining'                                     , 'placer'      ,
+    drc %in% 'quartz mining'                                     , 'quartz'      ,
+    drc %in% 'harvest'                                           , NA_character_ ,
     default = 'otherpoly'
   )
 }
