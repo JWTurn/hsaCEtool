@@ -1,5 +1,13 @@
 # hsaCEtool 0.0.0.9000
 
+- New readers for tree species cover, each cutting a source to an area and
+  writing files: `read_scanfi_species()` (SCANFI v2 crown closure by species,
+  one 30 m raster per species and year, on the source's own grid) and
+  `read_vri_species()` (BC VRI polygons overlapping the area, with their
+  species, percents, crown closure and age). Their inputs are
+  `scanfi_species` and `vri_r1` in the inputs table, named in the new
+  settings section `landscape: species:`. Species layers built from them
+  come later; nothing else changes.
 - The hand-off of premade files between phases can run in the pipeline
   instead of by hand. In the phase that cleans the locations,
   `locations: premade_write: true` adds target `premade_files`
