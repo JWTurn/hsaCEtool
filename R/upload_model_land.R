@@ -58,16 +58,7 @@ upload_model_land <- function(project = NULL, years = NULL, force = FALSE, confi
     'model_land_layers_file',
     'model_land'
   )
-  stale <- with_tar_project(
-    ctx$tar_project,
-    targets::tar_outdated(
-      names = targets::any_of(check),
-      shortcut = TRUE,
-      callr_function = NULL,
-      script = ctx$script,
-      store = ctx$store
-    )
-  )
+  stale <- outdated_targets(ctx, check)
   if (length(stale)) {
     stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   }

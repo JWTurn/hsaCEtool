@@ -70,16 +70,7 @@ upload_models <- function(project = NULL, models = NULL, force = FALSE, config_d
     paste0('model_coefs_', models),
     coefs_nm
   )
-  stale <- with_tar_project(
-    ctx$tar_project,
-    targets::tar_outdated(
-      names = targets::any_of(check),
-      shortcut = TRUE,
-      callr_function = NULL,
-      script = ctx$script,
-      store = ctx$store
-    )
-  )
+  stale <- outdated_targets(ctx, check)
   if (length(stale)) {
     stop('Not up to date (run the pipeline first): ', paste(stale, collapse = ', '), call. = FALSE)
   }

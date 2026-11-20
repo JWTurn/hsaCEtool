@@ -108,3 +108,23 @@ test_that('TAR_PROJECT is set only while checking the store, then left as it was
   expect_error(with_tar_project('NMC', stop('failed')), 'failed')
   expect_equal(Sys.getenv('TAR_PROJECT'), 'other')
 })
+
+test_that('the upload check runs the script as targets does, not inside the package', {
+  # like YT_caribou: the script sources a file that sets `local` in the global
+  # environment; run inside the package, `local` would be base::local()
+  dir <- withr::local_tempdir()
+  withr::local_dir(dir)
+  writeLines(c('p:', '  script: p/_targets.R', '  store: _targets/p'), '_targets.yaml')
+  reproducible::checkPath('p', create = TRUE)
+  writeLines('local <- list(n = 1)', 'p/_local.R')
+  writeLines(
+    c('source("p/_local.R")', 'library(targets)', 'list(tar_target(x, local$n))'),
+    'p/_targets.R'
+  )
+  withr::local_envvar(TAR_PROJECT = 'p')
+  targets::tar_make(reporter = 'silent')
+  ctx <- list(tar_project = 'p', script = 'p/_targets.R', store = '_targets/p')
+  expect_identical(outdated_targets(ctx, 'x'), character(0))
+  writeLines('local <- list(n = 2)', 'p/_local.R')
+  expect_identical(outdated_targets(ctx, 'x'), 'x')
+})
