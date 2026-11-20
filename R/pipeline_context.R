@@ -107,3 +107,30 @@ with_tar_project <- function(tar_project, code) {
   Sys.setenv(TAR_PROJECT = tar_project)
   code
 }
+
+#' @title Targets of a project that are out of date
+#' @description Used by the upload helpers to check that what they share is up
+#'   to date. Runs [targets::tar_outdated()] on the project's script and
+#'   store, and only on `names` (`shortcut = TRUE`): the steps before them can
+#'   look out of date on a computer that cannot download the locations. The script runs in a new R process, as in
+#'   [targets::tar_make()]. Run in this session instead (`callr_function =
+#'   NULL`), a name the script expects in the global environment (e.g.
+#'   `local`, set by a `_local.R` it sources) would find a function of this
+#'   package or base R first, and objects the script keeps in the global
+#'   environment would not count as the targets' dependencies.
+#' @param ctx list from `pipeline_context()`.
+#' @param names character. Targets to check.
+#' @return character. The targets in `names` that are out of date.
+#' @keywords internal
+#' @noRd
+outdated_targets <- function(ctx, names) {
+  with_tar_project(
+    ctx$tar_project,
+    targets::tar_outdated(
+      names = targets::any_of(names),
+      shortcut = TRUE,
+      script = ctx$script,
+      store = ctx$store
+    )
+  )
+}
