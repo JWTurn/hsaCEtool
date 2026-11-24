@@ -374,6 +374,13 @@ test_that('the iSSA fit fixes the step intercept SD and gives coefficient tables
   expect_true(all(file.exists(got)))
   expect_true(any(grepl('toy_seasons.csv$', got)))
   expect_equal(glmmTMB::fixef(readRDS(got[1]))$cond, glmmTMB::fixef(fit)$cond)
+  # with a record of the table it came from and the versions that made it
+  info <- data.table::fread(got[grepl('toy_fit_info.csv$', got)], colClasses = 'character')
+  expect_identical(nrow(info), 1L)
+  expect_identical(info$table_md5, unname(tools::md5sum(tab)))
+  expect_identical(info$rows, as.character(nrow(r$data)))
+  expect_identical(info$converged, 'TRUE')
+  expect_identical(info$glmmTMB, as.character(packageVersion('glmmTMB')))
 })
 
 test_that('a model\'s control reaches the fit, and only its own fit command', {
@@ -422,6 +429,8 @@ test_that('a model\'s control reaches the fit, and only its own fit command', {
   )
   got <- suppressWarnings(suppressMessages(fit_model_file(tab, out_dir)))
   expect_equal(readRDS(got[1])$fit$convergence, 1L)
+  info <- data.table::fread(got[grepl('_fit_info.csv$', got)])
+  expect_false(info$converged)
 })
 
 test_that('per-group coefficients add the deviation to each season\'s estimate', {
