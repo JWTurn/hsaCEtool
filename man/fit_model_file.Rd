@@ -13,11 +13,17 @@ fit_model_file(file, out_dir, threads = 1L)
 
 \item{threads}{integer. Cores glmmTMB may use (its \code{parallel} control).
 The table's \code{control} (the model's \verb{control:} setting) is also used,
-on top of \code{rank_check = 'adjust'}; \code{threads} sets \code{parallel}.}
+on top of \code{rank_check = 'adjust'}; \code{threads} sets \code{parallel}.
+A one-row table, \if{html}{\out{<name>}}_fit_info.csv, records what the fit was made
+from and with: the table file's MD5 checksum (so a fit can be matched to
+the table it came from), when it was fitted and how long it took, the
+threads, rows and animals, whether it converged and \code{pdHess}, and the R,
+hsaCEtool (with its GitHub commit, if installed from there), glmmTMB and
+TMB versions.}
 }
 \value{
-character, invisibly. The files written: \if{html}{\out{<name>}}_fit.rds and the
-coefficient CSVs.
+character, invisibly. The files written: \if{html}{\out{<name>}}_fit.rds, the
+coefficient CSVs and \if{html}{\out{<name>}}_fit_info.csv.
 }
 \description{
 Reads a file from \code{\link[=write_model_table]{write_model_table()}}, fits it with

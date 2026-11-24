@@ -864,8 +864,14 @@ write_model_table <- function(data, model, name, out_dir, seasons = NULL) {
 #' @param threads integer. Cores glmmTMB may use (its `parallel` control).
 #'   The table's `control` (the model's `control:` setting) is also used,
 #'   on top of `rank_check = 'adjust'`; `threads` sets `parallel`.
-#' @return character, invisibly. The files written: <name>_fit.rds and the
-#'   coefficient CSVs.
+#'   A one-row table, <name>_fit_info.csv, records what the fit was made
+#'   from and with: the table file's MD5 checksum (so a fit can be matched to
+#'   the table it came from), when it was fitted and how long it took, the
+#'   threads, rows and animals, whether it converged and `pdHess`, and the R,
+#'   hsaCEtool (with its GitHub commit, if installed from there), glmmTMB and
+#'   TMB versions.
+#' @return character, invisibly. The files written: <name>_fit.rds, the
+#'   coefficient CSVs and <name>_fit_info.csv.
 #' @author Julie W. Turner
 #' @export
 fit_model_file <- function(file, out_dir, threads = 1L) {
@@ -904,5 +910,39 @@ fit_model_file <- function(file, out_dir, threads = 1L) {
     x$seasons,
     x$seasons_used %||% 'all'
   )
-  invisible(c(fit_file, files))
+  info_file <- file.path(out_dir, paste0(x$name, '_fit_info.csv'))
+  data.table::fwrite(fit_info(x, file, fit, t0, threads), info_file)
+  invisible(c(fit_file, files, info_file))
+}
+
+#' @title What a fit was made from and with
+#' @param x list. The table read by [fit_model_file()].
+#' @param file character. The table's file.
+#' @param fit list. The fit from [fit_issa()].
+#' @param start POSIXct. When the fit started.
+#' @param threads integer. Cores glmmTMB was given.
+#' @return data.table, one row: model, table, table_md5, fitted (start, UTC),
+#'   minutes, threads, rows, animals, converged, pdHess and the R, hsaCEtool,
+#'   hsaCEtool_sha, glmmTMB and TMB versions.
+#' @keywords internal
+#' @noRd
+fit_info <- function(x, file, fit, start, threads) {
+  pkg <- function(p) as.character(utils::packageVersion(p))
+  data.table::data.table(
+    model = x$name,
+    table = basename(file),
+    table_md5 = unname(tools::md5sum(file)),
+    fitted = format(start, '%Y-%m-%d %H:%M:%S', tz = 'UTC'),
+    minutes = round(as.numeric(difftime(Sys.time(), start, units = 'mins')), 1),
+    threads = as.integer(threads),
+    rows = nrow(x$data),
+    animals = data.table::uniqueN(x$data$id),
+    converged = fit$fit$convergence == 0,
+    pdHess = isTRUE(fit$sdr$pdHess),
+    R = paste(R.version$major, R.version$minor, sep = '.'),
+    hsaCEtool = pkg('hsaCEtool'),
+    hsaCEtool_sha = utils::packageDescription('hsaCEtool')$RemoteSha %||% NA_character_,
+    glmmTMB = pkg('glmmTMB'),
+    TMB = pkg('TMB')
+  )
 }

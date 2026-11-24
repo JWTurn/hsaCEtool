@@ -1,5 +1,11 @@
 # hsaCEtool 0.0.0.9000
 
+- `fit_model_file()` also writes `<name>_fit_info.csv`: the table file's MD5
+  checksum, when the fit was made and how long it took, the threads, rows
+  and animals, convergence and `pdHess`, and the R, hsaCEtool (and its
+  GitHub commit), glmmTMB and TMB versions. A fit made on an HPC cluster can
+  then be matched to the table it came from and to the versions that made it
+  (first step of #16).
 - New readers for tree species cover, each cutting a source to an area and
   writing files: `read_scanfi_species()` (SCANFI v2 crown closure by species,
   one 30 m raster per species and year, on the source's own grid) and
