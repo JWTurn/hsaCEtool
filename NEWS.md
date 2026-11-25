@@ -1,5 +1,13 @@
 # hsaCEtool 0.0.0.9000
 
+- New model setting `fit: cluster`, for models fitted on an HPC cluster
+  (#16). The model's table is exported (as with `export: true`); target
+  `model_fit_<name>_files` (`cluster_fit_files()`) waits for `<name>_fit.rds`
+  and `<name>_fit_info.csv` copied back to `outputs/<project>/models/hpc/`,
+  and `model_fit_<name>` (`read_cluster_fit()`) reads the fit only if the
+  table MD5 in `_fit_info.csv` matches the current table. Its coefficient
+  tables are then made, and `upload_models()` shares it, as for a model fitted
+  in the pipeline. `fit:` is now `true`, `false` or `cluster`.
 - `fit_model_file()` also writes `<name>_fit_info.csv`: the table file's MD5
   checksum, when the fit was made and how long it took, the threads, rows
   and animals, convergence and `pdHess`, and the R, hsaCEtool (and its

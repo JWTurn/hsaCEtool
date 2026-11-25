@@ -178,11 +178,14 @@ check_model_settings <- function(mcfg, n_made, seasons) {
         ')'
       )
     }
-    if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit)) {
-      add('models: ', nm, ': fit must be true or false')
+    if (!is.null(m$fit) && !isTRUE(m$fit) && !isFALSE(m$fit) && !identical(m$fit, 'cluster')) {
+      add('models: ', nm, ': fit must be true, false or cluster')
     }
     if (!is.null(m$export) && !isTRUE(m$export) && !isFALSE(m$export)) {
       add('models: ', nm, ': export must be true or false')
+    }
+    if (identical(m$fit, 'cluster') && isFALSE(m$export)) {
+      add('models: ', nm, ': fit: cluster always exports its table (leave out export: false)')
     }
     if (!is.null(m$upload) && !isTRUE(m$upload) && !isFALSE(m$upload)) {
       add('models: ', nm, ': upload must be true or false')
@@ -913,6 +916,64 @@ fit_model_file <- function(file, out_dir, threads = 1L) {
   info_file <- file.path(out_dir, paste0(x$name, '_fit_info.csv'))
   data.table::fwrite(fit_info(x, file, fit, t0, threads), info_file)
   invisible(c(fit_file, files, info_file))
+}
+
+#' @title The fit of a `fit: cluster` model, copied back from the cluster
+#' @description The files [fit_model_file()] wrote on the cluster,
+#'   `<name>_fit.rds` and `<name>_fit_info.csv`, copied back to `dir`
+#'   (outputs/<project>/models/hpc/). Stops, saying what to do, while either
+#'   is missing.
+#' @param dir character. Folder the fits are copied back to.
+#' @param name character. Model name.
+#' @param table character. The model's table file ([write_model_table()]).
+#' @return character. The two files.
+#' @author Julie W. Turner
+#' @export
+cluster_fit_files <- function(dir, name, table) {
+  files <- file.path(dir, paste0(name, c('_fit.rds', '_fit_info.csv')))
+  missing <- !file.exists(files)
+  if (any(missing)) {
+    stop(
+      name,
+      ' (fit: cluster) has no fit yet: fit ',
+      basename(table),
+      ' on the cluster with fit_model_file() and copy back ',
+      paste(basename(files[missing]), collapse = ' and '),
+      ' to ',
+      dir,
+      call. = FALSE
+    )
+  }
+  files
+}
+
+#' @title Read a cluster fit, only if it was made from the current table
+#' @description Reads the fit from [cluster_fit_files()] after checking that
+#'   the table MD5 checksum in its `<name>_fit_info.csv` matches the model's
+#'   current table, so a fit made from an older table is never used.
+#' @param files character. The fit (.rds) and its fit info (.csv), from
+#'   [cluster_fit_files()].
+#' @inheritParams cluster_fit_files
+#' @return The fit, as from [fit_issa()].
+#' @author Julie W. Turner
+#' @export
+read_cluster_fit <- function(files, table, name) {
+  info <- data.table::fread(files[2], colClasses = 'character')
+  md5 <- unname(tools::md5sum(table))
+  if (nrow(info) != 1L || !identical(info$table_md5, md5)) {
+    stop(
+      name,
+      ': the cluster fit in ',
+      dirname(files[1]),
+      ' was made from another table',
+      if (nrow(info) == 1L) paste0(' (', info$table, ', fitted ', info$fitted, ' UTC)'),
+      ' than the current ',
+      basename(table),
+      ': fit the current table on the cluster and copy back its fit',
+      call. = FALSE
+    )
+  }
+  readRDS(files[1])
 }
 
 #' @title What a fit was made from and with

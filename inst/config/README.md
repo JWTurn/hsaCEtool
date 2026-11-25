@@ -940,7 +940,7 @@ model:
     dist_otherpoly: {min: [dist_otherpoly, harv_dist]}
   models:
     full:
-      fit: true                 # false: build and check the table only
+      fit: true                 # false: build and check the table only; cluster: fit on an HPC cluster
       n_random: 10              # random steps per used step (of tracks: n_random)
       seasons: all              # or e.g. [winter]
       subset: juris == 'yt'     # optional
@@ -1002,6 +1002,19 @@ model:
   log says "iteration limit reached"):
   `control: {optCtrl: {iter.max: 1000, eval.max: 1000}}`. Only that model is
   refitted.
+- **Fitting on an HPC cluster** (a model's `fit: cluster`): for a model too
+  big to fit on your own computer. Its table is saved to
+  `outputs/<project>/models/tables/<name>_table.rds` (as with `export: true`).
+  Copy it to the cluster, fit it there with `fit_model_file()`, and copy the
+  fit, `<name>_fit.rds`, and its record, `<name>_fit_info.csv`, back to
+  `outputs/<project>/models/hpc/`. Until both are there, the pipeline stops
+  at target `model_fit_<name>_files` and says what to do. The fit is used
+  only if the table it was made from (its MD5 checksum, a fingerprint of the
+  file, in `_fit_info.csv`) is the model's current table, so a fit from an
+  older table never reaches the coefficient tables. The coefficient tables
+  are then made here, as for a model fitted here, and `upload: true` works
+  the same way. The coefficient tables `fit_model_file()` writes on the
+  cluster are for a quick look only; the pipeline does not read them.
 - **Sharing fitted models** (a model's `upload: true`): after a run,
   `upload_models("<project>")` puts each such model in the Drive folder
   `model: upload_folder:` (it may be shared widely: each fit is first checked

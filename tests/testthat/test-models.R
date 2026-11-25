@@ -176,6 +176,16 @@ test_that('model settings are checked', {
     check_model_settings(nocap, 30, toy_seasons)
   )))
   expect_true(any(grepl('export must be', p)))
+  # fit: true, false or cluster; a cluster fit always exports its table
+  bad$models <- list(
+    m7 = list(formula = form, n_random = 5, fit = 'yes'),
+    m8 = list(formula = form, n_random = 5, fit = 'cluster', export = FALSE),
+    m9 = list(formula = form, n_random = 5, fit = 'cluster')
+  )
+  p <- check_model_settings(bad, 30, toy_seasons)
+  expect_true(any(grepl('m7: fit must be true, false or cluster', p)))
+  expect_true(any(grepl('m8: fit: cluster always exports', p)))
+  expect_false(any(grepl('m9:', p)))
   bad$models <- list(
     m5 = list(formula = form, n_random = 5, upload = 'yes'),
     m6 = list(formula = form, n_random = 5, upload = TRUE, fit = FALSE)
@@ -431,6 +441,64 @@ test_that('a model\'s control reaches the fit, and only its own fit command', {
   expect_equal(readRDS(got[1])$fit$convergence, 1L)
   info <- data.table::fread(got[grepl('_fit_info.csv$', got)])
   expect_false(info$converged)
+})
+
+test_that('a cluster fit is used only if it was made from the current table', {
+  # targets: the table is exported, the fit waits for the copied-back files
+  cfg <- list(
+    model = list(models = list(big = list(formula = form, n_random = 5, fit = 'cluster')))
+  )
+  tg <- targets_models(cfg)
+  nms <- purrr::map_chr(tg, function(t) t$settings$name)
+  expect_true(all(
+    c(
+      'model_table_big_file',
+      'model_fit_big_files',
+      'model_fit_big',
+      'model_coefs_big',
+      'model_coefs_big_files'
+    ) %in%
+      nms
+  ))
+  cmd <- function(nm) paste(deparse(tg[[match(nm, nms)]]$command$expr), collapse = ' ')
+  expect_true(grepl('read_cluster_fit', cmd('model_fit_big')))
+  expect_false(grepl('fit_issa', cmd('model_fit_big')))
+  expect_identical(tg[[match('model_fit_big_files', nms)]]$settings$format, 'file')
+  # a toy table fitted "on the cluster" with fit_model_file()
+  steps <- toy_model_steps(n_strata = 30)
+  files <- toy_extracted(steps, file.path(tempdir(), 'toy_extracted5'))
+  r <- build_model_data(
+    steps,
+    files,
+    make_animal_codes(steps$id),
+    common,
+    list(formula = form, n_random = 5)
+  )
+  tab <- write_model_table(r, list(formula = form), 'toy', file.path(tempdir(), 'toy_cl_tables'))
+  hpc <- file.path(tempdir(), 'toy_cl_hpc')
+  unlink(hpc, recursive = TRUE)
+  # nothing copied back yet
+  expect_error(cluster_fit_files(hpc, 'toy', tab), 'has no fit yet: fit toy_table.rds')
+  suppressWarnings(suppressMessages(fit_model_file(tab, hpc)))
+  file.remove(file.path(hpc, 'toy_fit_info.csv'))
+  expect_error(cluster_fit_files(hpc, 'toy', tab), 'copy back toy_fit_info.csv to')
+  # a matching fit is read and gives its coefficient tables
+  suppressWarnings(suppressMessages(fit_model_file(tab, hpc)))
+  got <- cluster_fit_files(hpc, 'toy', tab)
+  fit <- read_cluster_fit(got, tab, 'toy')
+  cf <- suppressWarnings(model_coefficients(fit))
+  out <- write_model_coefficients(cf, r$log, 'toy', file.path(tempdir(), 'toy_cl_models'))
+  expect_true(all(file.exists(out)))
+  # a fit from another table (here, the same model with fewer random steps) stops
+  r2 <- build_model_data(
+    steps,
+    files,
+    make_animal_codes(steps$id),
+    common,
+    list(formula = form, n_random = 3)
+  )
+  tab2 <- write_model_table(r2, list(formula = form), 'toy', file.path(tempdir(), 'toy_cl_tables2'))
+  expect_error(read_cluster_fit(got, tab2, 'toy'), 'was made from another table \\(toy_table.rds')
 })
 
 test_that('per-group coefficients add the deviation to each season\'s estimate', {
