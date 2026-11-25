@@ -530,7 +530,11 @@ model:
   #                        when a fit stops at the iteration limit (300) without converging;
   #                        null = the defaults. Kept in an exported table for fit_model_file().
   #     fit: true         true: fit it; false: build its table only (target model_data_<name>
-  #                        and its log), e.g. to check the table before a long fit
+  #                        and its log), e.g. to check the table before a long fit; cluster:
+  #                        export its table, fit it on an HPC cluster with fit_model_file()
+  #                        and copy <name>_fit.rds and <name>_fit_info.csv back to
+  #                        outputs/<project>/models/hpc/; the pipeline uses that fit only if
+  #                        it was made from the current table (too big to fit here)
   #     export: false      true: also save the table to outputs/<project>/models/tables/
   #                        <name>_table.rds, to fit elsewhere with fit_model_file() (e.g. on
   #                        an HPC cluster, see the project's hpc/ folder); false: don't

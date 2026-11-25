@@ -19,7 +19,11 @@
 #'     to fit elsewhere with [fit_model_file()] (e.g. on an HPC cluster);
 #'   - `model_fit_<name>`: the glmmTMB fit ([fit_issa()]), unless the model has `fit: false`;
 #'     a model's `control:` goes to [glmmTMB::glmmTMBControl()], on top of
-#'     `rank_check = 'adjust'`;
+#'     `rank_check = 'adjust'`. With `fit: cluster`, the table is exported (as with
+#'     `export: true`) and fitted on an HPC cluster with [fit_model_file()];
+#'     `model_fit_<name>_files` waits for the fit and its fit info copied back to
+#'     outputs/<project>/models/hpc/ ([cluster_fit_files()]), and `model_fit_<name>`
+#'     reads the fit only if it was made from the current table ([read_cluster_fit()]);
 #'   - `model_coefs_<name>` and `model_coefs_<name>_files`: coefficient tables
 #'     ([model_coefficients()]) saved as CSV with the table's log and the
 #'     model's season table ([model_season_table()]).
@@ -85,11 +89,14 @@ targets_models <- function(cfg) {
         tar_target_raw(paste0('model_log_', nm), substitute(DATA$log, list(DATA = data_nm)))
       )
     )
-    if (isTRUE(models[[nm]]$export)) {
+    # fit: cluster: the table is fitted on an HPC cluster and the fit copied back
+    cluster <- identical(models[[nm]]$fit, 'cluster')
+    table_nm <- as.symbol(paste0('model_table_', nm, '_file'))
+    if (isTRUE(models[[nm]]$export) || cluster) {
       out <- c(
         out,
         list(tar_target_raw(
-          paste0('model_table_', nm, '_file'),
+          as.character(table_nm),
           substitute(
             write_model_table(DATA, CFG, NM, file.path(model_dir, 'tables'), SEASONS),
             list(DATA = data_nm, CFG = cfg_nm, NM = nm, SEASONS = seasons_nm)
@@ -104,7 +111,9 @@ targets_models <- function(cfg) {
     }
     # control: only in the command of a model that sets it, so adding it to one
     # model does not change (and refit) the others
-    fit_cmd <- if (is.null(models[[nm]]$control)) {
+    fit_cmd <- if (cluster) {
+      NULL
+    } else if (is.null(models[[nm]]$control)) {
       substitute(
         fit_issa(DATA$data, CFG$formula, step_sd = CFG$step_sd %||% 1000),
         list(DATA = data_nm, CFG = cfg_nm)
@@ -120,10 +129,33 @@ targets_models <- function(cfg) {
         list(DATA = data_nm, CFG = cfg_nm)
       )
     }
+    fit_targets <- if (cluster) {
+      fit_files_nm <- as.symbol(paste0(fit_nm, '_files'))
+      list(
+        # reruns whenever the copied-back files change (or are deleted)
+        tar_target_raw(
+          as.character(fit_files_nm),
+          substitute(
+            cluster_fit_files(file.path(model_dir, 'hpc'), NM, TABLE),
+            list(NM = nm, TABLE = table_nm)
+          ),
+          format = 'file'
+        ),
+        tar_target_raw(
+          as.character(fit_nm),
+          substitute(
+            read_cluster_fit(FILES, TABLE, NM),
+            list(FILES = fit_files_nm, TABLE = table_nm, NM = nm)
+          )
+        )
+      )
+    } else {
+      list(tar_target_raw(as.character(fit_nm), fit_cmd))
+    }
     out <- c(
       out,
+      fit_targets,
       list(
-        tar_target_raw(as.character(fit_nm), fit_cmd),
         tar_target_raw(
           as.character(coefs_nm),
           substitute(model_coefficients(FIT), list(FIT = fit_nm))

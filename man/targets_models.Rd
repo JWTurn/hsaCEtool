@@ -28,7 +28,11 @@ outputs/\if{html}{\out{<project>}}/models/tables/\if{html}{\out{<name>}}_table.r
 to fit elsewhere with \code{\link[=fit_model_file]{fit_model_file()}} (e.g. on an HPC cluster);
 \item \verb{model_fit_<name>}: the glmmTMB fit (\code{\link[=fit_issa]{fit_issa()}}), unless the model has \code{fit: false};
 a model's \verb{control:} goes to \code{\link[glmmTMB:glmmTMBControl]{glmmTMB::glmmTMBControl()}}, on top of
-\code{rank_check = 'adjust'};
+\code{rank_check = 'adjust'}. With \code{fit: cluster}, the table is exported (as with
+\code{export: true}) and fitted on an HPC cluster with \code{\link[=fit_model_file]{fit_model_file()}};
+\verb{model_fit_<name>_files} waits for the fit and its fit info copied back to
+outputs/\if{html}{\out{<project>}}/models/hpc/ (\code{\link[=cluster_fit_files]{cluster_fit_files()}}), and \verb{model_fit_<name>}
+reads the fit only if it was made from the current table (\code{\link[=read_cluster_fit]{read_cluster_fit()}});
 \item \verb{model_coefs_<name>} and \verb{model_coefs_<name>_files}: coefficient tables
 (\code{\link[=model_coefficients]{model_coefficients()}}) saved as CSV with the table's log and the
 model's season table (\code{\link[=model_season_table]{model_season_table()}}).
